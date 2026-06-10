@@ -2,6 +2,16 @@
 
 EvalScope — LLM evaluation framework with a registry-based plugin architecture. This file is the contract for AI coding agents working in this repo.
 
+## Environment
+
+**Always activate the `evalscope` conda environment** before any command:
+
+```bash
+source /root/anaconda3/etc/profile.d/conda.sh && conda activate evalscope
+```
+
+All Python, pip, pytest, evalscope CLI, and lint commands in this repo MUST run inside this environment (Python 3.10, `/root/anaconda3/envs/evalscope/bin/python`). Never use system Python or another conda env.
+
 ## Setup
 
 ```bash
