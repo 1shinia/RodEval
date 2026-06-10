@@ -160,6 +160,9 @@ def _build_task_config_local(data: dict, launch_result: LaunchResult) -> TaskCon
     if launch_result.api_url:
         task_config.api_url = launch_result.api_url
         task_config.api_key = data.get('api_key') or launch_result.api_key
+        # Clear checkpoint defaults (revision, precision) auto-set by TaskConfig
+        # when eval_type was temporarily CHECKPOINT during __init__.
+        task_config.model_args = {}
     else:
         task_config.model_args = launch_result.model_args
     return task_config
