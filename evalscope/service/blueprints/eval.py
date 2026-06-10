@@ -23,6 +23,14 @@ from ..utils import (
     stop_process,
     validate_task_id,
 )
+from ..model_launcher import (
+    ModelSource,
+    LocalBackend,
+    launch,
+    stop as launcher_stop,
+    is_direct_eval_type,
+    LaunchResult,
+)
 
 logger = get_logger()
 
@@ -71,7 +79,17 @@ def _build_result_table(work_dir: str) -> str:
         return ''
 
 
-_REQUIRED_FIELDS = ['model', 'datasets', 'api_url']
+_BASE_FIELDS = ['model', 'datasets']
+
+
+def _get_required_fields(data: dict) -> list[str]:
+    """Return required fields based on model_source."""
+    fields = list(_BASE_FIELDS)
+    if data.get('model_source') == ModelSource.LOCAL:
+        fields.append('model_path')
+    else:
+        fields.append('api_url')
+    return fields
 
 
 class RequestValidationError(Exception):
@@ -89,17 +107,12 @@ def _handle_validation_error(exc: RequestValidationError):
 
 
 def _parse_request() -> tuple[dict, str]:
-    """Validate the request body and return (data, task_id).
-
-    Raises:
-        RequestValidationError: when the request is missing required fields or
-            the ``EvalScope-Task-Id`` header is absent or malformed.
-    """
+    """Validate the request body and return (data, task_id)."""
     data = request.get_json()
     if not data:
         raise RequestValidationError('Request body is required')
 
-    for field in _REQUIRED_FIELDS:
+    for field in _get_required_fields(data):
         if field not in data:
             raise RequestValidationError(f'{field} is required')
 
@@ -115,15 +128,40 @@ def _parse_request() -> tuple[dict, str]:
     return data, task_id
 
 
-def _build_task_config(data: dict) -> TaskConfig:
-    """Build a TaskConfig from request data with common defaults applied."""
+def _build_task_config_openai(data: dict) -> TaskConfig:
+    """Build a TaskConfig for OpenAI API mode."""
     if not data.get('eval_type'):
         data['eval_type'] = EvalType.OPENAI_API
-
     task_config = TaskConfig.from_dict(data)
     task_config.no_timestamp = True
     task_config.enable_progress_tracker = True
     task_config.analysis_report = True
+    return task_config
+
+
+def _build_task_config_local(data: dict, launch_result: LaunchResult) -> TaskConfig:
+    """Build a TaskConfig for local model mode."""
+    task_config = TaskConfig(
+        model=data.get('model') or os.path.basename(launch_result.model_path or data['model_path']),
+        datasets=data.get('datasets', []),
+        limit=data.get('limit'),
+        eval_batch_size=data.get('eval_batch_size', 1),
+        dataset_hub=data.get('dataset_hub', 'modelscope'),
+        dataset_dir=data.get('dataset_dir') or '',
+        dataset_args=data.get('dataset_args') or {},
+        generation_config=data.get('generation_config', {}),
+        repeats=data.get('repeats', 1),
+        stream=data.get('stream'),
+        no_timestamp=True,
+        enable_progress_tracker=True,
+        analysis_report=True,
+    )
+    task_config.eval_type = launch_result.eval_type
+    if launch_result.api_url:
+        task_config.api_url = launch_result.api_url
+        task_config.api_key = data.get('api_key') or launch_result.api_key
+    else:
+        task_config.model_args = launch_result.model_args
     return task_config
 
 
@@ -142,11 +180,15 @@ def _all_results_empty(result) -> bool:
     return False
 
 
-def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task'):
-    """Run the evaluation subprocess and return a Flask response."""
+def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task',
+                  use_direct: bool = False):
+    """Run the evaluation and return a Flask response."""
     create_log_file(task_id, os.path.join('logs', 'eval_log.log'))
     try:
-        result = run_in_subprocess(run_eval_wrapper, task_config, task_id=task_id)
+        if use_direct:
+            result = run_eval_wrapper(task_config)
+        else:
+            result = run_in_subprocess(run_eval_wrapper, task_config, task_id=task_id)
         table_str = _build_result_table(task_config.work_dir)
         if _all_results_empty(result):
             error_msg = (
@@ -172,17 +214,60 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task'):
 def run_evaluation():
     """Run a model evaluation task (blocking).
 
-    Returns the evaluation result when the task completes.
+    Two modes:
+
+    **OpenAI API** (model_source='openai' or not set)::
+
+        {"model_source": "openai", "model": "qwen2.5-0.5b",
+         "api_url": "http://localhost:8000/v1", "api_key": "sk-...",
+         "datasets": ["gsm8k"], "limit": 10}
+
+    **Local model** (model_source='local')::
+
+        {"model_source": "local",
+         "model_path": "/data/models/qwen.gguf", "backend": "auto",
+         "backend_args": {"n_ctx": 2048}, "datasets": ["gsm8k"], "limit": 10}
     """
     data, task_id = _parse_request()
+    model_source = data.get('model_source')
 
-    task_config = _build_task_config(data)
+    # ── Local model: launch inference backend ──────────────────────
+    launch_result: LaunchResult | None = None
+    if model_source == ModelSource.LOCAL:
+        model_path = data['model_path']
+        backend = data.get('backend', LocalBackend.AUTO)
+        backend_args = data.get('backend_args', {})
+        logger.info(f'[{task_id}] Launching local model: path={model_path} backend={backend}')
+        try:
+            launch_result = launch(model_path, backend=backend, backend_args=backend_args)
+            logger.info(f'[{task_id}] Launched: backend={launch_result.backend} '
+                        f'eval_type={launch_result.eval_type}')
+        except Exception as e:
+            logger.error(f'[{task_id}] Launch failed: {e}')
+            return jsonify({'status': 'error', 'task_id': task_id, 'error': str(e)}), 500
+
+    # ── Build TaskConfig ───────────────────────────────────────────
+    try:
+        if launch_result is not None:
+            task_config = _build_task_config_local(data, launch_result)
+        else:
+            task_config = _build_task_config_openai(data)
+    except Exception as e:
+        if launch_result:
+            launcher_stop(launch_result)
+        return jsonify({'status': 'error', 'task_id': task_id, 'error': str(e)}), 400
+
     task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+    logger.info(f'[{task_id}] Running: model={task_config.model} '
+                f'eval_type={task_config.eval_type} datasets={task_config.datasets}')
 
-    logger.info(f'[{task_id}] Running evaluation task for model: {task_config.model}')
-    logger.info(f'[{task_id}] Datasets: {task_config.datasets}')
-
-    return _execute_task(task_id, task_config, label='Task')
+    # ── Execute ────────────────────────────────────────────────────
+    try:
+        use_direct = launch_result is not None and is_direct_eval_type(task_config.eval_type or '')
+        return _execute_task(task_id, task_config, label='Task', use_direct=use_direct)
+    finally:
+        if launch_result:
+            launcher_stop(launch_result)
 
 
 @bp_eval.route('/stop', methods=['POST'])
@@ -215,7 +300,7 @@ def resume_evaluation():
     if not os.path.isdir(work_dir):
         return jsonify({'error': f'Output directory not found for task_id: {task_id}'}), 404
 
-    task_config = _build_task_config(data)
+    task_config = _build_task_config_openai(data)
     task_config.work_dir = work_dir
     task_config.use_cache = work_dir
     task_config.rerun_review = True
