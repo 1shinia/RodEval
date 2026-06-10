@@ -263,7 +263,12 @@ def run_evaluation():
 
     # ── Execute ────────────────────────────────────────────────────
     try:
-        use_direct = launch_result is not None and is_direct_eval_type(task_config.eval_type or '')
+        # Server-mode launchers (llama_cpp, vllm, etc.) provide process
+        # isolation via a separate server process. The eval itself is just
+        # HTTP calls — safe to run directly without a subprocess.
+        use_direct = (launch_result is not None and
+                      (is_direct_eval_type(task_config.eval_type or '') or
+                       launch_result.api_url is not None))
         return _execute_task(task_id, task_config, label='Task', use_direct=use_direct)
     finally:
         if launch_result:
