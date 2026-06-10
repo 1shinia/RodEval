@@ -140,7 +140,7 @@ def _find_free_port() -> int:
 def _health_check(url: str, timeout: float = 180.0) -> bool:
     import urllib.request
     deadline = time.time() + timeout
-    health_url = url.rstrip('/') + '/v1/models'
+    health_url = url.rstrip('/') + '/models'
     while time.time() < deadline:
         try:
             resp = urllib.request.urlopen(urllib.request.Request(health_url), timeout=5)
