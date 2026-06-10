@@ -43,6 +43,15 @@ def litellm_api() -> type[ModelAPI]:
     return LiteLLMAPI
 
 
+@register_model_api(name='llama_cpp')
+def llama_cpp_api() -> type[ModelAPI]:
+    check_import('llama_cpp', package='llama-cpp-python', raise_error=True, feature_name='llama_cpp')
+
+    from .llama_cpp import LlamaCppAPI
+
+    return LlamaCppAPI
+
+
 @register_model_api(name='server')
 @deprecated(since='1.0.0', remove_in='1.1.0', alternative='openai_api')
 def server() -> type[ModelAPI]:
