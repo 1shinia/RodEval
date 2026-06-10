@@ -7,6 +7,7 @@ import Card from '@/components/ui/Card'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl } from '@/api/eval'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/types'
 import { usePolling } from '@/hooks/usePolling'
+import { Copy, Check } from 'lucide-react'
 
 export default function EvalTaskPage() {
   const { t } = useLocale()
@@ -19,6 +20,7 @@ export default function EvalTaskPage() {
   const [logText, setLogText] = useState('')
   const [logLine, setLogLine] = useState(0)
   const [progress, setProgress] = useState(0)
+  const [copied, setCopied] = useState(false)
 
   const handleSubmit = async (config: Record<string, unknown>) => {
     const id = `eval_${Date.now()}`
@@ -28,6 +30,7 @@ export default function EvalTaskPage() {
     setLogLine(0)
     setProgress(0)
     setResult(null)
+    setCopied(false)
     try {
       const res = await submitEvalTask(config, id)
       setResult(res)
@@ -40,9 +43,7 @@ export default function EvalTaskPage() {
 
   const handleStop = async () => {
     if (!taskId) return
-    try {
-      await stopEvalTask(taskId)
-    } catch { /* ignore errors */ }
+    try { await stopEvalTask(taskId) } catch { /* ignore */ }
     setRunning(false)
     setResult({ status: 'stopped', task_id: taskId })
   }
@@ -58,25 +59,13 @@ export default function EvalTaskPage() {
   }, [taskId, logLine])
 
   usePolling<ProgressResponse>({
-    fn: progressFn,
-    enabled: running && !!taskId,
-    interval: 5000,
-    onData: (d) => {
-      setProgress(d.percent ?? 0)
-      if (d.percent >= 100) setRunning(false)
-    },
+    fn: progressFn, enabled: running && !!taskId, interval: 5000,
+    onData: (d) => { setProgress(d.percent ?? 0); if (d.percent >= 100) setRunning(false) },
   })
 
   usePolling<LogResponse>({
-    fn: logFn,
-    enabled: running && !!taskId,
-    interval: 5000,
-    onData: (d) => {
-      if (d.text) {
-        setLogText((prev) => prev + d.text)
-        setLogLine(d.tail_line)
-      }
-    },
+    fn: logFn, enabled: running && !!taskId, interval: 5000,
+    onData: (d) => { if (d.text) { setLogText((prev) => prev + d.text); setLogLine(d.tail_line) } },
   })
 
   const reportUrl = useMemo(() => (taskId ? getEvalReportUrl(taskId) : null), [taskId])
@@ -84,28 +73,29 @@ export default function EvalTaskPage() {
   return (
     <div className="page-enter">
       <h1 className="text-xl font-semibold mb-6">{t('eval.title')}</h1>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Config Form */}
         <Card title={t('eval.config')}>
-          <EvalConfigForm
-            onSubmit={handleSubmit}
-            disabled={running}
-            initialDataset={initialDataset}
-          />
+          <EvalConfigForm onSubmit={handleSubmit} disabled={running} initialDataset={initialDataset} />
         </Card>
-
-        {/* Right: Task Monitor */}
-        <Card title={t('eval.status')}>
-          <TaskMonitor
-            running={running}
-            progress={progress}
-            logText={logText}
-            result={result}
-            reportUrl={reportUrl}
-            readyLabel={t('eval.ready')}
-            onStop={handleStop}
-          />
+        <Card title={t('eval.status')} action={
+          <button onClick={() => {
+            const text = [logText, result?.error].filter(Boolean).join('\n')
+            if (!text) return
+            const ta = document.createElement('textarea')
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+            document.body.appendChild(ta); ta.select()
+            try { document.execCommand('copy') } catch { /* ignore */ }
+            document.body.removeChild(ta)
+            setCopied(true); setTimeout(() => setCopied(false), 2000)
+          }}
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card2)]"
+            title="复制全部日志">
+            {copied ? <Check size={13} className="text-[var(--green)]" /> : <Copy size={13} />}
+            {copied ? '已复制' : '复制日志'}
+          </button>
+        }>
+          <TaskMonitor running={running} progress={progress} logText={logText} result={result}
+            reportUrl={reportUrl} readyLabel={t('eval.ready')} onStop={handleStop} />
         </Card>
       </div>
     </div>

@@ -358,7 +358,7 @@ body {
   .type-body-sm        { @apply text-sm; }
   .type-body-sm-strong { @apply text-sm font-medium; }
   .type-body-xs        { @apply text-xs; }
-  .type-label-xs       { @apply text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]; }
+  .type-label-xs       { @apply text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]; }
   .type-table-xs       { @apply text-[10px] font-semibold uppercase tracking-wider text-[var(--text-dim)]; }
   .type-caption-mono   { @apply text-xs font-mono tabular-nums; }
   .type-code           { @apply text-[13px] font-mono; }

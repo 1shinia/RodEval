@@ -15,7 +15,7 @@ const LocaleContext = createContext<LocaleCtx>({
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(
-    () => (localStorage.getItem('evalscope-locale') as Locale) || 'en',
+    () => (localStorage.getItem('evalscope-locale') as Locale) || 'zh',
   )
 
   const setLocale = useCallback((l: Locale) => {
