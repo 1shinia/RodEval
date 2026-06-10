@@ -208,6 +208,37 @@ class LocalDataLoader(DataLoader):
                         dataset_found = True
                     break
 
+        # Fallback: try loading from Arrow files (ModelScope/HuggingFace cache format)
+        if not dataset_found and os.path.isdir(path):
+            import pyarrow.ipc as ipc
+
+            arrow_files = []
+            for root, _dirs, files in os.walk(path):
+                for f in files:
+                    if f.endswith('.arrow'):
+                        arrow_files.append(os.path.join(root, f))
+
+            # Prefer arrow files whose filename contains the split name
+            matching = [f for f in arrow_files if f'-{self.split}.arrow' in f
+                        or f.endswith(f'{self.split}.arrow')]
+            # Fall back if no split match but only one arrow file present
+            if not matching and len(arrow_files) == 1:
+                matching = arrow_files
+
+            if matching:
+                records = []
+                for arrow_path in matching:
+                    with open(arrow_path, 'rb') as fh:
+                        reader = ipc.open_stream(fh)
+                        table = reader.read_all()
+                        records.extend(table.to_pylist())
+                if records:
+                    dataset = records
+                    dataset_found = True
+                    logger.info(
+                        f'Loaded {len(records)} records from Arrow file(s) in {path}'
+                    )
+
         # If no specific file found, raise an error with helpful information
         if not dataset_found:
             supported_exts = [ext for ext, _ in supported_format]
