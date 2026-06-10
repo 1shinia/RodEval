@@ -171,7 +171,21 @@ def _launch_sglang(model_path: str, port: int, extra_args=None) -> subprocess.Po
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-_SERVER_LAUNCHERS = {'vllm': _launch_vllm, 'sglang': _launch_sglang}
+def _launch_llama_cpp(model_path: str, port: int, extra_args=None) -> subprocess.Popen:
+    extra_args = extra_args or {}
+    cmd = ['python', '-m', 'llama_cpp.server',
+           '--model', model_path,
+           '--host', '0.0.0.0', '--port', str(port)]
+    if extra_args.get('n_ctx'):
+        cmd += ['--n_ctx', str(extra_args['n_ctx'])]
+    if extra_args.get('n_threads'):
+        cmd += ['--n_threads', str(extra_args['n_threads'])]
+    if extra_args.get('n_gpu_layers'):
+        cmd += ['--n_gpu_layers', str(extra_args['n_gpu_layers'])]
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+_SERVER_LAUNCHERS = {'vllm': _launch_vllm, 'sglang': _launch_sglang, 'llama_cpp': _launch_llama_cpp}
 
 # Eval types that must NOT run in a subprocess (C extensions crash on spawn)
 _DIRECT_EVAL_TYPES = {'llm_ckpt'}
@@ -199,14 +213,7 @@ def launch(model_path: str, backend: str = 'auto',
         return LaunchResult(backend=resolved, eval_type='openai_api',
                             api_url=api_url, model_path=model_path, _server_process=proc)
 
-    # Direct mode
-    if resolved == 'llama_cpp':
-        return LaunchResult(backend='llama_cpp', eval_type='llama_cpp', model_path=model_path,
-                            model_args={'model_path': model_path,
-                                        'n_ctx': backend_args.get('n_ctx', 2048),
-                                        **({'n_threads': backend_args['n_threads']} if 'n_threads' in backend_args else {}),
-                                        **({'n_gpu_layers': backend_args['n_gpu_layers']} if 'n_gpu_layers' in backend_args else {})})
-
+    # Direct mode (for backends that load model directly in-process)
     if resolved == 'transformers':
         return LaunchResult(backend='transformers', eval_type='llm_ckpt', model_path=model_path,
                             model_args={'model_path': model_path,
