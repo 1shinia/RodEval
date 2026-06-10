@@ -74,7 +74,7 @@ class GeneralQAAdapter(DefaultDataAdapter):
             Sample: Sample object with input, target, and metadata.
         """
         query = record.get('question') or record.get('query')
-        answer = record.get('answer') or record.get('response')
+        answer = record.get('answer') or record.get('response') or record.get('answerKey')
         system_prompt = record.get('system')
         messages = record.get('messages')
 
