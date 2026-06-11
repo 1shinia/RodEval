@@ -25,8 +25,8 @@ interface ParamDef {
 
 const BACKEND_PARAMS: Record<string, ParamDef[]> = {
   llama_cpp: [
-    { key: 'n_ctx', label: '上下文长度', type: 'number', placeholder: '默认 2048' },
-    { key: 'n_threads', label: '线程数', type: 'number', placeholder: '默认 4' },
+    { key: 'n_ctx', label: '上下文长度', type: 'number', placeholder: '默认 4096' },
+    { key: 'n_threads', label: '线程数', type: 'number', placeholder: '默认 8' },
   ],
   transformers: [
     { key: 'precision', label: '精度', type: 'select', options: ['float16', 'bfloat16', 'float32', 'auto'] },
@@ -48,9 +48,8 @@ const BACKEND_PARAMS: Record<string, ParamDef[]> = {
 }
 
 const DEFAULT_PARAM_VALUES: Record<string, string> = {
-  n_ctx: '2048',
-  n_threads: '4',
-  n_gpu_layers: '0',
+  n_ctx: '4096',
+  n_threads: '8',
   precision: 'float16',
   device_map: 'auto',
   dtype: 'auto',
