@@ -155,19 +155,37 @@ def _health_check(url: str, timeout: float = 180.0) -> bool:
 # ── Server launchers ──────────────────────────────────────────────
 
 def _launch_vllm(model_path: str, port: int, extra_args=None) -> subprocess.Popen:
+    extra_args = extra_args or {}
     cmd = ['python', '-m', 'vllm.entrypoints.openai.api_server',
            '--model', model_path, '--served-model-name', os.path.basename(model_path),
            '--host', '0.0.0.0', '--port', str(port),
-           '--trust-remote-code', '--disable-log-requests', '--disable-log-stats']
-    if has_gpu():
+           '--disable-log-requests', '--disable-log-stats']
+    if extra_args.get('trust_remote_code'):
+        cmd += ['--trust-remote-code']
+    if extra_args.get('dtype') and extra_args['dtype'] != 'auto':
+        cmd += ['--dtype', str(extra_args['dtype'])]
+    if extra_args.get('tensor_parallel_size'):
+        cmd += ['--tensor-parallel-size', str(extra_args['tensor_parallel_size'])]
+    elif has_gpu():
         import torch
         cmd += ['--tensor-parallel-size', str(torch.cuda.device_count())]
+    if extra_args.get('max_model_len'):
+        cmd += ['--max-model-len', str(extra_args['max_model_len'])]
+    if extra_args.get('gpu_memory_utilization'):
+        cmd += ['--gpu-memory-utilization', str(extra_args['gpu_memory_utilization'])]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def _launch_sglang(model_path: str, port: int, extra_args=None) -> subprocess.Popen:
+    extra_args = extra_args or {}
     cmd = ['python', '-m', 'sglang.launch_server',
            '--model-path', model_path, '--host', '0.0.0.0', '--port', str(port)]
+    if extra_args.get('trust_remote_code'):
+        cmd += ['--trust-remote-code']
+    if extra_args.get('tp_size'):
+        cmd += ['--tp-size', str(extra_args['tp_size'])]
+    if extra_args.get('mem_fraction_static'):
+        cmd += ['--mem-fraction-static', str(extra_args['mem_fraction_static'])]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -182,6 +200,8 @@ def _launch_llama_cpp(model_path: str, port: int, extra_args=None) -> subprocess
         cmd += ['--n_threads', str(extra_args['n_threads'])]
     if extra_args.get('n_gpu_layers'):
         cmd += ['--n_gpu_layers', str(extra_args['n_gpu_layers'])]
+    if extra_args.get('n_batch'):
+        cmd += ['--n_batch', str(extra_args['n_batch'])]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

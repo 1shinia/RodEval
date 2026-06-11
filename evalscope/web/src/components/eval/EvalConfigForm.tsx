@@ -13,6 +13,53 @@ interface Props {
   initialDataset?: string
 }
 
+interface ParamDef {
+  key: string
+  label: string
+  type: 'number' | 'select' | 'checkbox'
+  options?: string[]
+  step?: string
+  placeholder?: string
+  showWhen?: (b: string) => boolean
+}
+
+const BACKEND_PARAMS: Record<string, ParamDef[]> = {
+  llama_cpp: [
+    { key: 'n_ctx', label: '上下文长度', type: 'number', placeholder: '默认 2048' },
+    { key: 'n_threads', label: '线程数', type: 'number', placeholder: '默认 4' },
+  ],
+  transformers: [
+    { key: 'precision', label: '精度', type: 'select', options: ['float16', 'bfloat16', 'float32', 'auto'] },
+    { key: 'device_map', label: '设备分配', type: 'select', options: ['auto', 'cuda:0', 'cuda:1', 'cpu'] },
+    { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
+  ],
+  vllm: [
+    { key: 'max_model_len', label: '上下文长度', type: 'number', placeholder: '默认 模型自带值' },
+    { key: 'dtype', label: '精度', type: 'select', options: ['auto', 'float16', 'bfloat16'] },
+    { key: 'tensor_parallel_size', label: '张量并行', type: 'number', placeholder: '默认 自动检测GPU数' },
+    { key: 'gpu_memory_utilization', label: 'GPU 内存比例', type: 'number', step: '0.05', placeholder: '默认 0.9' },
+    { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
+  ],
+  sglang: [
+    { key: 'tp_size', label: '张量并行', type: 'number', placeholder: '默认 1' },
+    { key: 'mem_fraction_static', label: 'GPU 内存比例', type: 'number', step: '0.05', placeholder: '默认 0.85' },
+    { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
+  ],
+}
+
+const DEFAULT_PARAM_VALUES: Record<string, string> = {
+  n_ctx: '2048',
+  n_threads: '4',
+  n_gpu_layers: '0',
+  precision: 'float16',
+  device_map: 'auto',
+  dtype: 'auto',
+}
+
+function getParams(backend: string): ParamDef[] {
+  return BACKEND_PARAMS[backend] || BACKEND_PARAMS['transformers']
+}
+
 export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: Props) {
   const { t } = useLocale()
 
@@ -28,11 +75,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
   // Local model
   const [modelPath, setModelPath] = useState('')
   const [backend, setBackend] = useState('auto')
-  const [nCtx, setNCtx] = useState('2048')
-  const [nThreads, setNThreads] = useState('4')
-  const [nGpuLayers, setNGpuLayers] = useState('0')
-  const [precision, setPrecision] = useState('float16')
-  const [deviceMap, setDeviceMap] = useState('auto')
+  const [backendParamValues, setBackendParamValues] = useState<Record<string, string>>(DEFAULT_PARAM_VALUES)
   const [showBackendOpts, setShowBackendOpts] = useState(false)
 
   // Dataset
@@ -113,6 +156,10 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
     setShowSuggestions(false)
   }
 
+  const setParam = (key: string, value: string) => {
+    setBackendParamValues((prev) => ({ ...prev, [key]: value }))
+  }
+
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
@@ -139,12 +186,19 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
       config.model_path = modelPath
       config.backend = backend
       const ba: Record<string, unknown> = {}
-      if (nCtx) ba.n_ctx = Number(nCtx)
-      if (nThreads) ba.n_threads = Number(nThreads)
-      if (nGpuLayers) ba.n_gpu_layers = Number(nGpuLayers)
-      if (backend === 'transformers') {
-        if (precision) ba.precision = `torch.${precision}`
-        if (deviceMap) ba.device_map = deviceMap
+      // Build backend_args from param definitions (only for the resolved backend)
+      const params = getParams(backend)
+      for (const p of params) {
+        const val = backendParamValues[p.key]
+        if (val === '' || val === undefined) continue
+        if (p.type === 'checkbox') {
+          if (val === 'true') ba[p.key] = true
+        } else if (p.type === 'number') {
+          const n = Number(val)
+          if (!isNaN(n)) ba[p.key] = n
+        } else {
+          ba[p.key] = val
+        }
       }
       if (Object.keys(ba).length > 0) config.backend_args = ba
     } else {
@@ -225,21 +279,44 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
             {showBackendOpts && (
               <Card className="!p-0 mt-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3">
-                  <FormField label={t('eval.nCtx')}><input type="number" value={nCtx} onChange={(e) => setNCtx(e.target.value)} className={FORM_INPUT_CLASS} /></FormField>
-                  <FormField label={t('eval.nThreads')}><input type="number" value={nThreads} onChange={(e) => setNThreads(e.target.value)} className={FORM_INPUT_CLASS} /></FormField>
-                  <FormField label={t('eval.nGpuLayers')}><input type="number" value={nGpuLayers} onChange={(e) => setNGpuLayers(e.target.value)} className={FORM_INPUT_CLASS} /></FormField>
-                  {backend === 'transformers' && (<>
-                    <FormField label={t('eval.precision')}>
-                      <select value={precision} onChange={(e) => setPrecision(e.target.value)} className={FORM_INPUT_CLASS}>
-                        <option value="float16">float16</option><option value="bfloat16">bfloat16</option><option value="float32">float32</option><option value="auto">auto</option>
-                      </select>
-                    </FormField>
-                    <FormField label={t('eval.deviceMap')}>
-                      <select value={deviceMap} onChange={(e) => setDeviceMap(e.target.value)} className={FORM_INPUT_CLASS}>
-                        <option value="auto">auto</option><option value="cuda:0">cuda:0</option><option value="cuda:1">cuda:1</option><option value="cpu">cpu</option>
-                      </select>
-                    </FormField>
-                  </>)}
+                  {getParams(backend).map((p) => {
+                    const val = backendParamValues[p.key] || ''
+                    if (p.type === 'checkbox') {
+                      return (
+                        <div key={p.key} className="flex items-end pb-0.5">
+                          <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer">
+                            <input type="checkbox"
+                              checked={val === 'true'}
+                              onChange={(e) => setParam(p.key, e.target.checked ? 'true' : 'false')}
+                              className="accent-[var(--accent)]" />
+                            {p.label}
+                          </label>
+                        </div>
+                      )
+                    }
+                    if (p.type === 'select' && p.options) {
+                      return (
+                        <FormField key={p.key} label={p.label}>
+                          <select value={val}
+                            onChange={(e) => setParam(p.key, e.target.value)}
+                            className={FORM_INPUT_CLASS}>
+                            {p.options.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </FormField>
+                      )
+                    }
+                    return (
+                      <FormField key={p.key} label={p.label}>
+                        <input type="number" step={p.step}
+                          value={val}
+                          onChange={(e) => setParam(p.key, e.target.value)}
+                          className={FORM_INPUT_CLASS}
+                          placeholder={p.placeholder} />
+                      </FormField>
+                    )
+                  })}
                 </div>
               </Card>
             )}
