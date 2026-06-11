@@ -105,7 +105,7 @@ class DefaultDataAdapter(DataAdapter):
         """
         test_dataset = None
         fewshot_dataset = None
-        if use_local_loader:
+        if use_local_loader or self.dataset_hub == HubType.LOCAL:
             # Use LocalDataLoader for actual local file loading
             test_load_func = partial(self.load_subset, data_loader=LocalDataLoader)
             test_dataset = self.load_subsets(test_load_func)

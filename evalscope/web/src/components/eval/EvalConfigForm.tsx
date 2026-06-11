@@ -61,6 +61,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
 
   // Dataset autocomplete
   const [benchmarkNames, setBenchmarkNames] = useState<string[]>([])
+  const GENERIC_LOCAL_TYPES = ['general_qa', 'general_mcq', 'general_fc']
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([])
   const datasetInputRef = useRef<HTMLDivElement>(null)
@@ -249,7 +250,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
         {!isLocal && (<>
           <FormField label={t('eval.modelName')} required error={errors.model}>
             <input value={model}
-              onChange={(e) => { setModel(e.target.value); if (errors.model) setErrors((p) => ({ ...p, model: '' })) }}
+              onChange={(e) => { setModel(e.target.value.trimStart()); if (errors.model) setErrors((p) => ({ ...p, model: '' })) }}
               className={inputClass(errors.model)} placeholder="Qwen/Qwen2.5-0.5B-Instruct" />
           </FormField>
           <FormField label={t('eval.apiUrl')} required error={errors.apiUrl}>
@@ -277,6 +278,10 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
               <option value="general_qa">{t('eval.datasetLocalTypeQA')}</option>
               <option value="general_mcq">{t('eval.datasetLocalTypeMCQ')}</option>
               <option value="general_fc">{t('eval.datasetLocalTypeFC')}</option>
+              <option disabled>──</option>
+              {benchmarkNames.filter((n) => !GENERIC_LOCAL_TYPES.includes(n)).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
             </select>
           </FormField>
           <FormField label={t('eval.datasetPath')} required error={errors.datasetPath}>
