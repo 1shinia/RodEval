@@ -9,6 +9,8 @@ from evalscope.config import TaskConfig
 from evalscope.constants import EvalType
 from evalscope.report.combinator import get_data_frame, get_report_list
 from evalscope.utils.logger import get_logger
+from ..model_launcher import LaunchResult, LocalBackend, ModelSource, is_direct_eval_type, launch
+from ..model_launcher import stop as launcher_stop
 from ..utils import (
     DEFAULT_MULTIMODAL_BENCHMARKS,
     DEFAULT_TEXT_BENCHMARKS,
@@ -22,14 +24,6 @@ from ..utils import (
     serialize_result,
     stop_process,
     validate_task_id,
-)
-from ..model_launcher import (
-    ModelSource,
-    LocalBackend,
-    launch,
-    stop as launcher_stop,
-    is_direct_eval_type,
-    LaunchResult,
 )
 
 logger = get_logger()
@@ -183,8 +177,7 @@ def _all_results_empty(result) -> bool:
     return False
 
 
-def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task',
-                  use_direct: bool = False):
+def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', use_direct: bool = False):
     """Run the evaluation and return a Flask response."""
     create_log_file(task_id, os.path.join('logs', 'eval_log.log'))
     try:
@@ -243,8 +236,10 @@ def run_evaluation():
         logger.info(f'[{task_id}] Launching local model: path={model_path} backend={backend}')
         try:
             launch_result = launch(model_path, backend=backend, backend_args=backend_args)
-            logger.info(f'[{task_id}] Launched: backend={launch_result.backend} '
-                        f'eval_type={launch_result.eval_type}')
+            logger.info(
+                f'[{task_id}] Launched: backend={launch_result.backend} '
+                f'eval_type={launch_result.eval_type}'
+            )
         except Exception as e:
             logger.error(f'[{task_id}] Launch failed: {e}')
             return jsonify({'status': 'error', 'task_id': task_id, 'error': str(e)}), 500
@@ -261,17 +256,20 @@ def run_evaluation():
         return jsonify({'status': 'error', 'task_id': task_id, 'error': str(e)}), 400
 
     task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
-    logger.info(f'[{task_id}] Running: model={task_config.model} '
-                f'eval_type={task_config.eval_type} datasets={task_config.datasets}')
+    logger.info(
+        f'[{task_id}] Running: model={task_config.model} '
+        f'eval_type={task_config.eval_type} datasets={task_config.datasets}'
+    )
 
     # ── Execute ────────────────────────────────────────────────────
     try:
         # Server-mode launchers (llama_cpp, vllm, etc.) provide process
         # isolation via a separate server process. The eval itself is just
         # HTTP calls — safe to run directly without a subprocess.
-        use_direct = (launch_result is not None and
-                      (is_direct_eval_type(task_config.eval_type or '') or
-                       launch_result.api_url is not None))
+        use_direct = (
+            launch_result is not None
+            and (is_direct_eval_type(task_config.eval_type or '') or launch_result.api_url is not None)
+        )
         return _execute_task(task_id, task_config, label='Task', use_direct=use_direct)
     finally:
         if launch_result:

@@ -219,8 +219,7 @@ class LocalDataLoader(DataLoader):
                         arrow_files.append(os.path.join(root, f))
 
             # Prefer arrow files whose filename contains the split name
-            matching = [f for f in arrow_files if f'-{self.split}.arrow' in f
-                        or f.endswith(f'{self.split}.arrow')]
+            matching = [f for f in arrow_files if f'-{self.split}.arrow' in f or f.endswith(f'{self.split}.arrow')]
             # Fall back if no split match but only one arrow file present
             if not matching and len(arrow_files) == 1:
                 matching = arrow_files
@@ -235,9 +234,7 @@ class LocalDataLoader(DataLoader):
                 if records:
                     dataset = records
                     dataset_found = True
-                    logger.info(
-                        f'Loaded {len(records)} records from Arrow file(s) in {path}'
-                    )
+                    logger.info(f'Loaded {len(records)} records from Arrow file(s) in {path}')
 
         # If no specific file found, raise an error with helpful information
         if not dataset_found:
