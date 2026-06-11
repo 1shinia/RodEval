@@ -55,6 +55,7 @@ class LaunchResult:
 
 # ── Detection ────────────────────────────────────────────────────
 
+
 def detect_model(path: str) -> ModelInfo:
     path = os.path.expanduser(path)
     info = ModelInfo(path=path, format=ModelFormat.CHECKPOINT)
@@ -92,6 +93,7 @@ def has_gpu() -> bool:
 
 # ── Backend resolution ────────────────────────────────────────────
 
+
 def resolve_backend(info: ModelInfo, preference: str = 'auto') -> str:
     if preference and preference != 'auto':
         return preference.lower()
@@ -104,21 +106,18 @@ def resolve_backend(info: ModelInfo, preference: str = 'auto') -> str:
 
 # ── Validation ────────────────────────────────────────────────────
 
+
 def _validate_backend(resolved: str, info: ModelInfo) -> None:
     gpu = has_gpu()
     if resolved in ('vllm', 'sglang'):
         if info.format == ModelFormat.GGUF:
-            raise ValueError(
-                f'{resolved} 无法直接加载 GGUF。请选 auto 或 llama_cpp。\n模型: {info.path}')
+            raise ValueError(f'{resolved} 无法直接加载 GGUF。请选 auto 或 llama_cpp。\n模型: {info.path}')
         if not gpu:
-            raise ValueError(
-                f'{resolved} 需要 GPU，当前服务器无 GPU。请选 auto 或 llama_cpp 或 transformers。')
+            raise ValueError(f'{resolved} 需要 GPU，当前服务器无 GPU。请选 auto 或 llama_cpp 或 transformers。')
     if resolved == 'llama_cpp' and info.format == ModelFormat.CHECKPOINT:
-        raise ValueError(
-            f'llama.cpp 需要 GGUF，但检测到 HF checkpoint。请选 auto 或 transformers。')
+        raise ValueError(f'llama.cpp 需要 GGUF，但检测到 HF checkpoint。请选 auto 或 transformers。')
     if resolved == 'transformers' and info.format == ModelFormat.GGUF:
-        raise ValueError(
-            f'Transformers 无法加载 GGUF。请选 auto 或 llama_cpp。')
+        raise ValueError(f'Transformers 无法加载 GGUF。请选 auto 或 llama_cpp。')
 
 
 # ── Port ──────────────────────────────────────────────────────────
@@ -154,12 +153,14 @@ def _health_check(url: str, timeout: float = 180.0) -> bool:
 
 # ── Server launchers ──────────────────────────────────────────────
 
+
 def _launch_vllm(model_path: str, port: int, extra_args=None) -> subprocess.Popen:
     extra_args = extra_args or {}
-    cmd = ['python', '-m', 'vllm.entrypoints.openai.api_server',
-           '--model', model_path, '--served-model-name', os.path.basename(model_path),
-           '--host', '0.0.0.0', '--port', str(port),
-           '--disable-log-requests', '--disable-log-stats']
+    cmd = [
+        'python', '-m', 'vllm.entrypoints.openai.api_server', '--model', model_path, '--served-model-name',
+        os.path.basename(model_path), '--host', '0.0.0.0', '--port',
+        str(port), '--disable-log-requests', '--disable-log-stats'
+    ]
     if extra_args.get('trust_remote_code'):
         cmd += ['--trust-remote-code']
     if extra_args.get('dtype') and extra_args['dtype'] != 'auto':
@@ -178,8 +179,7 @@ def _launch_vllm(model_path: str, port: int, extra_args=None) -> subprocess.Pope
 
 def _launch_sglang(model_path: str, port: int, extra_args=None) -> subprocess.Popen:
     extra_args = extra_args or {}
-    cmd = ['python', '-m', 'sglang.launch_server',
-           '--model-path', model_path, '--host', '0.0.0.0', '--port', str(port)]
+    cmd = ['python', '-m', 'sglang.launch_server', '--model-path', model_path, '--host', '0.0.0.0', '--port', str(port)]
     if extra_args.get('trust_remote_code'):
         cmd += ['--trust-remote-code']
     if extra_args.get('tp_size'):
@@ -191,9 +191,7 @@ def _launch_sglang(model_path: str, port: int, extra_args=None) -> subprocess.Po
 
 def _launch_llama_cpp(model_path: str, port: int, extra_args=None) -> subprocess.Popen:
     extra_args = extra_args or {}
-    cmd = ['python', '-m', 'llama_cpp.server',
-           '--model', model_path,
-           '--host', '0.0.0.0', '--port', str(port)]
+    cmd = ['python', '-m', 'llama_cpp.server', '--model', model_path, '--host', '0.0.0.0', '--port', str(port)]
     if extra_args.get('n_ctx'):
         cmd += ['--n_ctx', str(extra_args['n_ctx'])]
     if extra_args.get('n_threads'):
@@ -210,16 +208,17 @@ _SERVER_LAUNCHERS = {'vllm': _launch_vllm, 'sglang': _launch_sglang, 'llama_cpp'
 # Eval types that must NOT run in a subprocess (C extensions crash on spawn)
 _DIRECT_EVAL_TYPES = {'llm_ckpt'}
 
-
 # ── Main API ──────────────────────────────────────────────────────
 
-def launch(model_path: str, backend: str = 'auto',
-           backend_args: Optional[Dict[str, Any]] = None) -> LaunchResult:
+
+def launch(model_path: str, backend: str = 'auto', backend_args: Optional[Dict[str, Any]] = None) -> LaunchResult:
     backend_args = backend_args or {}
     info = detect_model(model_path)
     resolved = resolve_backend(info, backend)
-    logger.info(f'[ModelLauncher] model={model_path} format={info.format.value} '
-                f'backend={resolved} gpu={has_gpu()}')
+    logger.info(
+        f'[ModelLauncher] model={model_path} format={info.format.value} '
+        f'backend={resolved} gpu={has_gpu()}'
+    )
     _validate_backend(resolved, info)
 
     # Server mode
@@ -228,18 +227,28 @@ def launch(model_path: str, backend: str = 'auto',
         api_url = f'http://127.0.0.1:{port}/v1'
         proc = _SERVER_LAUNCHERS[resolved](model_path, port, backend_args)
         if not _health_check(api_url):
-            proc.terminate(); proc.wait(timeout=10)
+            proc.terminate()
+            proc.wait(timeout=10)
             raise RuntimeError(f'{resolved} server unhealthy after 180s (model={model_path})')
-        return LaunchResult(backend=resolved, eval_type='openai_api',
-                            api_url=api_url, model_path=model_path, _server_process=proc)
+        return LaunchResult(
+            backend=resolved, eval_type='openai_api', api_url=api_url, model_path=model_path, _server_process=proc
+        )
 
     # Direct mode (for backends that load model directly in-process)
     if resolved == 'transformers':
-        return LaunchResult(backend='transformers', eval_type='llm_ckpt', model_path=model_path,
-                            model_args={'model_path': model_path,
-                                        'revision': backend_args.get('revision', 'master'),
-                                        'precision': backend_args.get('precision', 'torch.float16'),
-                                        **({'device_map': backend_args['device_map']} if 'device_map' in backend_args else {})})
+        return LaunchResult(
+            backend='transformers',
+            eval_type='llm_ckpt',
+            model_path=model_path,
+            model_args={
+                'model_path': model_path,
+                'revision': backend_args.get('revision', 'master'),
+                'precision': backend_args.get('precision', 'torch.float16'),
+                **({
+                    'device_map': backend_args['device_map']
+                } if 'device_map' in backend_args else {})
+            }
+        )
 
     raise ValueError(f'Unknown backend: {resolved}')
 
@@ -253,12 +262,12 @@ def stop(result: LaunchResult) -> None:
     try:
         proc.wait(timeout=15)
     except subprocess.TimeoutExpired:
-        proc.kill(); proc.wait()
+        proc.kill()
+        proc.wait()
 
 
 @contextmanager
-def launch_context(model_path: str, backend: str = 'auto',
-                   backend_args: Optional[Dict[str, Any]] = None):
+def launch_context(model_path: str, backend: str = 'auto', backend_args: Optional[Dict[str, Any]] = None):
     result = launch(model_path, backend=backend, backend_args=backend_args)
     try:
         yield result
