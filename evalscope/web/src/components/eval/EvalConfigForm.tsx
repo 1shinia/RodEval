@@ -31,6 +31,7 @@ const BACKEND_PARAMS: Record<string, ParamDef[]> = {
   transformers: [
     { key: 'precision', label: '精度', type: 'select', options: ['float16', 'bfloat16', 'float32', 'auto'] },
     { key: 'device_map', label: '设备分配', type: 'select', options: ['auto', 'cuda:0', 'cuda:1', 'cpu'] },
+    { key: 'attn_implementation', label: '注意力实现', type: 'select', options: ['sdpa', 'eager', 'flash_attention_2'] },
     { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
   ],
   vllm: [
@@ -50,8 +51,9 @@ const BACKEND_PARAMS: Record<string, ParamDef[]> = {
 const DEFAULT_PARAM_VALUES: Record<string, string> = {
   n_ctx: '4096',
   n_threads: '8',
-  precision: 'float16',
+  precision: 'auto',
   device_map: 'auto',
+  attn_implementation: 'sdpa',
   dtype: 'auto',
 }
 
