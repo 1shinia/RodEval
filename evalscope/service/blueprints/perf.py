@@ -48,6 +48,84 @@ def _build_perf_table(result, api_type: str = None) -> str:
 bp_perf = Blueprint('perf', __name__, url_prefix='/api/v1/perf')
 
 
+@bp_perf.route('/list', methods=['GET'])
+def list_perf_tasks():
+    """List all performance test tasks with metadata.
+
+    Query params:
+        root_path (str): output root directory (default: OUTPUT_DIR)
+    """
+    root = request.args.get('root_path', OUTPUT_DIR)
+    if not os.path.isdir(root):
+        return jsonify({'tasks': [], 'error': f'Directory not found: {root}'}), 200
+
+    tasks = []
+    for entry in sorted(os.listdir(root), reverse=True):
+        task_dir = os.path.join(root, entry)
+        perf_dir = os.path.join(task_dir, 'perf')
+        if not os.path.isdir(task_dir) or not os.path.isdir(perf_dir):
+            continue
+
+        # Default metadata
+        meta = {
+            'task_id': entry,
+            'model': 'N/A',
+            'api': 'N/A',
+            'dataset': 'N/A',
+            'runs': 0,
+            'has_report': os.path.exists(os.path.join(perf_dir, 'perf_report.html')),
+            'timestamp': '',
+        }
+
+        # Try to read args from first run subdirectory (look in task_dir and perf_dir)
+        try:
+            search_dirs = [task_dir, perf_dir]
+            for search_dir in search_dirs:
+                if not os.path.isdir(search_dir):
+                    continue
+                for sub in sorted(os.listdir(search_dir)):
+                    sub_dir = os.path.join(search_dir, sub)
+                    if not os.path.isdir(sub_dir) or sub == 'perf':
+                        continue
+                    args_file = os.path.join(sub_dir, 'benchmark_args.json')
+                    if os.path.isfile(args_file):
+                        with open(args_file, 'r') as f:
+                            args_data = json.load(f)
+                        meta['model'] = args_data.get('model', 'N/A')
+                        meta['api'] = args_data.get('api', 'N/A')
+                        meta['dataset'] = args_data.get('dataset', 'N/A')
+                        break
+                if meta['model'] != 'N/A':
+                    break
+        except Exception:
+            pass
+
+        # Count run subdirs (look in both task_dir and perf_dir)
+        try:
+            run_count = 0
+            for search_dir in [task_dir, perf_dir]:
+                if os.path.isdir(search_dir):
+                    run_count += sum(
+                        1 for s in os.listdir(search_dir)
+                        if os.path.isdir(os.path.join(search_dir, s)) and s != 'perf'
+                    )
+            meta['runs'] = run_count
+        except Exception:
+            pass
+
+        # Timestamp from mtime
+        try:
+            mtime = os.path.getmtime(task_dir)
+            from datetime import datetime
+            meta['timestamp'] = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+        except Exception:
+            pass
+
+        tasks.append(meta)
+
+    return jsonify({'tasks': tasks}), 200
+
+
 @bp_perf.route('/invoke', methods=['POST'])
 def run_performance_test():
     """Run a performance benchmark task (blocking).

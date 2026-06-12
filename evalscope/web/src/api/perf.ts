@@ -1,6 +1,27 @@
 import { apiPost, api } from './client'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
 
+export interface PerfTaskMeta {
+  task_id: string
+  model: string
+  api: string
+  dataset: string
+  runs: number
+  has_report: boolean
+  timestamp: string
+}
+
+export interface ListPerfTasksResponse {
+  tasks: PerfTaskMeta[]
+  error?: string
+}
+
+export async function listPerfTasks(rootPath?: string): Promise<ListPerfTasksResponse> {
+  const params: Record<string, string> = {}
+  if (rootPath) params.root_path = rootPath
+  return api<ListPerfTasksResponse>('/api/v1/perf/list', params)
+}
+
 export async function submitPerfTask(
   payload: Record<string, unknown>,
   taskId: string,
