@@ -44,9 +44,9 @@ export default function TopNav() {
       <div className="flex items-center justify-between px-4 max-w-[1600px] mx-auto" style={{ height: '56px' }}>
         <div className="flex items-center gap-3 lg:gap-5 min-w-0">
           <div className="flex items-center gap-2 shrink-0">
-            <img src="/logo.png" alt="RodEval" className="w-8 h-8 object-contain" />
+            <img src="/logo.png" alt="RodCount" className="w-8 h-8 object-contain" />
             <span className="font-bold text-lg tracking-tight text-[var(--text)]">
-              Rod<span className="text-[var(--accent)]">Eval</span>
+              Rod<span className="text-[var(--accent)]">Count</span>
             </span>
           </div>
           <nav className="hidden lg:flex items-center gap-0.5">

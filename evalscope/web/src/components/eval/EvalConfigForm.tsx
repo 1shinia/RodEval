@@ -115,6 +115,9 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
   const [topP, setTopP] = useState('')
   const [maxTokens, setMaxTokens] = useState('')
   const [topK, setTopK] = useState('')
+  const [seed, setSeed] = useState('42')
+  const [judgeStrategy, setJudgeStrategy] = useState('auto')
+  const [ignoreErrors, setIgnoreErrors] = useState(false)
   const [datasetArgs, setDatasetArgs] = useState('')
 
   // Validation
@@ -168,7 +171,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
   }
 
   const selectSuggestion = (name: string) => {
-    const parts = datasets.split(',').map((s) => s.trim())
+    const parts = datasets.split(/[,，]/).map((s) => s.trim())
     parts[parts.length - 1] = name
     setDatasets(parts.join(', '))
     setShowSuggestions(false)
@@ -231,7 +234,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
       if (datasetDir) config.dataset_dir = datasetDir
       config.dataset_args = { [datasetLocalType]: { local_path: datasetPath } }
     } else {
-      config.datasets = datasets.split(',').map((s) => s.trim()).filter(Boolean)
+      config.datasets = datasets.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
       config.dataset_hub = datasetHub
       if (datasetDir) config.dataset_dir = datasetDir
     }
@@ -245,6 +248,9 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
     if (maxTokens) genConfig.max_tokens = Number(maxTokens)
     if (topK) genConfig.top_k = Number(topK)
     if (Object.keys(genConfig).length > 0) config.generation_config = genConfig
+    if (seed && seed !== '42') config.seed = Number(seed)
+    if (judgeStrategy && judgeStrategy !== 'auto') config.judge_strategy = judgeStrategy
+    if (ignoreErrors) config.ignore_errors = true
     if (datasetArgs) { try { const extra = JSON.parse(datasetArgs); config.dataset_args = { ...(config.dataset_args as Record<string, unknown> || {}), ...extra } } catch { /* ignore */ } }
     onSubmit(config)
   }
@@ -446,31 +452,87 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
       {showMore && (
         <Card className="!p-0">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
+            {/* Row 1 — 采样参数 */}
+            <FormField label={t('eval.temperature')}>
+              <input type="number" step="0.1" min={0} max={2} value={temperature}
+                onChange={(e) => {
+                  let v = e.target.value.replace(/[^0-9.]/g, '')
+                  if (v !== '' && Number(v) > 2) v = '2'
+                  setTemperature(v)
+                }}
+                className={FORM_INPUT_CLASS} />
+            </FormField>
+            <FormField label={t('eval.topP')}>
+              <input type="number" step="0.05" min={0} max={1} value={topP}
+                onChange={(e) => {
+                  let v = e.target.value.replace(/[^0-9.]/g, '')
+                  if (v !== '' && Number(v) > 1) v = '1'
+                  setTopP(v)
+                }}
+                className={FORM_INPUT_CLASS} />
+            </FormField>
+            <FormField label={t('eval.topK')}>
+              <input type="number" min={1} step="1" value={topK}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setTopK(v)
+                }}
+                className={FORM_INPUT_CLASS} />
+            </FormField>
+            {/* Row 2 — 长度 + 运行控制 */}
+            <FormField label={t('eval.maxTokens')}>
+              <input type="number" min={1} step="1" value={maxTokens}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setMaxTokens(v)
+                }}
+                className={FORM_INPUT_CLASS} />
+            </FormField>
             <FormField label={t('eval.repeats')}>
-              <input type="number" value={repeats} onChange={(e) => setRepeats(e.target.value)} className={FORM_INPUT_CLASS} />
+              <input type="number" min={1} step="1" value={repeats}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setRepeats(v)
+                }}
+                className={FORM_INPUT_CLASS} />
             </FormField>
             <FormField label={t('eval.timeout')}>
-              <input type="number" value={timeout} onChange={(e) => setTimeout_(e.target.value)} className={FORM_INPUT_CLASS} />
+              <input type="number" min={1} step="1" value={timeout}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setTimeout_(v)
+                }}
+                className={FORM_INPUT_CLASS} />
             </FormField>
-            <div className="flex items-end gap-2 pb-0.5">
+            {/* Row 3 — 种子 + 评判 + 开关 */}
+            <FormField label={t('eval.seed')}>
+              <input type="number" min={1} step="1" value={seed}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setSeed(v)
+                }}
+                className={FORM_INPUT_CLASS} />
+            </FormField>
+            <FormField label={t('eval.judgeStrategy')}>
+              <select value={judgeStrategy} onChange={(e) => setJudgeStrategy(e.target.value)} className={FORM_INPUT_CLASS}>
+                <option value="auto">auto</option>
+                <option value="rule">rule</option>
+                <option value="llm">llm</option>
+                <option value="llm_recall">llm_recall</option>
+              </select>
+            </FormField>
+            <div className="flex items-end gap-4 pb-0.5">
               <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer">
                 <input type="checkbox" checked={stream} onChange={(e) => setStream(e.target.checked)} className="accent-[var(--accent)]" />
                 {t('eval.stream')}
               </label>
+              <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer">
+                <input type="checkbox" checked={ignoreErrors} onChange={(e) => setIgnoreErrors(e.target.checked)} className="accent-[var(--accent)]" />
+                {t('eval.ignoreErrors')}
+              </label>
             </div>
-            <FormField label={t('eval.temperature')}>
-              <input type="number" step="0.1" value={temperature} onChange={(e) => setTemperature(e.target.value)} className={FORM_INPUT_CLASS} />
-            </FormField>
-            <FormField label={t('eval.topP')}>
-              <input type="number" step="0.1" value={topP} onChange={(e) => setTopP(e.target.value)} className={FORM_INPUT_CLASS} />
-            </FormField>
-            <FormField label={t('eval.maxTokens')}>
-              <input type="number" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} className={FORM_INPUT_CLASS} />
-            </FormField>
-            <FormField label={t('eval.topK')}>
-              <input type="number" value={topK} onChange={(e) => setTopK(e.target.value)} className={FORM_INPUT_CLASS} />
-            </FormField>
-            <div className="md:col-span-2">
+            {/* Row 4 — 数据集参数 */}
+            <div className="md:col-span-3">
               <label className={FORM_LABEL_CLASS}>{t('eval.datasetArgs')}</label>
               <textarea value={datasetArgs} onChange={(e) => setDatasetArgs(e.target.value)}
                 className={`${FORM_INPUT_CLASS} h-20 resize-y`} style={{ fontFamily: 'var(--font-mono)' }}
