@@ -135,18 +135,6 @@ export default function DetailsTab({ reportName, datasetName, rootPath, perfMetr
               {(normOverall * 100).toFixed(2)}
             </span>
           </div>
-          {/* mini progress ring — 6px stroke (DESIGN.md `{components.score-ring}`) */}
-          <svg width="48" height="48" viewBox="0 0 48 48" style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx="24" cy="24" r="19" fill="none" stroke="var(--border)" strokeWidth="6" />
-            <circle
-              cx="24" cy="24" r="19" fill="none"
-              stroke={scoreColor(normOverall)}
-              strokeWidth="6"
-              strokeDasharray={`${2 * Math.PI * 19}`}
-              strokeDashoffset={`${2 * Math.PI * 19 * (1 - normOverall)}`}
-              strokeLinecap="round"
-            />
-          </svg>
         </div>
       )}
 
