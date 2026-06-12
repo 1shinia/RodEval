@@ -18,17 +18,7 @@ ANALYSIS_PROMPT = """You are an expert AI model evaluator. Analyze the following
 
 The report must contain exactly four sections with second-level Markdown headers (##):
 
-## Overall Performance
-Summarize the model's general performance across all evaluated benchmarks and metrics.
-
-## Key Metrics Analysis
-Break down individual metrics. If multiple metrics are present, categorize them into *Low*, *Medium*, and *High* performance tiers and present the breakdown in a Markdown table.
-
-## Improvement Suggestions
-Provide specific, actionable recommendations to address identified weaknesses or low-scoring areas.
-
-## Conclusion
-Offer a concise summary of the findings and an overall assessment.
+{sections}
 
 Requirements:
 - Output only the report content itself — no preamble, commentary, or closing remarks.
@@ -37,8 +27,7 @@ Requirements:
 
 ```json
 {report_str}
-```
-"""
+```"""
 
 
 def normalize_score(score: Union[float, dict, int], keep_num: int = 4) -> Union[float, dict]:
@@ -267,6 +256,30 @@ class Report(BaseModel):
         try:
             language = 'English' if DEFAULT_LANGUAGE == 'en' else 'Chinese'
 
+            if DEFAULT_LANGUAGE == 'en':
+                sections = (
+                    '## Overall Performance\n'
+                    'Summarize the model\'s general performance across all evaluated benchmarks and metrics.\n\n'
+                    '## Key Metrics Analysis\n'
+                    'Break down individual metrics. If multiple metrics are present, categorize them into '
+                    '*Low*, *Medium*, and *High* performance tiers and present the breakdown in a Markdown table.\n\n'
+                    '## Improvement Suggestions\n'
+                    'Provide specific, actionable recommendations to address identified weaknesses or low-scoring areas.\n\n'
+                    '## Conclusion\n'
+                    'Offer a concise summary of the findings and an overall assessment.'
+                )
+            else:
+                sections = (
+                    '## 总体表现\n'
+                    '总结模型在所有评估基准和指标上的整体表现。\n\n'
+                    '## 关键指标分析\n'
+                    '逐个分析各指标，若存在多个指标，请将其分为 *低*、*中*、*高* 三个性能层级并用 Markdown 表格展示。\n\n'
+                    '## 改进建议\n'
+                    '针对已识别的弱点或低分领域，提供具体、可操作的建议。\n\n'
+                    '## 总结\n'
+                    '简要总结分析结果并给出整体评价。'
+                )
+
             # Use judge_model_args if configured; otherwise fall back to the task's own model settings
             if task_config.judge_model_args:
                 judge_llm = LLMJudge(**task_config.judge_model_args)
@@ -278,7 +291,7 @@ class Report(BaseModel):
                     eval_type=task_config.eval_type,
                 )
 
-            prompt = ANALYSIS_PROMPT.format(language=language, report_str=self.to_json_str())
+            prompt = ANALYSIS_PROMPT.format(sections=sections, language=language, report_str=self.to_json_str())
             response = judge_llm.judge(prompt)
             if response.startswith('[ERROR]'):
                 logger.warning(f'Analysis generation failed, skipping: {response}')
