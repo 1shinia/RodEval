@@ -103,10 +103,7 @@ def plot_multi_report_radar(df: pd.DataFrame):
 
     fig.update_layout(
         template=PLOTLY_THEME,
-        polar=dict(
-            radialaxis=dict(visible=True, range=[0, 1]),
-            angularaxis=dict(showticklabels=False)
-        ),
+        polar=dict(radialaxis=dict(visible=True, range=[0, 1]), angularaxis=dict(showticklabels=False)),
         margin=dict(t=20, l=20, r=20, b=20)
     )
     return fig
