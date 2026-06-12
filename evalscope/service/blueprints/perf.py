@@ -106,8 +106,7 @@ def list_perf_tasks():
             for search_dir in [task_dir, perf_dir]:
                 if os.path.isdir(search_dir):
                     run_count += sum(
-                        1 for s in os.listdir(search_dir)
-                        if os.path.isdir(os.path.join(search_dir, s)) and s != 'perf'
+                        1 for s in os.listdir(search_dir) if os.path.isdir(os.path.join(search_dir, s)) and s != 'perf'
                     )
             meta['runs'] = run_count
         except Exception:
