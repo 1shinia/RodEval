@@ -74,25 +74,39 @@ def plot_single_dataset_scores(df: pd.DataFrame):
 
 
 def plot_multi_report_radar(df: pd.DataFrame):
+    dataset_colors = px.colors.qualitative.Bold + px.colors.qualitative.Vivid
+
     fig = go.Figure()
 
     grouped = df.groupby(ReportKey.model_name)
-    common_datasets = set.intersection(*[set(group[ReportKey.dataset_name]) for _, group in grouped])
+    common_datasets = sorted(set.intersection(*[set(group[ReportKey.dataset_name]) for _, group in grouped]))
+
+    ds_color_map = {ds: dataset_colors[i % len(dataset_colors)] for i, ds in enumerate(common_datasets)}
 
     for model_name, group in grouped:
-        common_group = group[group[ReportKey.dataset_name].isin(common_datasets)]
-        fig.add_trace(
-            go.Scatterpolar(
-                r=common_group[ReportKey.score],
-                theta=common_group[ReportKey.dataset_name],
-                name=model_name,
-                fill='toself'
+        group = group.set_index(ReportKey.dataset_name)
+        for ds in common_datasets:
+            color = ds_color_map[ds]
+            fig.add_trace(
+                go.Scatterpolar(
+                    r=[0, group.loc[ds, ReportKey.score]],
+                    theta=[ds, ds],
+                    name=f'{model_name} — {ds}',
+                    mode='lines+markers+text',
+                    text=['', ds],
+                    textposition='top center',
+                    textfont=dict(size=11, color='#444'),
+                    line=dict(color=color, width=2.5),
+                    marker=dict(size=10, color=color, line=dict(color='white', width=1.5)),
+                )
             )
-        )
 
     fig.update_layout(
         template=PLOTLY_THEME,
-        polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 1]),
+            angularaxis=dict(showticklabels=False)
+        ),
         margin=dict(t=20, l=20, r=20, b=20)
     )
     return fig
