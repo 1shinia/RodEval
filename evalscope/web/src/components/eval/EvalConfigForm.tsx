@@ -19,14 +19,16 @@ interface ParamDef {
   type: 'number' | 'select' | 'checkbox'
   options?: string[]
   step?: string
+  min?: number
+  max?: number
   placeholder?: string
   showWhen?: (b: string) => boolean
 }
 
 const BACKEND_PARAMS: Record<string, ParamDef[]> = {
   llama_cpp: [
-    { key: 'n_ctx', label: '上下文长度', type: 'number', placeholder: '默认 4096' },
-    { key: 'n_threads', label: '线程数', type: 'number', placeholder: '默认 8' },
+    { key: 'n_ctx', label: '上下文长度', type: 'number', min: 1, placeholder: '默认 4096' },
+    { key: 'n_threads', label: '线程数', type: 'number', min: 1, placeholder: '默认 8' },
   ],
   transformers: [
     { key: 'precision', label: '精度', type: 'select', options: ['float16', 'bfloat16', 'float32', 'auto'] },
@@ -35,15 +37,29 @@ const BACKEND_PARAMS: Record<string, ParamDef[]> = {
     { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
   ],
   vllm: [
-    { key: 'max_model_len', label: '上下文长度', type: 'number', placeholder: '默认 模型自带值' },
-    { key: 'dtype', label: '精度', type: 'select', options: ['auto', 'float16', 'bfloat16'] },
-    { key: 'tensor_parallel_size', label: '张量并行', type: 'number', placeholder: '默认 自动检测GPU数' },
-    { key: 'gpu_memory_utilization', label: 'GPU 内存比例', type: 'number', step: '0.05', placeholder: '默认 0.9' },
+    { key: 'max_model_len', label: '上下文长度', type: 'number', min: 1, placeholder: '默认 模型自带值' },
+    { key: 'dtype', label: '精度', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
+    { key: 'quantization', label: '量化', type: 'select', options: ['无', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
+    { key: 'kv_cache_dtype', label: 'KV Cache 精度', type: 'select', options: ['auto', 'fp8'] },
+    { key: 'tensor_parallel_size', label: '张量并行', type: 'number', min: 1, placeholder: '默认 自动检测GPU数' },
+    { key: 'pipeline_parallel_size', label: '流水线并行', type: 'number', min: 1, placeholder: '默认 1' },
+    { key: 'data_parallel_size', label: '数据并行', type: 'number', min: 1, placeholder: '默认 1' },
+    { key: 'expert_parallel_size', label: '专家并行（MoE）', type: 'number', min: 1, placeholder: '默认 1' },
+    { key: 'gpu_memory_utilization', label: 'GPU 内存比例', type: 'number', min: 0, max: 1, step: '0.05', placeholder: '默认 0.9' },
+    { key: 'max_num_seqs', label: '最大并发请求数', type: 'number', min: 1, placeholder: '默认 256' },
     { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
   ],
   sglang: [
-    { key: 'tp_size', label: '张量并行', type: 'number', placeholder: '默认 1' },
-    { key: 'mem_fraction_static', label: 'GPU 内存比例', type: 'number', step: '0.05', placeholder: '默认 0.85' },
+    { key: 'context_length', label: '上下文长度', type: 'number', min: 1, placeholder: '默认 模型自带值' },
+    { key: 'dtype', label: '精度', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
+    { key: 'quantization', label: '量化', type: 'select', options: ['无', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
+    { key: 'kv_cache_dtype', label: 'KV Cache 精度', type: 'select', options: ['auto', 'fp8'] },
+    { key: 'tp_size', label: '张量并行', type: 'number', min: 1, placeholder: '默认 1' },
+    { key: 'pp_size', label: '流水线并行', type: 'number', min: 1, placeholder: '默认 1' },
+    { key: 'dp_size', label: '数据并行', type: 'number', min: 1, placeholder: '默认 1' },
+    { key: 'ep_size', label: '专家并行（MoE）', type: 'number', min: 1, placeholder: '默认 1' },
+    { key: 'mem_fraction_static', label: 'GPU 内存比例', type: 'number', min: 0, max: 1, step: '0.05', placeholder: '默认 0.85' },
+    { key: 'max_running_requests', label: '最大并发请求数', type: 'number', min: 1, placeholder: '默认 256' },
     { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
   ],
 }
@@ -310,9 +326,22 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
                     }
                     return (
                       <FormField key={p.key} label={p.label}>
-                        <input type="number" step={p.step}
+                        <input type="number" step={p.step || '1'} min={p.min} max={p.max}
                           value={val}
-                          onChange={(e) => setParam(p.key, e.target.value)}
+                          onChange={(e) => {
+                            let v = e.target.value
+                            const isInt = !p.step
+                            if (isInt) {
+                              v = v.replace(/[^0-9]/g, '')
+                            } else {
+                              v = v.replace(/[^0-9.]/g, '')
+                              const parts = v.split('.')
+                              if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('')
+                            }
+                            if (v !== '' && p.min !== undefined && Number(v) < p.min) v = ''
+                            if (v !== '' && p.max !== undefined && Number(v) > p.max) v = String(p.max)
+                            setParam(p.key, v)
+                          }}
                           className={FORM_INPUT_CLASS}
                           placeholder={p.placeholder} />
                       </FormField>

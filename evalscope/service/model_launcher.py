@@ -170,10 +170,22 @@ def _launch_vllm(model_path: str, port: int, extra_args=None) -> subprocess.Pope
     elif has_gpu():
         import torch
         cmd += ['--tensor-parallel-size', str(torch.cuda.device_count())]
+    if extra_args.get('pipeline_parallel_size'):
+        cmd += ['--pipeline-parallel-size', str(extra_args['pipeline_parallel_size'])]
+    if extra_args.get('data_parallel_size'):
+        cmd += ['--data-parallel-size', str(extra_args['data_parallel_size'])]
+    if extra_args.get('expert_parallel_size'):
+        cmd += ['--expert-parallel-size', str(extra_args['expert_parallel_size'])]
     if extra_args.get('max_model_len'):
         cmd += ['--max-model-len', str(extra_args['max_model_len'])]
     if extra_args.get('gpu_memory_utilization'):
         cmd += ['--gpu-memory-utilization', str(extra_args['gpu_memory_utilization'])]
+    if extra_args.get('quantization') and extra_args['quantization'] != '无':
+        cmd += ['--quantization', str(extra_args['quantization'])]
+    if extra_args.get('kv_cache_dtype') and extra_args['kv_cache_dtype'] != 'auto':
+        cmd += ['--kv-cache-dtype', str(extra_args['kv_cache_dtype'])]
+    if extra_args.get('max_num_seqs'):
+        cmd += ['--max-num-seqs', str(extra_args['max_num_seqs'])]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -182,10 +194,26 @@ def _launch_sglang(model_path: str, port: int, extra_args=None) -> subprocess.Po
     cmd = ['python', '-m', 'sglang.launch_server', '--model-path', model_path, '--host', '0.0.0.0', '--port', str(port)]
     if extra_args.get('trust_remote_code'):
         cmd += ['--trust-remote-code']
+    if extra_args.get('context_length'):
+        cmd += ['--context-length', str(extra_args['context_length'])]
+    if extra_args.get('dtype') and extra_args['dtype'] != 'auto':
+        cmd += ['--dtype', str(extra_args['dtype'])]
+    if extra_args.get('max_running_requests'):
+        cmd += ['--max-running-requests', str(extra_args['max_running_requests'])]
     if extra_args.get('tp_size'):
         cmd += ['--tp-size', str(extra_args['tp_size'])]
+    if extra_args.get('pp_size'):
+        cmd += ['--pp-size', str(extra_args['pp_size'])]
+    if extra_args.get('dp_size'):
+        cmd += ['--dp-size', str(extra_args['dp_size'])]
+    if extra_args.get('ep_size'):
+        cmd += ['--ep-size', str(extra_args['ep_size'])]
     if extra_args.get('mem_fraction_static'):
         cmd += ['--mem-fraction-static', str(extra_args['mem_fraction_static'])]
+    if extra_args.get('quantization') and extra_args['quantization'] != '无':
+        cmd += ['--quantization', str(extra_args['quantization'])]
+    if extra_args.get('kv_cache_dtype') and extra_args['kv_cache_dtype'] != 'auto':
+        cmd += ['--kv-cache-dtype', str(extra_args['kv_cache_dtype'])]
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
