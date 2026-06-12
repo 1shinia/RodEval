@@ -202,6 +202,9 @@ def _launch_sglang(model_path: str, port: int, extra_args=None) -> subprocess.Po
         cmd += ['--max-running-requests', str(extra_args['max_running_requests'])]
     if extra_args.get('tp_size'):
         cmd += ['--tp-size', str(extra_args['tp_size'])]
+    elif has_gpu():
+        import torch
+        cmd += ['--tp-size', str(torch.cuda.device_count())]
     if extra_args.get('pp_size'):
         cmd += ['--pp-size', str(extra_args['pp_size'])]
     if extra_args.get('dp_size'):

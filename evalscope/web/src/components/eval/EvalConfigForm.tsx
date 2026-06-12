@@ -54,7 +54,7 @@ const BACKEND_PARAMS: Record<string, ParamDef[]> = {
     { key: 'dtype', label: '精度', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
     { key: 'quantization', label: '量化', type: 'select', options: ['无', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
     { key: 'kv_cache_dtype', label: 'KV Cache 精度', type: 'select', options: ['auto', 'fp8'] },
-    { key: 'tp_size', label: '张量并行', type: 'number', min: 1, placeholder: '默认 1' },
+    { key: 'tp_size', label: '张量并行', type: 'number', min: 1, placeholder: '默认 自动检测GPU数' },
     { key: 'pp_size', label: '流水线并行', type: 'number', min: 1, placeholder: '默认 1' },
     { key: 'dp_size', label: '数据并行', type: 'number', min: 1, placeholder: '默认 1' },
     { key: 'ep_size', label: '专家并行（MoE）', type: 'number', min: 1, placeholder: '默认 1' },
@@ -74,7 +74,8 @@ const DEFAULT_PARAM_VALUES: Record<string, string> = {
 }
 
 function getParams(backend: string): ParamDef[] {
-  return BACKEND_PARAMS[backend] || BACKEND_PARAMS['transformers']
+  if (backend === 'auto') return []
+  return BACKEND_PARAMS[backend] || []
 }
 
 export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: Props) {
@@ -288,12 +289,14 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
             </select>
           </FormField>
           <div className="md:col-span-2">
-            <button type="button" onClick={() => setShowBackendOpts(!showBackendOpts)}
-              className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline cursor-pointer">
-              {t('eval.backendAdvanced')}
-              {showBackendOpts ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-            {showBackendOpts && (
+          {backend !== 'auto' && (
+            <>
+              <button type="button" onClick={() => setShowBackendOpts(!showBackendOpts)}
+                className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline cursor-pointer">
+                {t('eval.backendAdvanced')}
+                {showBackendOpts ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+              {showBackendOpts && (
               <Card className="!p-0 mt-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3">
                   {getParams(backend).map((p) => {
@@ -349,6 +352,8 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
                   })}
                 </div>
               </Card>
+            )}
+            </>
             )}
           </div>
         </>)}
