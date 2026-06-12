@@ -457,6 +457,33 @@ def get_analysis():
         return jsonify({'error': str(e)}), 500
 
 
+@bp_reports.route('/delete', methods=['DELETE'])
+def delete_report():
+    """Delete a report folder.
+
+    Body (JSON):
+        root_path   (str): output root directory
+        report_name (str): report identifier
+    """
+    data = request.get_json(silent=True) or {}
+    report_name = data.get('report_name')
+    if not report_name:
+        return jsonify({'error': 'report_name is required'}), 400
+    try:
+        root = _root_path()
+        prefix, _, _ = process_report_name(report_name)
+        report_dir = os.path.join(root, prefix)
+        if not os.path.isdir(report_dir):
+            return jsonify({'error': 'Report folder not found'}), 404
+        import shutil
+        shutil.rmtree(report_dir)
+        logger.info(f'Deleted report: {report_dir}')
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        logger.error(f'Failed to delete report {report_name}: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
 @bp_reports.route('/html', methods=['GET'])
 def get_html_report():
     """Serve the HTML report file for a given report.

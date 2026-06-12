@@ -86,6 +86,19 @@ export function getHtmlReportUrl(rootPath: string, reportName: string): string {
   return `${BASE}/html?root_path=${encodeURIComponent(rootPath)}&report_name=${encodeURIComponent(reportName)}`
 }
 
+export async function deleteReport(rootPath: string, reportName: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE}/delete`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ root_path: rootPath, report_name: reportName }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(body.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 export function getChartUrl(
   rootPath: string,
   chartType: 'scores' | 'sunburst' | 'dataset_scores' | 'radar' | 'histogram' | 'grouped_bar',

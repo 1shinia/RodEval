@@ -170,6 +170,19 @@ export default function ReportsPage() {
     }
   }, [selectedForCompare, navigate, rootPath])
 
+  const handleDelete = useCallback(async (name: string) => {
+    if (!window.confirm(`确定要删除 "${name}" 吗？此操作不可撤销。`)) return
+    try {
+      await reportsApi.deleteReport(rootPath, name)
+      // Remove from compare selection
+      clearCompareSelection()
+      // Refresh list
+      fetchReports()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '删除失败')
+    }
+  }, [rootPath, clearCompareSelection, fetchReports])
+
   const handleViewHtml = useCallback(() => {
     if (selectedForCompare.length === 1) {
       const url = reportsApi.getHtmlReportUrl(rootPath, selectedForCompare[0])
@@ -315,6 +328,7 @@ export default function ReportsPage() {
               selected={selectedForCompare.includes(report.name)}
               onSelect={toggleSelectForCompare}
               onClick={handleCardClick}
+              onDelete={handleDelete}
             />
           ))}
         </div>

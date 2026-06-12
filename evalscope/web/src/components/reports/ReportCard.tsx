@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Trash2 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/contexts/LocaleContext'
@@ -11,6 +11,8 @@ interface ReportCardProps {
   onSelect: (name: string) => void
   /** Navigate to report detail */
   onClick: (name: string) => void
+  /** Delete this report */
+  onDelete?: (name: string) => void
 }
 
 function formatTimestamp(ts: string): string {
@@ -46,7 +48,7 @@ function Checkbox({ checked }: { checked: boolean }) {
   )
 }
 
-export default function ReportCard({ report, selected, onSelect, onClick }: ReportCardProps) {
+export default function ReportCard({ report, selected, onSelect, onClick, onDelete }: ReportCardProps) {
   const { t } = useLocale()
 
   const formattedDate = report.timestamp ? formatTimestamp(report.timestamp) : ''
@@ -117,6 +119,21 @@ export default function ReportCard({ report, selected, onSelect, onClick }: Repo
           {report.score.toFixed(4)}
         </span>
       </div>
+
+      {/* Delete button */}
+      {onDelete && (
+        <button
+          type="button"
+          aria-label="Delete report"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(report.name)
+          }}
+          className="shrink-0 flex items-center justify-center rounded p-0.5 transition-colors cursor-pointer opacity-30 group-hover:opacity-80 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]"
+        >
+          <Trash2 size={15} className="text-[var(--text-dim)] hover:text-[var(--danger)] transition-colors" />
+        </button>
+      )}
 
       {/* Chevron — dedicated detail navigation button */}
       <button
