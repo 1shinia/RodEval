@@ -3,34 +3,34 @@
 
 /* ── Design tokens ───────────────────────────────────────────── */
 :root {
-  --bg:             #0c0c1a;
-  --bg-card:        #12122b;
-  --bg-card2:       #16163a;
-  --bg-deep:        #09091a;
-  --bg-hover:       #1b1b3a;
-  --border:         rgba(129, 109, 248, 0.10);
-  --border-md:      rgba(129, 109, 248, 0.18);
-  --border-strong:  rgba(129, 109, 248, 0.28);
-  --text:           #e2e8f0;
-  --text-muted:     #8896aa;
-  --text-dim:       #505870;
-  --accent:         #816DF8;
-  --accent-dim:     rgba(129, 109, 248, 0.12);
-  --accent-glow:    rgba(129, 109, 248, 0.25);
-  --accent-dark:    #5B3FD6;
-  --purple:         #a78bfa;
-  --purple-dim:     rgba(167, 139, 250, 0.12);
+  --bg:             #ffffff;
+  --bg-card:        #f8f9fc;
+  --bg-card2:       #f0f1f5;
+  --bg-deep:        #e8eaf0;
+  --bg-hover:       #e2e4ed;
+  --border:         rgba(100, 100, 130, 0.12);
+  --border-md:      rgba(100, 100, 130, 0.20);
+  --border-strong:  rgba(100, 100, 130, 0.30);
+  --text:           #1a1a2e;
+  --text-muted:     #5a5a7a;
+  --text-dim:       #9090a8;
+  --accent:         #5B3FD6;
+  --accent-dim:     rgba(91, 63, 214, 0.08);
+  --accent-glow:    rgba(91, 63, 214, 0.15);
+  --accent-dark:    #4528b0;
+  --purple:         #7c3aed;
+  --purple-dim:     rgba(124, 58, 237, 0.08);
   --green:          #0F9C7E;
-  --green-dim:      rgba(15, 156, 126, 0.12);
-  --yellow:         #fbbf24;
+  --green-dim:      rgba(15, 156, 126, 0.08);
+  --yellow:         #b45309;
   --radius-xs:      4px;
   --radius-sm:      8px;
   --radius:         12px;
   --radius-lg:      16px;
   --radius-xl:      20px;
-  --shadow-sm:      0 2px 8px rgba(0,0,0,0.4);
-  --shadow:         0 4px 20px rgba(0,0,0,0.55);
-  --shadow-lg:      0 8px 40px rgba(0,0,0,0.6);
+  --shadow-sm:      0 2px 8px rgba(0,0,0,0.06);
+  --shadow:         0 4px 20px rgba(0,0,0,0.08);
+  --shadow-lg:      0 8px 40px rgba(0,0,0,0.10);
   --transition:     0.18s ease;
 }
 
