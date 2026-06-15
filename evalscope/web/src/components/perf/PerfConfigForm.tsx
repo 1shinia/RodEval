@@ -29,7 +29,7 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
   const [parallel, setParallel] = useState('1')
   const [number, setNumber] = useState('10')
   const [rate, setRate] = useState('')
-  const [maxTokens, setMaxTokens] = useState('512')
+  const [maxTokens, setMaxTokens] = useState('')
   const [minTokens, setMinTokens] = useState('')
   const [dataset, setDataset] = useState('openqa')
   const [customDataset, setCustomDataset] = useState('')
@@ -221,19 +221,19 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
 
         {/* ── Token / Prompt ── */}
         <FormField label={t('perf.maxTokens')}>
-          <input type="number" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} className={FORM_INPUT_CLASS} />
+          <input type="number" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} className={FORM_INPUT_CLASS} placeholder="默认 2048" />
         </FormField>
 
         <FormField label={t('perf.minTokens')}>
-          <input type="number" value={minTokens} onChange={(e) => setMinTokens(e.target.value)} className={FORM_INPUT_CLASS} />
+          <input type="number" value={minTokens} onChange={(e) => setMinTokens(e.target.value)} className={FORM_INPUT_CLASS} placeholder="不限制" />
         </FormField>
 
         <FormField label={t('perf.maxPromptLen')}>
-          <input type="number" value={maxPromptLen} onChange={(e) => setMaxPromptLen(e.target.value)} className={FORM_INPUT_CLASS} />
+          <input type="number" value={maxPromptLen} onChange={(e) => setMaxPromptLen(e.target.value)} className={FORM_INPUT_CLASS} placeholder="默认 131072" />
         </FormField>
 
         <FormField label={t('perf.minPromptLen')}>
-          <input type="number" value={minPromptLen} onChange={(e) => setMinPromptLen(e.target.value)} className={FORM_INPUT_CLASS} />
+          <input type="number" value={minPromptLen} onChange={(e) => setMinPromptLen(e.target.value)} className={FORM_INPUT_CLASS} placeholder="默认 0" />
         </FormField>
 
         {/* API mode: Tokenizer path shown here */}
