@@ -186,9 +186,13 @@ def serialize_result(result):
     Recursively walks dicts and lists, converting any Pydantic ``BaseModel``
     instances (``Report``, ``BenchmarkSummary``, ``PercentileResult``, etc.)
     to plain dicts via ``model_dump()`` / ``to_dict()``.
+    Also sanitises NaN / Infinity to None (JSON-compatible).
     """
+    from math import isfinite
     from pydantic import BaseModel
 
+    if isinstance(result, float) and not isfinite(result):
+        return None
     if isinstance(result, BaseModel):
         # Report has a custom to_dict() that delegates to model_dump()
         if hasattr(result, 'to_dict'):
