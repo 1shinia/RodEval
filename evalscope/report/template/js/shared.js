@@ -37,8 +37,8 @@ function setLang(lang) {
   /* Update <html lang> for accessibility / SEO */
   document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
 
-  /* Persist selection across page reloads (shared key across all reports) */
-  try { localStorage.setItem('evalscope-lang', lang); } catch (e) { /* ignore */ }
+  /* Persist selection across page reloads (shared key with app's LocaleContext) */
+  try { localStorage.setItem('evalscope-locale', lang); } catch (e) { /* ignore */ }
 }
 
 /* Bind click handlers to the EN / 中文 toggle buttons */
@@ -50,7 +50,9 @@ document.querySelectorAll('.lang-btn').forEach(function (btn) {
    falling back to the server-side DEFAULT_LANG when no stored preference exists */
 (function initLang() {
   try {
-    var saved = localStorage.getItem('evalscope-lang');
+    /* Read locale from app's key first, then report-specific key (backward compat) */
+    var saved = localStorage.getItem('evalscope-locale')
+      || localStorage.getItem('evalscope-lang');
     setLang((saved && I18N[saved]) ? saved : (DEFAULT_LANG || 'en'));
   } catch (e) {
     setLang(DEFAULT_LANG || 'en');

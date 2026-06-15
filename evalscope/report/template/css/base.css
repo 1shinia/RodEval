@@ -207,7 +207,7 @@ body {
 
 /* ── Header card ─────────────────────────────────────────────── */
 .report-header {
-  background: linear-gradient(140deg, #0e0e28 0%, #13163a 55%, #0b1024 100%);
+  background: linear-gradient(140deg, #eef0ff 0%, #f4f2ff 55%, #e8ecff 100%);
   border: 1px solid var(--border-md);
   border-radius: var(--radius-xl);
   padding: 2.75rem 2.5rem 2.25rem;
@@ -258,7 +258,7 @@ body {
 .report-title {
   font-size: 2.4rem;
   font-weight: 800;
-  background: linear-gradient(130deg, #e2e8f0 30%, var(--accent) 100%);
+  background: linear-gradient(130deg, #1a1a2e 20%, var(--accent) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -686,7 +686,7 @@ tbody tr:hover td { background: rgba(129,109,248,0.04); }
   line-height: 1.4;
 }
 .lang-btn:hover  { background: rgba(255,255,255,0.06); color: var(--text); }
-.lang-btn.active { background: var(--accent); color: #0d1117; }
+.lang-btn.active { background: var(--accent); color: #ffffff; }
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 900px) {
