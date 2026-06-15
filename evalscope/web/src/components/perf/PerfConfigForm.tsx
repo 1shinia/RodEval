@@ -23,6 +23,7 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
   const [minTokens, setMinTokens] = useState('')
   const [dataset, setDataset] = useState('openqa')
   const [customDataset, setCustomDataset] = useState('')
+  const [datasetPath, setDatasetPath] = useState('')
   const [maxPromptLen, setMaxPromptLen] = useState('')
   const [minPromptLen, setMinPromptLen] = useState('')
   const [tokenizerPath, setTokenizerPath] = useState('')
@@ -53,6 +54,7 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
     if (maxTokens) config.max_tokens = Number(maxTokens)
     if (minTokens) config.min_tokens = Number(minTokens)
     if (dataset) config.dataset = dataset === 'custom' ? customDataset : dataset
+    if (datasetPath) config.dataset_path = datasetPath
     if (maxPromptLen) config.max_prompt_length = Number(maxPromptLen)
     if (minPromptLen) config.min_prompt_length = Number(minPromptLen)
     if (tokenizerPath) config.tokenizer_path = tokenizerPath
@@ -118,9 +120,14 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
         </FormField>
 
         {dataset === 'custom' && (
-          <FormField label="自定义数据集名称">
-            <input value={customDataset} onChange={(e) => setCustomDataset(e.target.value)} className={FORM_INPUT_CLASS} placeholder="输入数据集名称" />
-          </FormField>
+          <>
+            <FormField label="自定义数据集名称">
+              <input value={customDataset} onChange={(e) => setCustomDataset(e.target.value)} className={FORM_INPUT_CLASS} placeholder="输入数据集名称" />
+            </FormField>
+            <FormField label="数据集路径">
+              <input value={datasetPath} onChange={(e) => setDatasetPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/datasets/my_perf_data.jsonl" />
+            </FormField>
+          </>
         )}
 
         {/* ── 压测参数 ── */}
@@ -148,15 +155,15 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
         <FormField label={t('perf.minPromptLen')}>
           <input type="number" value={minPromptLen} onChange={(e) => setMinPromptLen(e.target.value)} className={FORM_INPUT_CLASS} />
         </FormField>
+
+        <FormField label="Tokenizer 路径">
+          <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
+        </FormField>
       </div>
 
       {/* ── 高级选项 ── */}
       <Collapsible header="更多参数" defaultOpen={false}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-          <FormField label="Tokenizer 路径">
-            <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
-          </FormField>
-
           <FormField label="Prefix 长度">
             <input type="number" value={prefixLength} onChange={(e) => setPrefixLength(e.target.value.replace(/[^0-9]/g, ''))} className={FORM_INPUT_CLASS} placeholder="0" />
           </FormField>
