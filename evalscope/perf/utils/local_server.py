@@ -58,10 +58,52 @@ def create_app(model, attn_implementation=None) -> FastAPI:
 def start_app(args: Arguments):
     logger.info('Starting local server, please wait...')
     if args.api == 'local':
-        check_import('torch', 'torch', raise_error=True)
-
-        app = create_app(args.model, args.attn_implementation)
-        uvicorn.run(app, host='0.0.0.0', port=args.port, workers=1)
+        if args.model.endswith('.gguf'):
+            # GGUF → start llama.cpp server
+            import sys
+            check_import('llama_cpp', 'llama-cpp-python', raise_error=True)
+            cmd = [
+                sys.executable, '-m', 'llama_cpp.server',
+                '--model', args.model,
+                '--n_ctx', '2048',
+                '--n_threads', '8',
+                '--host', '0.0.0.0',
+                '--port', str(args.port),
+            ]
+            proc = subprocess.Popen(cmd)
+            # Wait for server to be ready
+            import time
+            import requests
+            health_url = f'http://127.0.0.1:{args.port}/health'
+            for _ in range(60):
+                try:
+                    resp = requests.get(health_url, timeout=2)
+                    if resp.status_code == 200:
+                        logger.info('llama.cpp server is ready')
+                        break
+                except Exception:
+                    pass
+                time.sleep(2)
+            else:
+                logger.warning('llama.cpp server did not become ready within 120s')
+            import atexit
+            def on_exit():
+                if proc.poll() is None:
+                    logger.info('Terminating llama.cpp server...')
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                    logger.info('llama.cpp server terminated.')
+                else:
+                    logger.info('llama.cpp server has already terminated.')
+            atexit.register(on_exit)
+        else:
+            check_import('torch', 'torch', raise_error=True)
+            app = create_app(args.model, args.attn_implementation)
+            uvicorn.run(app, host='0.0.0.0', port=args.port, workers=1)
 
     elif args.api == 'local_vllm':
         import torch

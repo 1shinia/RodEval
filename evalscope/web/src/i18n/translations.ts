@@ -454,7 +454,7 @@ const zh: Dict = {
     apiUrl: '模型API URL',
     apiKey: '模型API Key',
     backend: '推理后端',
-    backendAuto: '自动检测',
+    backendAuto: 'Auto Detect',
     backendVllm: 'vLLM',
     backendSglang: 'SGLang',
     backendLlamaCpp: 'llama.cpp',

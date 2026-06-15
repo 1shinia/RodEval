@@ -1,4 +1,4 @@
-import { useState, type SyntheticEvent } from 'react'
+import { useState, useEffect, useRef, type SyntheticEvent } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
@@ -14,6 +14,7 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
   const { t } = useLocale()
   const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
   const isLocal = modelSource === 'local'
+  const modelManualRef = useRef(false)
 
   // OpenAI API fields
   const [model, setModel] = useState('')
@@ -41,6 +42,13 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
   const [extraArgs, setExtraArgs] = useState('')
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Auto-fill model name from path for local models
+  useEffect(() => {
+    if (!isLocal || !modelPath || modelManualRef.current) return
+    const name = modelPath.split('/').pop() || ''
+    if (name) setModel(name)
+  }, [modelPath, isLocal])
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -162,8 +170,8 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
               className={inputClass(errors.modelPath)} placeholder="/data/models/qwen.gguf" />
           </FormField>
           <FormField label={t('eval.modelName')}>
-            <input value={model} onChange={(e) => setModel(e.target.value)} className={FORM_INPUT_CLASS}
-              placeholder={modelPath ? modelPath.split('/').pop() || '' : t('eval.modelNamePlaceholder')} />
+            <input value={model} onChange={(e) => { setModel(e.target.value); modelManualRef.current = true }} className={FORM_INPUT_CLASS}
+              placeholder={t('eval.modelNamePlaceholder')} />
           </FormField>
           <FormField label={t('eval.backend')}>
             <select value={backend} onChange={(e) => setBackend(e.target.value)} className={FORM_INPUT_CLASS}>

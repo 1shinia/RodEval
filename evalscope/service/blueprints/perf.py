@@ -135,7 +135,11 @@ def run_performance_test():
     if not data:
         return jsonify({'error': 'Request body is required'}), 400
 
-    required_fields = ['model', 'url']
+    # url is required for remote APIs, but local models auto-generate their own URL
+    api_type = data.get('api', 'openai')
+    required_fields = ['model']
+    if not api_type.startswith('local'):
+        required_fields.append('url')
     for field in required_fields:
         if field not in data:
             return jsonify({'error': f'{field} is required'}), 400
