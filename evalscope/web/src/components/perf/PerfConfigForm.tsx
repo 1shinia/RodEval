@@ -3,7 +3,7 @@ import { useLocale } from '@/contexts/LocaleContext'
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
 import Collapsible from '@/components/ui/Collapsible'
-import { FORM_INPUT_CLASS, inputClass } from '@/components/ui/formStyles'
+import { FORM_INPUT_CLASS, FORM_LABEL_CLASS, inputClass } from '@/components/ui/formStyles'
 
 interface Props {
   onSubmit: (config: Record<string, unknown>) => void
@@ -12,10 +12,20 @@ interface Props {
 
 export default function PerfConfigForm({ onSubmit, disabled }: Props) {
   const { t } = useLocale()
+  const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
+  const isLocal = modelSource === 'local'
+
+  // OpenAI API fields
   const [model, setModel] = useState('')
   const [url, setUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [api, setApi] = useState('openai')
+
+  // Local model fields
+  const [modelPath, setModelPath] = useState('')
+  const [backend, setBackend] = useState('auto')
+
+  // Common fields
   const [parallel, setParallel] = useState('1')
   const [number, setNumber] = useState('10')
   const [rate, setRate] = useState('')
@@ -35,7 +45,12 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
-    if (!model.trim()) newErrors.model = 'Required'
+    if (isLocal) {
+      if (!modelPath.trim()) newErrors.modelPath = 'Required'
+    } else {
+      if (!model.trim()) newErrors.model = 'Required'
+      if (!url.trim()) newErrors.url = 'Required'
+    }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
@@ -43,13 +58,30 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
     setErrors({})
 
     const config: Record<string, unknown> = {
-      model,
-      api,
       parallel: parallel.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
       number: number.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
     }
-    if (url) config.url = url
-    if (apiKey) config.api_key = apiKey
+
+    if (isLocal) {
+      config.model = modelPath
+      config.model_path = modelPath
+      // Map backend to perf api type
+      if (backend === 'auto') {
+        config.api = 'local'  // auto-detect, default to local/transformers
+      } else if (backend === 'vllm') {
+        config.api = 'local_vllm'
+      } else {
+        config.api = 'local'
+      }
+      if (tokenizerPath) config.tokenizer_path = tokenizerPath
+    } else {
+      config.model = model
+      config.api = api
+      config.url = url
+      if (apiKey) config.api_key = apiKey
+      if (tokenizerPath) config.tokenizer_path = tokenizerPath
+    }
+
     if (rate) config.rate = Number(rate)
     if (maxTokens) config.max_tokens = Number(maxTokens)
     if (minTokens) config.min_tokens = Number(minTokens)
@@ -57,7 +89,6 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
     if (datasetPath) config.dataset_path = datasetPath
     if (maxPromptLen) config.max_prompt_length = Number(maxPromptLen)
     if (minPromptLen) config.min_prompt_length = Number(minPromptLen)
-    if (tokenizerPath) config.tokenizer_path = tokenizerPath
     if (prefixLength) config.prefix_length = Number(prefixLength)
     if (extraArgs.trim()) {
       try { config.extra_args = JSON.parse(extraArgs) }
@@ -72,32 +103,81 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+
+      {/* Model Source */}
+      <div className="flex items-center gap-6">
+        <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="ms" value="openai" checked={!isLocal}
+            onChange={() => setModelSource('openai')} className="accent-[var(--accent)]" />
+          <span className="text-sm text-[var(--text)]">API</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="ms" value="local" checked={isLocal}
+            onChange={() => setModelSource('local')} className="accent-[var(--accent)]" />
+          <span className="text-sm text-[var(--text)]">{t('eval.modelSourceLocal')}</span>
+        </label>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* ── 模型与 API ── */}
-        <FormField label={t('eval.modelName')} required error={errors.model}>
-          <input
-            value={model}
-            onChange={(e) => { setModel(e.target.value); if (errors.model) setErrors((p) => ({ ...p, model: '' })) }}
-            className={inputClass(errors.model)}
-            placeholder="Qwen/Qwen2.5-0.5B-Instruct"
-          />
-        </FormField>
 
-        <FormField label={t('perf.apiType')}>
-          <select value={api} onChange={(e) => setApi(e.target.value)} className={FORM_INPUT_CLASS}>
-            <option value="openai">OpenAI</option>
-            <option value="dashscope">DashScope</option>
-            <option value="local">Local</option>
-          </select>
-        </FormField>
+        {/* ── OpenAI API fields ── */}
+        {!isLocal && (<>
+          <FormField label={t('eval.modelName')} required error={errors.model}>
+            <input
+              value={model}
+              onChange={(e) => { setModel(e.target.value); if (errors.model) setErrors((p) => ({ ...p, model: '' })) }}
+              className={inputClass(errors.model)}
+              placeholder="Qwen/Qwen2.5-0.5B-Instruct"
+            />
+          </FormField>
 
-        <FormField label={t('eval.apiUrl')}>
-          <input value={url} onChange={(e) => setUrl(e.target.value)} className={FORM_INPUT_CLASS} placeholder="http://localhost:8000/v1" />
-        </FormField>
+          <FormField label={t('perf.apiType')}>
+            <select value={api} onChange={(e) => setApi(e.target.value)} className={FORM_INPUT_CLASS}>
+              <option value="openai">OpenAI</option>
+              <option value="openai_responses">OpenAI Responses</option>
+              <option value="openai_embedding">OpenAI Embedding</option>
+              <option value="openai_rerank">OpenAI Rerank</option>
+              <option value="dashscope">DashScope</option>
+              <option value="custom">Custom</option>
+            </select>
+          </FormField>
 
-        <FormField label={t('eval.apiKey')}>
-          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className={FORM_INPUT_CLASS} placeholder="sk-..." />
-        </FormField>
+          <FormField label={t('eval.apiUrl')} required error={errors.url}>
+            <input value={url}
+              onChange={(e) => { setUrl(e.target.value); if (errors.url) setErrors((p) => ({ ...p, url: '' })) }}
+              className={inputClass(errors.url)} placeholder="http://localhost:8000/v1" />
+          </FormField>
+
+          <FormField label={t('eval.apiKey')}>
+            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className={FORM_INPUT_CLASS} placeholder="sk-..." />
+          </FormField>
+        </>)}
+
+        {/* ── Local model fields ── */}
+        {isLocal && (<>
+          <FormField label={t('eval.modelPath')} required error={errors.modelPath}>
+            <input value={modelPath}
+              onChange={(e) => { setModelPath(e.target.value); if (errors.modelPath) setErrors((p) => ({ ...p, modelPath: '' })) }}
+              className={inputClass(errors.modelPath)} placeholder="/data/models/qwen.gguf" />
+          </FormField>
+          <FormField label={t('eval.modelName')}>
+            <input value={model} onChange={(e) => setModel(e.target.value)} className={FORM_INPUT_CLASS}
+              placeholder={modelPath ? modelPath.split('/').pop() || '' : t('eval.modelNamePlaceholder')} />
+          </FormField>
+          <FormField label={t('eval.backend')}>
+            <select value={backend} onChange={(e) => setBackend(e.target.value)} className={FORM_INPUT_CLASS}>
+              <option value="auto">Auto Detect</option>
+              <option value="transformers">Transformers</option>
+              <option value="vllm">vLLM</option>
+              <option value="sglang">SGLang</option>
+              <option value="llama_cpp">llama.cpp</option>
+            </select>
+          </FormField>
+          <FormField label="Tokenizer 路径">
+            <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
+          </FormField>
+        </>)}
 
         {/* ── 数据集 ── */}
         <FormField label={t('perf.dataset')}>
@@ -156,13 +236,16 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
           <input type="number" value={minPromptLen} onChange={(e) => setMinPromptLen(e.target.value)} className={FORM_INPUT_CLASS} />
         </FormField>
 
-        <FormField label="Tokenizer 路径">
-          <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
-        </FormField>
+        {/* API mode: Tokenizer path shown here */}
+        {!isLocal && (
+          <FormField label="Tokenizer 路径">
+            <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
+          </FormField>
+        )}
       </div>
 
       {/* ── 高级选项 ── */}
-      <Collapsible header="更多参数" defaultOpen={false}>
+      <Collapsible header={<span className="text-sm text-[var(--accent)]">更多参数</span>} defaultOpen={false} chevronAfter chevronColor="var(--accent)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
           <FormField label="Prefix 长度">
             <input type="number" value={prefixLength} onChange={(e) => setPrefixLength(e.target.value.replace(/[^0-9]/g, ''))} className={FORM_INPUT_CLASS} placeholder="0" />

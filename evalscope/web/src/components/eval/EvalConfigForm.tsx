@@ -444,7 +444,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
 
       {/* More params toggle */}
       <button type="button" onClick={() => setShowMore(!showMore)}
-        className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline cursor-pointer">
+        className="flex items-center gap-1 text-sm text-[var(--accent)] hover:underline cursor-pointer">
         {t('eval.moreParams')}
         {showMore ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
       </button>

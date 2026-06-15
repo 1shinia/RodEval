@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 
 interface Props {
   /** Header content rendered to the right of the chevron. May be a render fn for open-aware headers. */
@@ -17,6 +17,8 @@ interface Props {
   chevronSize?: number
   /** Chevron color (CSS color or var). */
   chevronColor?: string
+  /** Place chevron after header text (default: before). */
+  chevronAfter?: boolean
 }
 
 /** Lightweight chevron + content collapsible. The 4 chat collapsibles in chat/ all share this shape. */
@@ -29,9 +31,10 @@ export default function Collapsible({
   bodyStyle,
   chevronSize = 12,
   chevronColor = 'var(--text-muted)',
+  chevronAfter = false,
 }: Props) {
   const [open, setOpen] = useState(defaultOpen)
-  const Chevron = open ? ChevronDown : ChevronRight
+  const Chevron = open ? ChevronUp : ChevronDown
   return (
     <div style={style}>
       <button
@@ -49,8 +52,9 @@ export default function Collapsible({
           ...headerStyle,
         }}
       >
-        <Chevron size={chevronSize} style={{ color: chevronColor, flexShrink: 0 }} />
+        {!chevronAfter && <Chevron size={chevronSize} style={{ color: chevronColor, flexShrink: 0 }} />}
         {typeof header === 'function' ? header(open) : header}
+        {chevronAfter && <Chevron size={chevronSize} style={{ color: chevronColor, flexShrink: 0 }} />}
       </button>
       {open && <div style={bodyStyle}>{children}</div>}
     </div>
