@@ -21,21 +21,21 @@ if TYPE_CHECKING:
     from evalscope.perf.utils.perf_models import RunData
 
 # ── Design tokens (must match report.css :root variables) ─────────────────────
-ACCENT = '#63b3ed'
-PURPLE = '#a78bfa'
-GREEN = '#34d399'
-YELLOW = '#fbbf24'
-RED = '#f87171'
+ACCENT = '#2563eb'
+PURPLE = '#7c3aed'
+GREEN = '#059669'
+YELLOW = '#d97706'
+RED = '#dc2626'
 
 PLOTLY_CONFIG: Dict[str, Any] = {'responsive': True}
 
 _GRID = dict(
-    gridcolor='rgba(99,179,237,0.08)',
-    zerolinecolor='rgba(99,179,237,0.12)',
+    gridcolor='rgba(0,0,0,0.08)',
+    zerolinecolor='rgba(0,0,0,0.15)',
 )
 
 _LAYOUT_BASE = dict(
-    template='plotly_dark',
+    template='plotly_white',
     paper_bgcolor='rgba(0,0,0,0)',
     plot_bgcolor='rgba(0,0,0,0)',
     font=dict(
