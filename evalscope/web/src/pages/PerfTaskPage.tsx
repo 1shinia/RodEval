@@ -3,10 +3,10 @@ import { useLocale } from '@/contexts/LocaleContext'
 import PerfConfigForm from '@/components/perf/PerfConfigForm'
 import TaskMonitor from '@/components/eval/TaskMonitor'
 import Card from '@/components/ui/Card'
-import { submitPerfTask, stopPerfTask, getPerfProgress, getPerfLog, getPerfReportUrl, listPerfTasks, type PerfTaskMeta } from '@/api/perf'
+import { submitPerfTask, stopPerfTask, getPerfProgress, getPerfLog, getPerfReportUrl, listPerfTasks, deletePerfTask, type PerfTaskMeta } from '@/api/perf'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/types'
 import { usePolling } from '@/hooks/usePolling'
-import { ExternalLink, History, Copy, Check } from 'lucide-react'
+import { ExternalLink, History, Copy, Check, Trash2 } from 'lucide-react'
 
 export default function PerfTaskPage() {
   const { t } = useLocale()
@@ -109,6 +109,16 @@ export default function PerfTaskPage() {
     window.open(getPerfReportUrl(tid), '_blank')
   }
 
+  const handleDelete = useCallback(async (tid: string, model: string) => {
+    if (!window.confirm(`确定要删除 "${model}" 的压测记录吗？此操作不可撤销。`)) return
+    try {
+      await deletePerfTask(tid)
+      loadHistory()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '删除失败')
+    }
+  }, [loadHistory])
+
   return (
     <div className="page-enter">
       <h1 className="text-xl font-semibold mb-6">{t('perf.title')}</h1>
@@ -191,6 +201,13 @@ export default function PerfTaskPage() {
                           报告
                         </button>
                       )}
+                      <button
+                        onClick={() => handleDelete(item.task_id, item.model)}
+                        className="inline-flex items-center gap-1 px-2 py-1 ml-1 text-xs rounded text-[var(--text-muted)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-colors cursor-pointer"
+                        title="删除"
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </td>
                   </tr>
                 ))}

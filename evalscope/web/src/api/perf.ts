@@ -46,3 +46,17 @@ export function getPerfReportUrl(taskId: string): string {
 export async function stopPerfTask(taskId: string): Promise<{ status: string; task_id: string }> {
   return apiPost<{ status: string; task_id: string }>(`/api/v1/perf/stop?task_id=${encodeURIComponent(taskId)}`, {})
 }
+
+export async function deletePerfTask(taskId: string): Promise<{ ok: boolean }> {
+  const BASE = '/api/v1/perf'
+  const res = await fetch(`${BASE}/delete`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_id: taskId }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(body.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}

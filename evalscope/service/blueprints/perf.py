@@ -197,6 +197,37 @@ def stop_performance_test():
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
 
 
+@bp_perf.route('/delete', methods=['DELETE'])
+def delete_performance_test():
+    """Delete a performance test task directory.
+
+    JSON body:
+        task_id (str): the task identifier
+    """
+    data = request.get_json()
+    if not data or not data.get('task_id'):
+        return jsonify({'error': 'task_id is required'}), 400
+
+    task_id = data['task_id']
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    import shutil
+    task_dir = os.path.join(OUTPUT_DIR, task_id)
+    if not os.path.isdir(task_dir):
+        return jsonify({'error': f'Task not found: {task_id}'}), 404
+
+    try:
+        shutil.rmtree(task_dir)
+        logger.info(f'Deleted perf task: {task_id}')
+        return jsonify({'ok': True, 'task_id': task_id}), 200
+    except Exception as e:
+        logger.error(f'Failed to delete perf task {task_id}: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
 @bp_perf.route('/report', methods=['GET'])
 def get_performance_report():
     """Get the HTML performance report for a completed task.
