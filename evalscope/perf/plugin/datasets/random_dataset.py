@@ -16,10 +16,16 @@ class RandomDatasetPlugin(DatasetPluginBase):
     """Read dataset and return prompt."""
 
     def __init__(self, query_parameters: Arguments):
-        assert query_parameters.tokenizer_path, 'Tokenizer path is required for random data generation, please provide it with `--tokenizer-path`.'  # noqa: E501
         super().__init__(query_parameters)
 
-        assert self.tokenizer is not None, 'Tokenizer should be initialized for random data generation.'  # noqa: E501
+        if self.tokenizer is None:
+            # Fallback: generate random text without tokenizer (API mode)
+            self.prefix_length = self.query_parameters.prefix_length
+            self.number = self.query_parameters.total_count or 1
+            self._use_text_fallback = True
+            logger.warning('No tokenizer provided — using random text fallback (character-based length)')
+            return
+
         self.prefix_length = self.query_parameters.prefix_length
         # Include warmup_count so the generator produces enough unique items
         # to cover both warmup and benchmark requests without cycling reuse.
@@ -44,8 +50,10 @@ class RandomDatasetPlugin(DatasetPluginBase):
         )
 
     def build_messages(self) -> Iterator[Union[List[Dict], List[int]]]:
-        """Yield prompts as text messages or, when --tokenize-prompt is set, as raw
-        token-ID lists that bypass the decode/re-encode round-trip entirely."""
+        if getattr(self, '_use_text_fallback', False):
+            yield from self._build_text_fallback()
+            return
+
         tokenize_prompt = self.query_parameters.tokenize_prompt
 
         if self.query_parameters.apply_chat_template and not tokenize_prompt:
@@ -192,3 +200,54 @@ class RandomDatasetPlugin(DatasetPluginBase):
     def get_template_len(self):
         empty_message = [self.create_message(text='')]
         return len(tokenize_chat_messages(self.tokenizer, empty_message))
+
+    def _build_text_fallback(self):
+        """Generate random natural-sounding text prompts without a tokenizer.
+
+        Used in API mode when no local tokenizer is available. Generates
+        variable-length sentences approximating the requested prompt length
+        via character count (roughly 4 chars ≈ 1 token for English text).
+        """
+        import random
+        import string
+
+        words = [
+            'the', 'a', 'is', 'are', 'was', 'were', 'have', 'has', 'will', 'would',
+            'can', 'could', 'should', 'may', 'might', 'must', 'shall', 'this', 'that',
+            'these', 'those', 'some', 'any', 'all', 'each', 'every', 'both', 'few',
+            'system', 'user', 'data', 'file', 'code', 'function', 'result', 'value',
+            'process', 'method', 'object', 'class', 'module', 'package', 'library',
+            'server', 'client', 'request', 'response', 'error', 'message', 'event',
+            'task', 'job', 'config', 'option', 'parameter', 'variable', 'constant',
+            'input', 'output', 'state', 'action', 'model', 'algorithm', 'network',
+            'database', 'query', 'index', 'table', 'record', 'field', 'key', 'type',
+        ]
+
+        min_chars = self.query_parameters.min_prompt_length
+        max_chars = self.query_parameters.max_prompt_length
+        if max_chars <= 0:
+            max_chars = 200
+
+        for i in range(self.number):
+            sentence_count = random.randint(3, 12)
+            sentences = []
+            for _ in range(sentence_count):
+                word_count = random.randint(4, 15)
+                sentence = ' '.join(random.choices(words, k=word_count)).capitalize()
+                punct = random.choice('.')
+                sentences.append(sentence + punct)
+
+            text = ' '.join(sentences)
+
+            # Trim or pad to roughly match desired length range
+            if len(text) > max_chars and max_chars > 0:
+                text = text[:max_chars].rsplit(' ', 1)[0] + '.'
+            elif len(text) < min_chars:
+                while len(text) < min_chars:
+                    text += ' ' + ' '.join(random.choices(words, k=random.randint(2, 6))).capitalize() + '.'
+
+            if self.query_parameters.apply_chat_template:
+                message = self.create_message(text)
+                yield [message]
+            else:
+                yield text
