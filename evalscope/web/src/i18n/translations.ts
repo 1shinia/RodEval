@@ -11,6 +11,7 @@ const en: Dict = {
     perf: 'Performance',
     benchmarks: 'Benchmarks',
     evalReports: 'Eval Reports',
+    perfReports: 'Perf Reports',
   },
   single: {
     selectReport: 'Select Report',
@@ -375,6 +376,7 @@ const zh: Dict = {
     perf: '性能测试',
     benchmarks: '基准测试',
     evalReports: '评估报告',
+    perfReports: '压测报告',
   },
   single: {
     selectReport: '选择报告',

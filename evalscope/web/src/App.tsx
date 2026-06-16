@@ -13,6 +13,7 @@ const ReportDetailPage = lazy(() => import('@/pages/ReportDetailPage'))
 const ComparePage = lazy(() => import('@/pages/ComparePage'))
 const EvalTaskPage = lazy(() => import('@/pages/EvalTaskPage'))
 const PerfTaskPage = lazy(() => import('@/pages/PerfTaskPage'))
+const PerfReportsPage = lazy(() => import('@/pages/PerfReportsPage'))
 const ReportViewerPage = lazy(() => import('@/pages/ReportViewerPage'))
 const BenchmarksPage = lazy(() => import('@/pages/BenchmarksPage'))
 
@@ -27,6 +28,7 @@ function AppRoutes() {
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/eval" element={<EvalTaskPage />} />
           <Route path="/perf" element={<PerfTaskPage />} />
+          <Route path="/perf-reports" element={<PerfReportsPage />} />
           <Route path="/benchmarks" element={<BenchmarksPage />} />
           <Route path="/viewer" element={<ReportViewerPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

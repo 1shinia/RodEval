@@ -32,9 +32,10 @@ export default function TopNav() {
 
   const navItems = [
     { to: '/dashboard', icon: <BarChart3 size={18} />, label: t('nav.dashboard') },
-    { to: '/reports', icon: <FileText size={18} />, label: t('nav.evalReports') },
     { to: '/eval', icon: <FlaskConical size={18} />, label: t('nav.eval') },
+    { to: '/reports', icon: <FileText size={18} />, label: t('nav.evalReports') },
     { to: '/perf', icon: <Gauge size={18} />, label: t('nav.perf') },
+    { to: '/perf-reports', icon: <FileText size={18} />, label: t('nav.perfReports') },
     { to: '/benchmarks', icon: <BookOpen size={18} />, label: t('nav.benchmarks') },
   ]
 
