@@ -161,9 +161,10 @@ def run_perf_benchmark(args):
 
     # Initialize local server if needed
     if args.api.startswith('local'):
-        #  start local server
+        #  start local server (health check is handled inside start_app)
         server = threading.Thread(target=start_app, args=(copy.deepcopy(args), ), daemon=True)
         server.start()
+        server.join()  # wait for start_app to complete (model load + health check)
 
     total_count = sum(args.number) if isinstance(args.number, list) else args.number
     tracker_ctx = make_tracker(

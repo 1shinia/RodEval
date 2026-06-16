@@ -120,11 +120,18 @@ class ChatService:
 
     async def _chat(self, request: ChatCompletionRequest):
         formatted_prompt, inputs, prompt_tokens = self._prepare_chat_inputs(request)
-        outputs = self.model.generate(
-            **inputs,
+        gen_kwargs = dict(
             max_new_tokens=request.max_tokens,
             min_new_tokens=request.min_tokens,
-            temperature=request.temperature,
+        )
+        if request.temperature is not None and request.temperature > 0:
+            gen_kwargs['temperature'] = request.temperature
+            gen_kwargs['do_sample'] = True
+        else:
+            gen_kwargs['do_sample'] = False
+        outputs = self.model.generate(
+            **inputs,
+            **gen_kwargs,
         )
         outputs = outputs[0][prompt_tokens:]  # remove prompt
         completion_tokens = len(outputs)
@@ -148,11 +155,18 @@ class ChatService:
 
     async def _text_completion(self, request: TextCompletionRequest):
         inputs, prompt_tokens = self._prepare_text_inputs(request)
-        outputs = self.model.generate(
-            **inputs,
+        gen_kwargs = dict(
             max_new_tokens=request.max_tokens,
             min_new_tokens=request.min_tokens,
-            temperature=request.temperature,
+        )
+        if request.temperature is not None and request.temperature > 0:
+            gen_kwargs['temperature'] = request.temperature
+            gen_kwargs['do_sample'] = True
+        else:
+            gen_kwargs['do_sample'] = False
+        outputs = self.model.generate(
+            **inputs,
+            **gen_kwargs,
         )
         outputs = outputs[0][prompt_tokens:]  # remove prompt
         completion_tokens = len(outputs)
@@ -190,8 +204,12 @@ class ChatService:
             streamer=self.streamer,
             max_new_tokens=request.max_tokens,
             min_new_tokens=request.min_tokens,
-            temperature=request.temperature,
         )
+        if request.temperature is not None and request.temperature > 0:
+            generation_kwargs['temperature'] = request.temperature
+            generation_kwargs['do_sample'] = True
+        else:
+            generation_kwargs['do_sample'] = False
         generate_partial = partial(self.model.generate, **generation_kwargs)
 
         with self._start_generation_thread(generate_partial):

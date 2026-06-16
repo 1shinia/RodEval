@@ -101,9 +101,54 @@ def start_app(args: Arguments):
                     logger.info('llama.cpp server has already terminated.')
             atexit.register(on_exit)
         else:
+            # Transformers / HF checkpoint → start uvicorn as a subprocess
+            # (same pattern as GGUF: subprocess + health check + atexit cleanup)
+            import sys
+            import atexit as _atexit
+            import socket
+            import time as _time
+
             check_import('torch', 'torch', raise_error=True)
-            app = create_app(args.model, args.attn_implementation)
-            uvicorn.run(app, host='0.0.0.0', port=args.port, workers=1)
+            attn_arg = repr(args.attn_implementation)  # None → 'None'
+            server_code = (
+                "import uvicorn\n"
+                "from evalscope.perf.utils.local_server import create_app\n"
+                "import sys\n"
+                "attn = None if sys.argv[2] == 'None' else sys.argv[2]\n"
+                "app = create_app(sys.argv[1], attn)\n"
+                "uvicorn.run(app, host='0.0.0.0', port=int(sys.argv[3]), workers=1)\n"
+            )
+            proc = subprocess.Popen([
+                sys.executable, '-c', server_code,
+                args.model, attn_arg, str(args.port),
+            ])
+
+            # Wait for the server to start accepting connections
+            for _ in range(60):
+                try:
+                    sock = socket.create_connection(('127.0.0.1', args.port), timeout=2)
+                    sock.close()
+                    logger.info('Local transformers server is ready')
+                    break
+                except OSError:
+                    pass
+                _time.sleep(2)
+            else:
+                logger.warning('Local transformers server did not become ready within 120s')
+
+            def _on_exit():
+                if proc.poll() is None:
+                    logger.info('Terminating transformers server...')
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                    logger.info('Transformers server terminated.')
+                else:
+                    logger.info('Transformers server has already terminated.')
+            _atexit.register(_on_exit)
 
     elif args.api == 'local_vllm':
         import torch
