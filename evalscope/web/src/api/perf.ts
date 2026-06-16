@@ -13,13 +13,18 @@ export interface PerfTaskMeta {
 
 export interface ListPerfTasksResponse {
   tasks: PerfTaskMeta[]
+  root_path?: string
+  filters?: {
+    available_models: string[]
+    available_datasets: string[]
+  }
   error?: string
 }
 
-export async function listPerfTasks(rootPath?: string): Promise<ListPerfTasksResponse> {
-  const params: Record<string, string> = {}
-  if (rootPath) params.root_path = rootPath
-  return api<ListPerfTasksResponse>('/api/v1/perf/list', params)
+export async function listPerfTasks(params?: Record<string, string>): Promise<ListPerfTasksResponse> {
+  const q: Record<string, string> = {}
+  if (params) Object.assign(q, params)
+  return api<ListPerfTasksResponse>('/api/v1/perf/list', q)
 }
 
 export async function submitPerfTask(

@@ -54,12 +54,26 @@ def list_perf_tasks():
 
     Query params:
         root_path (str): output root directory (default: OUTPUT_DIR)
+        search    (str): search in model name and dataset
+        model     (str): filter by model (exact match)
+        dataset   (str): filter by dataset (exact match)
+        sort_by   (str): sort field ('time', 'model')
+        sort_order (str): 'asc' or 'desc' (default: 'desc')
     """
     root = request.args.get('root_path', OUTPUT_DIR)
+    search = request.args.get('search', '').strip().lower()
+    filter_model = request.args.get('model', '').strip()
+    filter_dataset = request.args.get('dataset', '').strip()
+    sort_by = request.args.get('sort_by', 'time')
+    sort_order = request.args.get('sort_order', 'desc')
+
     if not os.path.isdir(root):
-        return jsonify({'tasks': [], 'error': f'Directory not found: {root}'}), 200
+        return jsonify({'tasks': [], 'root_path': root, 'error': f'Directory not found: {root}'}), 200
 
     tasks = []
+    all_models = set()
+    all_datasets = set()
+
     for entry in sorted(os.listdir(root), reverse=True):
         task_dir = os.path.join(root, entry)
         perf_dir = os.path.join(task_dir, 'perf')
@@ -121,8 +135,35 @@ def list_perf_tasks():
             pass
 
         tasks.append(meta)
+        if meta['model'] != 'N/A':
+            all_models.add(meta['model'])
+        if meta['dataset'] != 'N/A':
+            all_datasets.add(meta['dataset'])
 
-    return jsonify({'tasks': tasks}), 200
+    # Apply filters
+    if search:
+        tasks = [t for t in tasks if search in t['model'].lower() or search in t['dataset'].lower()]
+    if filter_model:
+        tasks = [t for t in tasks if t['model'] == filter_model]
+    if filter_dataset:
+        tasks = [t for t in tasks if t['dataset'] == filter_dataset]
+
+    # Sort
+    if sort_by == 'model':
+        tasks.sort(key=lambda t: t['model'].lower(), reverse=(sort_order == 'desc'))
+    else:
+        # Default: sort by time (already in reverse order from listdir)
+        if sort_order == 'asc':
+            tasks.reverse()
+
+    return jsonify({
+        'tasks': tasks,
+        'root_path': root,
+        'filters': {
+            'available_models': sorted(all_models),
+            'available_datasets': sorted(all_datasets),
+        },
+    }), 200
 
 
 @bp_perf.route('/invoke', methods=['POST'])
