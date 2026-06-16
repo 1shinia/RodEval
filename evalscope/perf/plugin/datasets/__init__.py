@@ -9,6 +9,7 @@ from .embedding_dataset import (
 from .flickr8k import FlickrDatasetPlugin
 from .kontext_bench import KontextDatasetPlugin
 from .line_by_line import LineByLineDatasetPlugin
+from .local_jsonl import LocalJsonlDatasetPlugin
 from .longalpaca import LongAlpacaDatasetPlugin
 from .multi_turn import RandomMultiTurnDatasetPlugin, ShareGPTEnMultiTurnPlugin, ShareGPTZhMultiTurnPlugin
 from .openqa import OpenqaDatasetPlugin
