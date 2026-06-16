@@ -265,6 +265,11 @@ class Arguments(BaseArgument):
     dataset_path: Optional[str] = None
     """Path to the dataset."""
 
+    dataset_label: Optional[str] = None
+    """Human-readable label for the dataset (used in reports when set).
+    When a user provides a custom local dataset, this label is shown
+    in place of the internal plugin name (e.g. 'local_jsonl')."""
+
     dataset_offset: int = 0
     """Global token-sequence offset for random datasets.
 

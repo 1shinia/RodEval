@@ -94,6 +94,7 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
     if (maxTokens) config.max_tokens = Number(maxTokens)
     if (minTokens) config.min_tokens = Number(minTokens)
     if (dataset) config.dataset = dataset === 'custom' ? 'local_jsonl' : dataset
+    if (dataset === 'custom' && customDataset) config.dataset_label = customDataset
     if (datasetPath) config.dataset_path = datasetPath
     if (maxPromptLen) config.max_prompt_length = Number(maxPromptLen)
     if (minPromptLen) config.min_prompt_length = Number(minPromptLen)
