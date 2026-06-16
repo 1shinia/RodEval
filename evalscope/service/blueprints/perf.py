@@ -93,7 +93,7 @@ def list_perf_tasks():
                             args_data = json.load(f)
                         meta['model'] = args_data.get('model', 'N/A')
                         meta['api'] = args_data.get('api', 'N/A')
-                        meta['dataset'] = args_data.get('dataset', 'N/A')
+                        meta['dataset'] = args_data.get('dataset_label', args_data.get('dataset', 'N/A'))
                         break
                 if meta['model'] != 'N/A':
                     break
