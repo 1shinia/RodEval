@@ -85,7 +85,7 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
     } else {
       config.model = model
       config.api = api
-      config.url = url
+      config.url = url.trim()
       if (apiKey) config.api_key = apiKey
       if (tokenizerPath) config.tokenizer_path = tokenizerPath
     }

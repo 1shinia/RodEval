@@ -223,7 +223,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
       }
       if (Object.keys(ba).length > 0) config.backend_args = ba
     } else {
-      if (apiUrl) config.api_url = apiUrl
+      if (apiUrl) config.api_url = apiUrl.trim()
       if (apiKey) config.api_key = apiKey
     }
 
