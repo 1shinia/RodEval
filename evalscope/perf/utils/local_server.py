@@ -63,17 +63,24 @@ def start_app(args: Arguments):
             import sys
             check_import('llama_cpp', 'llama-cpp-python', raise_error=True)
             cmd = [
-                sys.executable, '-m', 'llama_cpp.server',
-                '--model', args.model,
-                '--n_ctx', '2048',
-                '--n_threads', '8',
-                '--host', '0.0.0.0',
-                '--port', str(args.port),
+                sys.executable,
+                '-m',
+                'llama_cpp.server',
+                '--model',
+                args.model,
+                '--n_ctx',
+                '2048',
+                '--n_threads',
+                '8',
+                '--host',
+                '0.0.0.0',
+                '--port',
+                str(args.port),
             ]
             proc = subprocess.Popen(cmd)
             # Wait for server to be ready
-            import time
             import requests
+            import time
             health_url = f'http://127.0.0.1:{args.port}/health'
             for _ in range(60):
                 try:
@@ -87,6 +94,7 @@ def start_app(args: Arguments):
             else:
                 logger.warning('llama.cpp server did not become ready within 120s')
             import atexit
+
             def on_exit():
                 if proc.poll() is None:
                     logger.info('Terminating llama.cpp server...')
@@ -99,28 +107,33 @@ def start_app(args: Arguments):
                     logger.info('llama.cpp server terminated.')
                 else:
                     logger.info('llama.cpp server has already terminated.')
+
             atexit.register(on_exit)
         else:
             # Transformers / HF checkpoint → start uvicorn as a subprocess
             # (same pattern as GGUF: subprocess + health check + atexit cleanup)
-            import sys
             import atexit as _atexit
             import socket
+            import sys
             import time as _time
 
             check_import('torch', 'torch', raise_error=True)
             attn_arg = repr(args.attn_implementation)  # None → 'None'
             server_code = (
-                "import uvicorn\n"
-                "from evalscope.perf.utils.local_server import create_app\n"
-                "import sys\n"
+                'import uvicorn\n'
+                'from evalscope.perf.utils.local_server import create_app\n'
+                'import sys\n'
                 "attn = None if sys.argv[2] == 'None' else sys.argv[2]\n"
-                "app = create_app(sys.argv[1], attn)\n"
+                'app = create_app(sys.argv[1], attn)\n'
                 "uvicorn.run(app, host='0.0.0.0', port=int(sys.argv[3]), workers=1)\n"
             )
             proc = subprocess.Popen([
-                sys.executable, '-c', server_code,
-                args.model, attn_arg, str(args.port),
+                sys.executable,
+                '-c',
+                server_code,
+                args.model,
+                attn_arg,
+                str(args.port),
             ])
 
             # Wait for the server to start accepting connections
@@ -148,6 +161,7 @@ def start_app(args: Arguments):
                     logger.info('Transformers server terminated.')
                 else:
                     logger.info('Transformers server has already terminated.')
+
             _atexit.register(_on_exit)
 
     elif args.api == 'local_vllm':
