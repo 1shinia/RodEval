@@ -107,7 +107,7 @@ def list_perf_tasks():
                             args_data = json.load(f)
                         meta['model'] = args_data.get('model', 'N/A')
                         meta['api'] = args_data.get('api', 'N/A')
-                        meta['dataset'] = args_data.get('dataset_label', args_data.get('dataset', 'N/A'))
+                        meta['dataset'] = args_data.get('dataset_label') or args_data.get('dataset', 'N/A')
                         break
                 if meta['model'] != 'N/A':
                     break
@@ -160,8 +160,8 @@ def list_perf_tasks():
         'tasks': tasks,
         'root_path': root,
         'filters': {
-            'available_models': sorted(all_models),
-            'available_datasets': sorted(all_datasets),
+            'available_models': sorted(m for m in all_models if m),
+            'available_datasets': sorted(d for d in all_datasets if d),
         },
     }), 200
 

@@ -53,7 +53,7 @@ def _build_basic_info(
     info: OrderedDict = OrderedDict()
     info['Model'] = args_dict.get('model', args_dict.get('model_id', 'N/A'))
     info['API Type'] = args_dict.get('api', 'N/A')
-    info['Dataset'] = args_dict.get('dataset_label', args_dict.get('dataset', 'N/A'))
+    info['Dataset'] = args_dict.get('dataset_label') or args_dict.get('dataset', 'N/A')
 
     total_req = sum(r.summary.total_requests for r in runs)
     succeed = sum(r.summary.succeed_requests for r in runs)
@@ -341,7 +341,7 @@ def gen_perf_html_report(
     html_content = template.render(
         model=first_args.get('model', first_args.get('model_id', 'N/A')),
         api_type=api_type,
-        dataset=first_args.get('dataset_label', first_args.get('dataset', 'N/A')),
+        dataset=first_args.get('dataset_label') or first_args.get('dataset', 'N/A'),
         generated_at=current_time().strftime('%Y-%m-%d %H:%M:%S'),
         evalscope_version=_evalscope_version,
         basic_info=_build_basic_info(first_args, runs, is_emb),
