@@ -10,7 +10,7 @@ const en: Dict = {
     eval: 'Evaluation',
     perf: 'Performance',
     benchmarks: 'Benchmarks',
-    reports: 'Reports',
+    evalReports: 'Eval Reports',
   },
   single: {
     selectReport: 'Select Report',
@@ -374,7 +374,7 @@ const zh: Dict = {
     eval: '模型评估',
     perf: '性能测试',
     benchmarks: '基准测试',
-    reports: '报告',
+    evalReports: '评估报告',
   },
   single: {
     selectReport: '选择报告',
