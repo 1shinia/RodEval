@@ -4,7 +4,9 @@ import multiprocessing
 import queue
 import sys
 import threading
+import time
 import traceback
+from dataclasses import dataclass, field
 
 from evalscope.config import TaskConfig
 from evalscope.perf.arguments import Arguments as PerfArguments
@@ -18,16 +20,54 @@ logger = get_logger()
 # Active process registry – allows external stop by task_id
 # ---------------------------------------------------------------------------
 
-_active_processes: dict[str, multiprocessing.Process] = {}
-"""Maps task_id → the subprocess currently running that task."""
+
+@dataclass
+class TaskInfo:
+    """Metadata for a running task."""
+
+    task_id: str
+    task_type: str  # 'eval' or 'perf'
+    model: str = ''
+    start_time: float = field(default_factory=time.time)
+    process: multiprocessing.Process | None = None
+
+
+_active_processes: dict[str, TaskInfo] = {}
+"""Maps task_id → TaskInfo for the currently running subprocess."""
 
 _active_lock = threading.Lock()
 
 
-def register_process(task_id: str, proc: multiprocessing.Process) -> None:
+def register_process(
+    task_id: str,
+    proc: multiprocessing.Process,
+    task_type: str = '',
+    model: str = '',
+) -> None:
     """Register a running subprocess so it can be stopped later."""
     with _active_lock:
-        _active_processes[task_id] = proc
+        _active_processes[task_id] = TaskInfo(
+            task_id=task_id,
+            task_type=task_type,
+            model=model,
+            process=proc,
+        )
+
+
+def get_running_tasks() -> list[dict]:
+    """Return metadata for all currently running tasks."""
+    with _active_lock:
+        result = []
+        for info in _active_processes.values():
+            if info.process and info.process.is_alive():
+                result.append({
+                    'task_id': info.task_id,
+                    'task_type': info.task_type,
+                    'model': info.model,
+                    'start_time': info.start_time,
+                    'elapsed_seconds': round(time.time() - info.start_time, 1),
+                })
+        return result
 
 
 def unregister_process(task_id: str) -> None:
@@ -42,9 +82,10 @@ def stop_process(task_id: str) -> bool:
     Returns True if a process was found and terminated, False otherwise.
     """
     with _active_lock:
-        proc = _active_processes.pop(task_id, None)
-    if proc is None:
+        info = _active_processes.pop(task_id, None)
+    if info is None or info.process is None:
         return False
+    proc = info.process
     if proc.is_alive():
         proc.terminate()
         proc.join(timeout=3)
@@ -95,7 +136,7 @@ def _process_worker(func, result_queue, *args, **kwargs):
             })
 
 
-def run_in_subprocess(func, *args, task_id=None, **kwargs):
+def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwargs):
     """Run *func* in a child process and return its result (blocks caller).
 
     Returns the function's return value on success; raises on error.
@@ -119,7 +160,7 @@ def run_in_subprocess(func, *args, task_id=None, **kwargs):
     p.start()
 
     if task_id:
-        register_process(task_id, p)
+        register_process(task_id, p, task_type=task_type, model=model)
 
     res = None
     # Poll for the result while the child is alive so we continuously drain

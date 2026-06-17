@@ -184,7 +184,9 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
         if use_direct:
             result = run_eval_wrapper(task_config)
         else:
-            result = run_in_subprocess(run_eval_wrapper, task_config, task_id=task_id)
+            result = run_in_subprocess(
+                run_eval_wrapper, task_config, task_id=task_id, task_type='eval', model=task_config.model
+            )
         table_str = _build_result_table(task_config.work_dir)
         if _all_results_empty(result):
             error_msg = (

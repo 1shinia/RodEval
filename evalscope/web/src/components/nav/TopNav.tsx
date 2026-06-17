@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { useLocale } from '@/contexts/LocaleContext'
 import LocaleToggle from './LocaleToggle'
 import ThemeToggle from './ThemeToggle'
+import RunningTasksIndicator from './RunningTasksIndicator'
 import { BarChart3, Gauge, FlaskConical, BookOpen, FileText, Menu, X } from 'lucide-react'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -63,6 +64,7 @@ export default function TopNav() {
           </nav>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <RunningTasksIndicator />
           <LocaleToggle />
           <ThemeToggle />
           <button onClick={() => setMobileOpen(!mobileOpen)}

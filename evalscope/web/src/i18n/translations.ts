@@ -13,6 +13,16 @@ const en: Dict = {
     evalReports: 'Eval Reports',
     perfReports: 'Perf Reports',
   },
+  tasks: {
+    running: 'Running',
+    noRunning: 'No tasks running',
+    eval: 'Evaluation',
+    perf: 'Performance',
+    elapsed: 'Elapsed',
+    model: 'Model',
+    stopTask: 'Stop',
+    viewLog: 'View Log',
+  },
   single: {
     selectReport: 'Select Report',
     taskConfig: 'Task Config',
@@ -377,6 +387,16 @@ const zh: Dict = {
     benchmarks: '基准测试',
     evalReports: '评估报告',
     perfReports: '压测报告',
+  },
+  tasks: {
+    running: '运行中',
+    noRunning: '没有运行中的任务',
+    eval: '评估',
+    perf: '压测',
+    elapsed: '已运行',
+    model: '模型',
+    stopTask: '停止',
+    viewLog: '查看日志',
   },
   single: {
     selectReport: '选择报告',

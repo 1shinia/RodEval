@@ -216,7 +216,9 @@ def run_performance_test():
     create_log_file(task_id, os.path.join('perf', 'benchmark.log'))
 
     try:
-        result = run_in_subprocess(run_perf_wrapper, perf_args, task_id=task_id)
+        result = run_in_subprocess(
+            run_perf_wrapper, perf_args, task_id=task_id, task_type='perf', model=perf_args.model
+        )
         table_str = _build_perf_table(result, api_type=perf_args.api)
         logger.info(f'[{task_id}] Task completed successfully')
         return jsonify({

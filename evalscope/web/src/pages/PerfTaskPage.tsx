@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
+import { useQueryParams } from '@/hooks/useQueryParams'
 import PerfConfigForm from '@/components/perf/PerfConfigForm'
 import TaskMonitor from '@/components/eval/TaskMonitor'
 import Card from '@/components/ui/Card'
@@ -10,6 +11,9 @@ import { Copy, Check } from 'lucide-react'
 
 export default function PerfTaskPage() {
   const { t } = useLocale()
+  const queryParams = useQueryParams()
+  const urlTaskId = queryParams.get('task')
+
   const [taskId, setTaskId] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<EvalInvokeResponse | null>(null)
@@ -17,6 +21,28 @@ export default function PerfTaskPage() {
   const [logLine, setLogLine] = useState(0)
   const [progress, setProgress] = useState(0)
   const [copied, setCopied] = useState(false)
+  const resumedRef = useRef(false)
+
+  // Resume monitoring a task from URL ?task=xxx (e.g. from running tasks indicator)
+  useEffect(() => {
+    if (urlTaskId && !resumedRef.current) {
+      resumedRef.current = true
+      setTaskId(urlTaskId)
+      setRunning(true)
+      // Fetch initial log immediately so it shows even if the task already finished
+      getPerfLog(urlTaskId, 0).then((d) => {
+        if (d.text) { setLogText(d.text); setLogLine(d.tail_line) }
+      }).catch(() => {})
+      // Check progress to see if task is still running
+      getPerfProgress(urlTaskId).then((d) => {
+        setProgress(d.percent ?? 0)
+        if (d.percent >= 100) {
+          setRunning(false)
+          setResult({ status: 'completed', task_id: urlTaskId })
+        }
+      }).catch(() => { setRunning(false) })
+    }
+  }, [urlTaskId])
 
   const handleSubmit = async (config: Record<string, unknown>) => {
     const id = `perf_${Date.now()}`
@@ -70,7 +96,10 @@ export default function PerfTaskPage() {
     interval: 5000,
     onData: (d) => {
       setProgress(d.percent ?? 0)
-      if (d.percent >= 100) setRunning(false)
+      if (d.percent >= 100) {
+        setRunning(false)
+        setResult((prev) => prev ?? { status: 'completed', task_id: taskId })
+      }
     },
   })
 

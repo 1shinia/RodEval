@@ -68,6 +68,13 @@ def create_app(outputs: str = None):
             'outputs_root': outputs_root or _DEFAULT_ROOT,
         })
 
+    @app.route('/api/v1/tasks/running', methods=['GET'])
+    def get_running_tasks():
+        """Return a list of currently running tasks with metadata."""
+        from .utils import get_running_tasks as _get_running_tasks
+        tasks = _get_running_tasks()
+        return jsonify({'tasks': tasks, 'count': len(tasks)})
+
     # --- SPA static-file serving ------------------------------------------
     if os.path.isdir(_WEB_DIST):
 
@@ -87,6 +94,7 @@ def create_app(outputs: str = None):
             'available_endpoints': {
                 'GET  /health': 'Health check',
                 'GET  /api/v1/config': 'Get runtime configuration',
+                'GET  /api/v1/tasks/running': 'List currently running tasks',
                 'GET  /api/v1/reports/media/file': 'Serve a local media file (image/audio/video) by path',
                 'POST /api/v1/eval/invoke': 'Run model evaluation task (blocking)',
                 'GET  /api/v1/eval/benchmarks': 'List supported benchmarks with descriptions',
@@ -134,6 +142,8 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
     logger.info(f'Starting EvalScope service on {host}:{port}')
     logger.info('Available endpoints:')
     logger.info('  GET  /health                         - Health check')
+    logger.info('  GET  /api/v1/config                  - Get runtime configuration')
+    logger.info('  GET  /api/v1/tasks/running           - List currently running tasks')
     logger.info('  POST /api/v1/eval/invoke             - Run model evaluation task (blocking)')
     logger.info('  GET  /api/v1/eval/benchmarks         - List supported benchmarks with descriptions')
     logger.info('  GET  /api/v1/eval/log                - Get evaluation log')
