@@ -35,7 +35,7 @@ from evalscope.utils.data_utils import (
 )
 from evalscope.utils.io_utils import OutputsStructure
 from evalscope.utils.logger import get_logger
-from ..utils import OUTPUT_DIR
+from ..utils import OUTPUT_DIR, validate_root_path
 
 logger = get_logger()
 
@@ -94,6 +94,11 @@ def serve_media_file():
     # Normalise to absolute path and reject directory traversal
     file_path = os.path.realpath(file_path)
 
+    # Security: restrict to OUTPUT_DIR to prevent arbitrary file reads
+    allowed_dir = os.path.realpath(OUTPUT_DIR)
+    if file_path != allowed_dir and not file_path.startswith(allowed_dir + os.sep):
+        return jsonify({'error': 'Access denied: path must be within the outputs directory'}), 403
+
     ext = os.path.splitext(file_path)[1].lower()
     if ext not in _MEDIA_EXTENSIONS:
         return jsonify({'error': f'File type {ext!r} is not allowed'}), 403
@@ -111,7 +116,8 @@ def serve_media_file():
 def _root_path() -> str:
     # Priority: URL query param > app config (from --outputs CLI arg) > default
     from flask import current_app
-    return request.args.get('root_path', current_app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT)
+    raw = request.args.get('root_path', current_app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT)
+    return validate_root_path(raw)
 
 
 # ------------------------------------------------------------------
@@ -472,7 +478,10 @@ def delete_report():
     try:
         root = _root_path()
         prefix, _, _ = process_report_name(report_name)
-        report_dir = os.path.join(root, prefix)
+        report_dir = os.path.realpath(os.path.join(root, prefix))
+        # Security: ensure resolved path is within root
+        if report_dir != root and not report_dir.startswith(root + os.sep):
+            return jsonify({'error': 'Access denied: invalid report path'}), 403
         if not os.path.isdir(report_dir):
             return jsonify({'error': 'Report folder not found'}), 404
         import shutil
@@ -499,7 +508,10 @@ def get_html_report():
     try:
         root = os.path.abspath(_root_path())
         prefix, model_name, _ = process_report_name(report_name)
-        report_html = os.path.join(root, prefix, OutputsStructure.REPORTS_DIR, 'report.html')
+        report_html = os.path.realpath(os.path.join(root, prefix, OutputsStructure.REPORTS_DIR, 'report.html'))
+        # Security: ensure resolved path is within root
+        if not report_html.startswith(root + os.sep):
+            return jsonify({'error': 'Access denied: invalid report path'}), 403
 
         if not os.path.exists(report_html):
             return jsonify({

@@ -36,10 +36,17 @@ def create_app(outputs: str = None):
     # responses instead of being escaped to \uXXXX sequences.
     app.json.ensure_ascii = False
 
-    # --- CORS (development convenience) -----------------------------------
+    # --- CORS (restrict to known frontend origins) ----------------------
     try:
         from flask_cors import CORS
-        CORS(app)
+
+        # Allow only the known frontend origins to prevent unauthorized cross-origin access
+        allowed_origins = [
+            'http://10.192.161.184:5173',
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+        ]
+        CORS(app, resources={r'/api/*': {'origins': allowed_origins}})
     except ImportError:
         pass  # flask-cors not installed; same-origin only
 

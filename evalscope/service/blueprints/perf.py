@@ -15,6 +15,7 @@ from ..utils import (
     run_perf_wrapper,
     serialize_result,
     stop_process,
+    validate_root_path,
     validate_task_id,
 )
 
@@ -66,6 +67,11 @@ def list_perf_tasks():
     filter_dataset = request.args.get('dataset', '').strip()
     sort_by = request.args.get('sort_by', 'time')
     sort_order = request.args.get('sort_order', 'desc')
+
+    try:
+        root = validate_root_path(root)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     if not os.path.isdir(root):
         return jsonify({'tasks': [], 'root_path': root, 'error': f'Directory not found: {root}'}), 200
@@ -333,6 +339,11 @@ def get_performance_progress():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     progress_file = os.path.join(OUTPUT_DIR, task_id, 'perf', 'progress.json')
     try:

@@ -10,12 +10,30 @@ def validate_task_id(task_id: str) -> None:
     """Validate a task_id value.
 
     Raises:
-        ValueError: if task_id is empty or contains path-traversal characters.
+        ValueError: if task_id is empty, too long, or contains path-traversal characters.
     """
     if not task_id:
         raise ValueError('task_id is required')
+    if len(task_id) > 255:
+        raise ValueError('task_id is too long')
+    if '\x00' in task_id:
+        raise ValueError('Invalid task_id')
     if os.path.basename(task_id) != task_id:
         raise ValueError('Invalid task_id')
+
+
+def validate_root_path(root: str) -> str:
+    """Validate that *root* resolves to a path within OUTPUT_DIR.
+
+    Returns the resolved absolute path.
+    Raises ValueError if the path escapes the allowed directory.
+    """
+    resolved = os.path.realpath(root)
+    allowed = os.path.realpath(OUTPUT_DIR)
+    # The resolved path must be exactly OUTPUT_DIR or a subdirectory of it
+    if resolved != allowed and not resolved.startswith(allowed + os.sep):
+        raise ValueError(f'root_path must be within {OUTPUT_DIR}')
+    return resolved
 
 
 def create_log_file(task_id: str, sub_path: str) -> str:
