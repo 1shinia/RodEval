@@ -29,18 +29,47 @@ export default function PerfTaskPage() {
       resumedRef.current = true
       setTaskId(urlTaskId)
       setRunning(true)
-      // Fetch initial log immediately so it shows even if the task already finished
-      getPerfLog(urlTaskId, 0).then((d) => {
-        if (d.text) { setLogText(d.text); setLogLine(d.tail_line) }
-      }).catch(() => {})
-      // Check progress to see if task is still running
-      getPerfProgress(urlTaskId).then((d) => {
-        setProgress(d.percent ?? 0)
-        if (d.percent >= 100) {
+
+      const resume = async () => {
+        // Fetch initial log immediately so it shows even if the task already finished
+        let logAcc = ''
+        let nextLine = 0
+        try {
+          const d = await getPerfLog(urlTaskId, 0)
+          if (d.text) { logAcc = d.text; nextLine = d.tail_line }
+        } catch { /* ignore */ }
+
+        // Check progress to see if task is still running
+        let done = false
+        try {
+          const p = await getPerfProgress(urlTaskId)
+          setProgress(p.percent ?? 0)
+          if (p.percent >= 100) done = true
+        } catch { done = true }
+
+        // If task already completed, fetch ALL remaining log pages
+        if (done) {
+          try {
+            let safety = 0
+            while (nextLine > 0 && safety < 50) {
+              const more = await getPerfLog(urlTaskId, nextLine)
+              if (!more.text || more.tail_line <= nextLine) break
+              logAcc += more.text
+              nextLine = more.tail_line
+              if (nextLine >= more.total_lines) break
+              safety++
+            }
+          } catch { /* ignore */ }
+          setLogText(logAcc)
+          setLogLine(nextLine)
           setRunning(false)
-          setResult({ status: 'completed', task_id: urlTaskId })
+          setResult({ status: 'ok', task_id: urlTaskId })
+        } else {
+          setLogText(logAcc)
+          setLogLine(nextLine)
         }
-      }).catch(() => { setRunning(false) })
+      }
+      resume()
     }
   }, [urlTaskId])
 
@@ -60,9 +89,9 @@ export default function PerfTaskPage() {
     } finally {
       setRunning(false)
       try {
-        const finalLog = await getPerfLog(id, logLine)
+        const finalLog = await getPerfLog(id, 0, 999999)
         if (finalLog.text) {
-          setLogText((prev) => prev + finalLog.text)
+          setLogText(finalLog.text)
           setLogLine(finalLog.tail_line)
         }
         const finalProg = await getPerfProgress(id)
@@ -98,7 +127,7 @@ export default function PerfTaskPage() {
       setProgress(d.percent ?? 0)
       if (d.percent >= 100) {
         setRunning(false)
-        setResult((prev) => prev ?? { status: 'completed', task_id: taskId })
+        setResult((prev) => prev ?? { status: 'ok', task_id: taskId! })
       }
     },
   })
