@@ -1,171 +1,44 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import EvalConfigForm from '@/components/eval/EvalConfigForm'
-import TaskMonitor from '@/components/eval/TaskMonitor'
-import Card from '@/components/ui/Card'
+import TaskPageLayout from '@/components/eval/TaskPageLayout'
+import { useTaskRunner } from '@/hooks/useTaskRunner'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl } from '@/api/eval'
-import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/types'
-import { usePolling } from '@/hooks/usePolling'
-import { Copy, Check } from 'lucide-react'
+
+const evalApi = {
+  submit: submitEvalTask,
+  stop: stopEvalTask,
+  getProgress: getEvalProgress,
+  getLog: getEvalLog,
+  getReportUrl: getEvalReportUrl,
+}
 
 export default function EvalTaskPage() {
   const { t } = useLocale()
   const queryParams = useQueryParams()
   const initialDataset = queryParams.get('dataset')
-  const urlTaskId = queryParams.get('task')
 
-  const [taskId, setTaskId] = useState<string | null>(null)
-  const [running, setRunning] = useState(false)
-  const [result, setResult] = useState<EvalInvokeResponse | null>(null)
-  const [logText, setLogText] = useState('')
-  const [logLine, setLogLine] = useState(0)
-  const [progress, setProgress] = useState(0)
-  const [copied, setCopied] = useState(false)
-  const resumedRef = useRef(false)
-
-  // Resume monitoring a task from URL ?task=xxx (e.g. from running tasks indicator)
-  useEffect(() => {
-    if (urlTaskId && !resumedRef.current) {
-      resumedRef.current = true
-      setTaskId(urlTaskId)
-      setRunning(true)
-
-      const resume = async () => {
-        // Fetch initial log immediately so it shows even if the task already finished
-        let logAcc = ''
-        let nextLine = 0
-        try {
-          const d = await getEvalLog(urlTaskId, 0)
-          if (d.text) { logAcc = d.text; nextLine = d.tail_line }
-        } catch { /* ignore */ }
-
-        // Check progress to see if task is still running
-        let done = false
-        try {
-          const p = await getEvalProgress(urlTaskId)
-          setProgress(p.percent ?? 0)
-          if (p.percent >= 100) done = true
-        } catch { done = true }
-
-        // If task already completed, fetch ALL remaining log pages
-        if (done) {
-          try {
-            let safety = 0
-            while (nextLine > 0 && safety < 50) {
-              const more = await getEvalLog(urlTaskId, nextLine)
-              if (!more.text || more.tail_line <= nextLine) break
-              logAcc += more.text
-              nextLine = more.tail_line
-              if (nextLine >= more.total_lines) break
-              safety++
-            }
-          } catch { /* ignore */ }
-          setLogText(logAcc)
-          setLogLine(nextLine)
-          setRunning(false)
-          setResult({ status: 'ok', task_id: urlTaskId })
-        } else {
-          setLogText(logAcc)
-          setLogLine(nextLine)
-        }
-      }
-      resume()
-    }
-  }, [urlTaskId])
-
-  const handleSubmit = async (config: Record<string, unknown>) => {
-    const id = `eval_${Date.now()}`
-    setTaskId(id)
-    setRunning(true)
-    setLogText('')
-    setLogLine(0)
-    setProgress(0)
-    setResult(null)
-    setCopied(false)
-    try {
-      const res = await submitEvalTask(config, id)
-      setResult(res)
-    } catch (e) {
-      setResult({ status: 'error', task_id: id, error: String(e) })
-    } finally {
-      setRunning(false)
-      // Fetch complete final log + progress (from line 0 to avoid stale closure on logLine)
-      try {
-        const finalLog = await getEvalLog(id, 0, 999999)
-        if (finalLog.text) {
-          setLogText(finalLog.text)
-          setLogLine(finalLog.tail_line)
-        }
-        const finalProg = await getEvalProgress(id)
-        setProgress(finalProg.percent ?? 100)
-      } catch { /* ignore */ }
-    }
-  }
-
-  const handleStop = async () => {
-    if (!taskId) return
-    try { await stopEvalTask(taskId) } catch { /* ignore */ }
-    setRunning(false)
-    setResult({ status: 'stopped', task_id: taskId })
-  }
-
-  const progressFn = useCallback(async () => {
-    if (!taskId) throw new Error('no task')
-    return getEvalProgress(taskId)
-  }, [taskId])
-
-  const logFn = useCallback(async () => {
-    if (!taskId) throw new Error('no task')
-    return getEvalLog(taskId, logLine)
-  }, [taskId, logLine])
-
-  usePolling<ProgressResponse>({
-    fn: progressFn, enabled: running && !!taskId, interval: 5000,
-    onData: (d) => {
-      setProgress(d.percent ?? 0)
-      if (d.percent >= 100) {
-        setRunning(false)
-        setResult((prev) => prev ?? { status: 'ok', task_id: taskId! })
-      }
-    },
-  })
-
-  usePolling<LogResponse>({
-    fn: logFn, enabled: running && !!taskId, interval: 5000,
-    onData: (d) => { if (d.text) { setLogText((prev) => prev + d.text); setLogLine(d.tail_line) } },
-  })
-
-  const reportUrl = useMemo(() => (taskId ? getEvalReportUrl(taskId) : null), [taskId])
+  const api = useMemo(() => evalApi, [])
+  const { running, progress, result, logText, reportUrl, copied,
+    handleSubmit, handleStop, copyLog } = useTaskRunner({ api, taskPrefix: 'eval' })
 
   return (
-    <div className="page-enter">
-      <h1 className="text-xl font-semibold mb-6">{t('eval.title')}</h1>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title={t('eval.config')}>
-          <EvalConfigForm onSubmit={handleSubmit} disabled={running} initialDataset={initialDataset} />
-        </Card>
-        <Card title={t('eval.status')} action={
-          <button onClick={() => {
-            const text = [logText, result?.error].filter(Boolean).join('\n')
-            if (!text) return
-            const ta = document.createElement('textarea')
-            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
-            document.body.appendChild(ta); ta.select()
-            try { document.execCommand('copy') } catch { /* ignore */ }
-            document.body.removeChild(ta)
-            setCopied(true); setTimeout(() => setCopied(false), 2000)
-          }}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card2)]"
-            title="复制全部日志">
-            {copied ? <Check size={13} className="text-[var(--green)]" /> : <Copy size={13} />}
-            {copied ? '已复制' : '复制日志'}
-          </button>
-        }>
-          <TaskMonitor running={running} progress={progress} logText={logText} result={result}
-            reportUrl={reportUrl} readyLabel={t('eval.ready')} onStop={handleStop} />
-        </Card>
-      </div>
-    </div>
+    <TaskPageLayout
+      title={t('eval.title')}
+      configTitle={t('eval.config')}
+      statusTitle={t('eval.status')}
+      readyLabel={t('eval.ready')}
+      running={running}
+      progress={progress}
+      result={result}
+      logText={logText}
+      reportUrl={reportUrl}
+      copied={copied}
+      onCopy={copyLog}
+      onStop={handleStop}
+    >
+      <EvalConfigForm onSubmit={handleSubmit} disabled={running} initialDataset={initialDataset} />
+    </TaskPageLayout>
   )
 }
