@@ -1,7 +1,9 @@
 import contextlib
 import io
 import multiprocessing
+import os
 import queue
+import signal
 import sys
 import threading
 import time
@@ -80,18 +82,28 @@ def stop_process(task_id: str) -> bool:
     """Terminate the subprocess associated with *task_id*.
 
     Returns True if a process was found and terminated, False otherwise.
+    Uses process group kill (os.killpg) to ensure all child/grandchild processes
+    are also terminated, preventing orphaned GPU workers or model servers.
     """
     with _active_lock:
         info = _active_processes.pop(task_id, None)
     if info is None or info.process is None:
         return False
     proc = info.process
-    if proc.is_alive():
-        proc.terminate()
-        proc.join(timeout=3)
-        if proc.is_alive():
-            proc.kill()
-            proc.join(timeout=2)
+    if proc.is_alive() and proc.pid is not None:
+        try:
+            # Get process group ID (child called os.setsid() on startup)
+            pgid = os.getpgid(proc.pid)
+            # Send SIGTERM to entire process group
+            os.killpg(pgid, signal.SIGTERM)
+            proc.join(timeout=3)
+            if proc.is_alive():
+                # Force kill the entire process group
+                os.killpg(pgid, signal.SIGKILL)
+                proc.join(timeout=2)
+        except ProcessLookupError:
+            # Process already exited, ignore
+            pass
     logger.info(f'Task {task_id} stopped by user.')
     return True
 
@@ -123,6 +135,10 @@ def _process_worker(func, result_queue, *args, **kwargs):
     stderr is captured and forwarded through the queue so the parent process
     can surface it even when the child crashes before *func* is reached.
     """
+    # Create a new session so this process becomes the process group leader.
+    # This allows the parent to kill the entire process tree (this process +
+    # any children it spawns) via os.killpg() when stopping the task.
+    os.setsid()
     with _capture_stderr() as stderr_buf:
         try:
             result = func(*args, **kwargs)
