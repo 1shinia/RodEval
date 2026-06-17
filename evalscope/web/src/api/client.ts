@@ -25,3 +25,12 @@ export async function apiPost<T = unknown>(path: string, body: unknown, headers?
   })
   return handleResponse<T>(res)
 }
+
+export async function apiDelete<T = unknown>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return handleResponse<T>(res)
+}

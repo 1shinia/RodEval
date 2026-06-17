@@ -1,4 +1,4 @@
-import { apiPost, api } from './client'
+import { api, apiPost, apiDelete } from './client'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
 
 export interface PerfTaskMeta {
@@ -53,15 +53,5 @@ export async function stopPerfTask(taskId: string): Promise<{ status: string; ta
 }
 
 export async function deletePerfTask(taskId: string): Promise<{ ok: boolean }> {
-  const BASE = '/api/v1/perf'
-  const res = await fetch(`${BASE}/delete`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ task_id: taskId }),
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(body.error || `HTTP ${res.status}`)
-  }
-  return res.json()
+  return apiDelete<{ ok: boolean }>('/api/v1/perf/delete', { task_id: taskId })
 }

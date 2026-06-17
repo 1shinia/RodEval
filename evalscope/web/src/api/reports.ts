@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, apiDelete } from './client'
 import type {
   AnalysisResponse,
   DataFrameResponse,
@@ -87,16 +87,7 @@ export function getHtmlReportUrl(rootPath: string, reportName: string): string {
 }
 
 export async function deleteReport(rootPath: string, reportName: string): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/delete`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ root_path: rootPath, report_name: reportName }),
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(body.error || `HTTP ${res.status}`)
-  }
-  return res.json()
+  return apiDelete<{ ok: boolean }>(`${BASE}/delete`, { root_path: rootPath, report_name: reportName })
 }
 
 export function getChartUrl(
