@@ -36,16 +36,31 @@ def create_app(outputs: str = None):
     # responses instead of being escaped to \uXXXX sequences.
     app.json.ensure_ascii = False
 
+    # --- Load .env from project root (if python-dotenv is installed) ------
+    _env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+    _env_path = os.path.abspath(_env_path)
+    try:
+        from dotenv import load_dotenv
+        if os.path.isfile(_env_path):
+            load_dotenv(_env_path, override=False)
+    except ImportError:
+        pass
+
     # --- CORS (restrict to known frontend origins) ----------------------
     try:
         from flask_cors import CORS
 
-        # Allow only the known frontend origins to prevent unauthorized cross-origin access
+        # Default local-dev origins; additional origins can be added via
+        # the CORS_ORIGINS environment variable (comma-separated) or
+        # a .env file in the project root.
+        # Example .env: CORS_ORIGINS=http://10.192.161.184:5173,http://my-server:80
         allowed_origins = [
-            'http://10.192.161.184:5173',
             'http://localhost:5173',
             'http://127.0.0.1:5173',
         ]
+        extra = os.environ.get('CORS_ORIGINS', '')
+        if extra:
+            allowed_origins.extend(o.strip() for o in extra.split(',') if o.strip())
         CORS(app, resources={r'/api/*': {'origins': allowed_origins}})
     except ImportError:
         pass  # flask-cors not installed; same-origin only
