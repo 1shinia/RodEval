@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { listBenchmarks } from '@/api/eval'
+import { toast } from '@/components/common/Toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import FormField from '@/components/ui/FormField'
@@ -27,40 +28,40 @@ interface ParamDef {
 
 const BACKEND_PARAMS: Record<string, ParamDef[]> = {
   llama_cpp: [
-    { key: 'n_ctx', label: '上下文长度', type: 'number', min: 1, placeholder: '默认 4096' },
-    { key: 'n_threads', label: '线程数', type: 'number', min: 1, placeholder: '默认 8' },
+    { key: 'n_ctx', label: 'eval.params.contextLength', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'n_threads', label: 'eval.params.threadCount', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
   ],
   transformers: [
-    { key: 'precision', label: '精度', type: 'select', options: ['float16', 'bfloat16', 'float32', 'auto'] },
-    { key: 'device_map', label: '设备分配', type: 'select', options: ['auto', 'cuda:0', 'cuda:1', 'cpu'] },
-    { key: 'attn_implementation', label: '注意力实现', type: 'select', options: ['sdpa', 'eager', 'flash_attention_2'] },
-    { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
+    { key: 'precision', label: 'eval.params.precision', type: 'select', options: ['float16', 'bfloat16', 'float32', 'auto'] },
+    { key: 'device_map', label: 'eval.params.deviceMap', type: 'select', options: ['auto', 'cuda:0', 'cuda:1', 'cpu'] },
+    { key: 'attn_implementation', label: 'eval.params.attnImpl', type: 'select', options: ['sdpa', 'eager', 'flash_attention_2'] },
+    { key: 'trust_remote_code', label: 'eval.params.trustRemoteCode', type: 'checkbox' },
   ],
   vllm: [
-    { key: 'max_model_len', label: '上下文长度', type: 'number', min: 1, placeholder: '默认 模型自带值' },
-    { key: 'dtype', label: '精度', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
-    { key: 'quantization', label: '量化', type: 'select', options: ['无', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
-    { key: 'kv_cache_dtype', label: 'KV Cache 精度', type: 'select', options: ['auto', 'fp8'] },
-    { key: 'tensor_parallel_size', label: '张量并行', type: 'number', min: 1, placeholder: '默认 自动检测GPU数' },
-    { key: 'pipeline_parallel_size', label: '流水线并行', type: 'number', min: 1, placeholder: '默认 1' },
-    { key: 'data_parallel_size', label: '数据并行', type: 'number', min: 1, placeholder: '默认 1' },
-    { key: 'expert_parallel_size', label: '专家并行（MoE）', type: 'number', min: 1, placeholder: '默认 1' },
-    { key: 'gpu_memory_utilization', label: 'GPU 内存比例', type: 'number', min: 0, max: 1, step: '0.05', placeholder: '默认 0.9' },
-    { key: 'max_num_seqs', label: '最大并发请求数', type: 'number', min: 1, placeholder: '默认 256' },
-    { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
+    { key: 'max_model_len', label: 'eval.params.contextLength', type: 'number', min: 1, placeholder: 'eval.params.defaultModelLen' },
+    { key: 'dtype', label: 'eval.params.precision', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
+    { key: 'quantization', label: 'eval.params.quantization', type: 'select', options: ['eval.params.none', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
+    { key: 'kv_cache_dtype', label: 'eval.params.kvCacheDtype', type: 'select', options: ['auto', 'fp8'] },
+    { key: 'tensor_parallel_size', label: 'eval.params.tensorParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultAutoGpu' },
+    { key: 'pipeline_parallel_size', label: 'eval.params.pipelineParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'data_parallel_size', label: 'eval.params.dataParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'expert_parallel_size', label: 'eval.params.expertParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'gpu_memory_utilization', label: 'eval.params.gpuMemUtil', type: 'number', min: 0, max: 1, step: '0.05', placeholder: 'eval.params.defaultVal' },
+    { key: 'max_num_seqs', label: 'eval.params.maxConcurrent', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'trust_remote_code', label: 'eval.params.trustRemoteCode', type: 'checkbox' },
   ],
   sglang: [
-    { key: 'context_length', label: '上下文长度', type: 'number', min: 1, placeholder: '默认 模型自带值' },
-    { key: 'dtype', label: '精度', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
-    { key: 'quantization', label: '量化', type: 'select', options: ['无', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
-    { key: 'kv_cache_dtype', label: 'KV Cache 精度', type: 'select', options: ['auto', 'fp8'] },
-    { key: 'tp_size', label: '张量并行', type: 'number', min: 1, placeholder: '默认 自动检测GPU数' },
-    { key: 'pp_size', label: '流水线并行', type: 'number', min: 1, placeholder: '默认 1' },
-    { key: 'dp_size', label: '数据并行', type: 'number', min: 1, placeholder: '默认 1' },
-    { key: 'ep_size', label: '专家并行（MoE）', type: 'number', min: 1, placeholder: '默认 1' },
-    { key: 'mem_fraction_static', label: 'GPU 内存比例', type: 'number', min: 0, max: 1, step: '0.05', placeholder: '默认 0.85' },
-    { key: 'max_running_requests', label: '最大并发请求数', type: 'number', min: 1, placeholder: '默认 256' },
-    { key: 'trust_remote_code', label: '信任远程代码', type: 'checkbox' },
+    { key: 'context_length', label: 'eval.params.contextLength', type: 'number', min: 1, placeholder: 'eval.params.defaultModelLen' },
+    { key: 'dtype', label: 'eval.params.precision', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
+    { key: 'quantization', label: 'eval.params.quantization', type: 'select', options: ['eval.params.none', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
+    { key: 'kv_cache_dtype', label: 'eval.params.kvCacheDtype', type: 'select', options: ['auto', 'fp8'] },
+    { key: 'tp_size', label: 'eval.params.tensorParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultAutoGpu' },
+    { key: 'pp_size', label: 'eval.params.pipelineParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'dp_size', label: 'eval.params.dataParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'ep_size', label: 'eval.params.expertParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'mem_fraction_static', label: 'eval.params.gpuMemUtil', type: 'number', min: 0, max: 1, step: '0.05', placeholder: 'eval.params.defaultVal' },
+    { key: 'max_running_requests', label: 'eval.params.maxConcurrent', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
+    { key: 'trust_remote_code', label: 'eval.params.trustRemoteCode', type: 'checkbox' },
   ],
 }
 
@@ -143,7 +144,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
         ]
         setBenchmarkNames(names)
       })
-      .catch(() => {})
+      .catch((e) => { toast.error(e instanceof Error ? e.message : 'Failed to load benchmarks') })
   }, [])
 
   useEffect(() => {
@@ -307,6 +308,8 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3">
                   {getParams(backend).map((p) => {
                     const val = backendParamValues[p.key] || ''
+                    const label = t(p.label)
+                    const ph = p.placeholder ? t(p.placeholder, { v: DEFAULT_PARAM_VALUES[p.key] || '' }) : undefined
                     if (p.type === 'checkbox') {
                       return (
                         <div key={p.key} className="flex items-end pb-0.5">
@@ -315,26 +318,26 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
                               checked={val === 'true'}
                               onChange={(e) => setParam(p.key, e.target.checked ? 'true' : 'false')}
                               className="accent-[var(--accent)]" />
-                            {p.label}
+                            {label}
                           </label>
                         </div>
                       )
                     }
                     if (p.type === 'select' && p.options) {
                       return (
-                        <FormField key={p.key} label={p.label}>
+                        <FormField key={p.key} label={label}>
                           <select value={val}
                             onChange={(e) => setParam(p.key, e.target.value)}
                             className={FORM_INPUT_CLASS}>
                             {p.options.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
+                              <option key={opt} value={opt === 'eval.params.none' ? '' : opt}>{opt.includes('eval.params.') ? t(opt) : opt}</option>
                             ))}
                           </select>
                         </FormField>
                       )
                     }
                     return (
-                      <FormField key={p.key} label={p.label}>
+                      <FormField key={p.key} label={label}>
                         <input type="number" step={p.step || '1'} min={p.min} max={p.max}
                           value={val}
                           onChange={(e) => {
@@ -352,7 +355,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
                             setParam(p.key, v)
                           }}
                           className={FORM_INPUT_CLASS}
-                          placeholder={p.placeholder} />
+                          placeholder={ph} />
                       </FormField>
                     )
                   })}

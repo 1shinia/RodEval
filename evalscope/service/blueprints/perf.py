@@ -58,12 +58,14 @@ def list_perf_tasks():
     """List all performance test tasks with metadata.
 
     Query params:
-        root_path (str): output root directory (default: OUTPUT_DIR)
-        search    (str): search in model name and dataset
-        model     (str): filter by model (exact match)
-        dataset   (str): filter by dataset (exact match)
-        sort_by   (str): sort field ('time', 'model')
+        root_path  (str): output root directory (default: OUTPUT_DIR)
+        search     (str): search in model name and dataset
+        model      (str): filter by model (exact match)
+        dataset    (str): filter by dataset (exact match)
+        sort_by    (str): sort field ('time', 'model')
         sort_order (str): 'asc' or 'desc' (default: 'desc')
+        page       (int): page number (default: 1)
+        page_size  (int): items per page (default: 20)
     """
     root = request.args.get('root_path', OUTPUT_DIR)
     search = request.args.get('search', '').strip().lower()
@@ -166,8 +168,18 @@ def list_perf_tasks():
         if sort_order == 'asc':
             tasks.reverse()
 
+    # Paginate
+    page = max(1, request.args.get('page', 1, type=int))
+    page_size = max(1, min(100, request.args.get('page_size', 20, type=int)))
+    total = len(tasks)
+    start = (page - 1) * page_size
+    page_tasks = tasks[start:start + page_size]
+
     return jsonify({
-        'tasks': tasks,
+        'tasks': page_tasks,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
         'root_path': root,
         'filters': {
             'available_models': sorted(m for m in all_models if m),

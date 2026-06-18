@@ -4,6 +4,8 @@ import { ReportsProvider } from '@/contexts/ReportsContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import MainLayout from '@/layouts/MainLayout'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
+import PageErrorBoundary from '@/components/common/PageErrorBoundary'
+import ToastContainer from '@/components/common/Toast'
 import { lazy, Suspense } from 'react'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 
@@ -22,15 +24,15 @@ function AppRoutes() {
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
         <Route element={<MainLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/reports/:reportId" element={<ReportDetailPage />} />
-          <Route path="/compare" element={<ComparePage />} />
-          <Route path="/eval" element={<EvalTaskPage />} />
-          <Route path="/perf" element={<PerfTaskPage />} />
-          <Route path="/perf-reports" element={<PerfReportsPage />} />
-          <Route path="/benchmarks" element={<BenchmarksPage />} />
-          <Route path="/viewer" element={<ReportViewerPage />} />
+          <Route path="/dashboard" element={<PageErrorBoundary pageName="dashboard"><DashboardPage /></PageErrorBoundary>} />
+          <Route path="/reports" element={<PageErrorBoundary pageName="reports"><ReportsPage /></PageErrorBoundary>} />
+          <Route path="/reports/:reportId" element={<PageErrorBoundary pageName="report-detail"><ReportDetailPage /></PageErrorBoundary>} />
+          <Route path="/compare" element={<PageErrorBoundary pageName="compare"><ComparePage /></PageErrorBoundary>} />
+          <Route path="/eval" element={<PageErrorBoundary pageName="eval"><EvalTaskPage /></PageErrorBoundary>} />
+          <Route path="/perf" element={<PageErrorBoundary pageName="perf"><PerfTaskPage /></PageErrorBoundary>} />
+          <Route path="/perf-reports" element={<PageErrorBoundary pageName="perf-reports"><PerfReportsPage /></PageErrorBoundary>} />
+          <Route path="/benchmarks" element={<PageErrorBoundary pageName="benchmarks"><BenchmarksPage /></PageErrorBoundary>} />
+          <Route path="/viewer" element={<PageErrorBoundary pageName="viewer"><ReportViewerPage /></PageErrorBoundary>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
@@ -46,6 +48,7 @@ export default function App() {
           <LocaleProvider>
             <ReportsProvider>
               <AppRoutes />
+              <ToastContainer />
             </ReportsProvider>
           </LocaleProvider>
         </ThemeProvider>

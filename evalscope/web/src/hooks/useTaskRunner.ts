@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import { usePolling } from '@/hooks/usePolling'
+import { toast } from '@/components/common/Toast'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/types'
 
 export interface TaskApi {
@@ -91,6 +92,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       setResult(res)
     } catch (e) {
       setResult({ status: 'error', task_id: id, error: String(e) })
+      toast.error(String(e))
     } finally {
       setRunning(false)
       // Fetch complete final log + progress (from line 0 to avoid stale closure on logLine)
@@ -108,7 +110,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
 
   const handleStop = async () => {
     if (!taskId) return
-    try { await api.stop(taskId) } catch { /* ignore */ }
+    try { await api.stop(taskId) } catch { toast.warning('Stop request failed') }
     setRunning(false)
     setResult({ status: 'stopped', task_id: taskId })
   }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocale } from '@/contexts/LocaleContext'
 import { listBenchmarks } from '@/api/eval'
+import { toast } from '@/components/common/Toast'
 import type { BenchmarkEntry } from '@/api/types'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer'
@@ -59,7 +60,7 @@ export default function BenchmarksPage() {
         const mmList = (res.multimodal ?? []).map((e) => normalize(e, 'vlm'))
         setAllBenchmarks([...textList, ...mmList])
       })
-      .catch(() => {})
+      .catch((e) => { toast.error(e instanceof Error ? e.message : 'Failed to load benchmarks') })
       .finally(() => setLoading(false))
   }, [])
 

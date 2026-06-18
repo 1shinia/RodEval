@@ -4,7 +4,7 @@ import { lookupTranslation, type Locale } from '@/i18n/translations'
 interface LocaleCtx {
   locale: Locale
   setLocale: (l: Locale) => void
-  t: (path: string) => string
+  t: (path: string, params?: Record<string, string | number>) => string
 }
 
 const LocaleContext = createContext<LocaleCtx>({
@@ -23,7 +23,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     setLocaleState(l)
   }, [])
 
-  const t = useCallback((path: string) => lookupTranslation(locale, path), [locale])
+  const t = useCallback((path: string, params?: Record<string, string | number>) => lookupTranslation(locale, path, params), [locale])
 
   const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t])
 

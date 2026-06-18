@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useLocale } from '@/contexts/LocaleContext'
 import { loadReport as apiLoadReport, getHtmlReportUrl } from '@/api/reports'
+import { toast } from '@/components/common/Toast'
 import type { LoadReportResponse, ReportData } from '@/api/types'
 import Breadcrumb from '@/components/ui/Breadcrumb'
 import Tabs from '@/components/ui/Tabs'
@@ -54,7 +55,9 @@ export default function ReportDetailPage() {
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(String(err))
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!cancelled) setError(msg)
+        toast.error(msg)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)

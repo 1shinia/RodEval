@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, FolderOpen, GitCompareArrows, Loader2, ScanSearch } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
+import { toast } from '@/components/common/Toast'
 import * as reportsApi from '@/api/reports'
 import type { ListReportsResponse, ReportSummary } from '@/api/types'
 import Breadcrumb from '@/components/ui/Breadcrumb'
@@ -80,7 +81,9 @@ export default function ReportsPage() {
       setAvailableModels(res.filters.available_models)
       setAvailableDatasets(res.filters.available_datasets)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reports')
+      const msg = err instanceof Error ? err.message : 'Failed to load reports'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -115,7 +118,9 @@ export default function ReportsPage() {
       setFilters(defaultFilters)
       clearCompareSelection()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Scan failed')
+      const msg = err instanceof Error ? err.message : 'Scan failed'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -171,17 +176,16 @@ export default function ReportsPage() {
   }, [selectedForCompare, navigate, rootPath])
 
   const handleDelete = useCallback(async (name: string) => {
-    if (!window.confirm(`确定要删除 "${name}" 吗？此操作不可撤销。`)) return
+    if (!window.confirm(t('reports.confirmDelete', { name }))) return
     try {
       await reportsApi.deleteReport(rootPath, name)
-      // Remove from compare selection
+      toast.success(t('common.deleteSuccess'))
       clearCompareSelection()
-      // Refresh list
       fetchReports()
     } catch (err) {
-      alert(err instanceof Error ? err.message : '删除失败')
+      toast.error(err instanceof Error ? err.message : t('common.deleteFailed'))
     }
-  }, [rootPath, clearCompareSelection, fetchReports])
+  }, [rootPath, clearCompareSelection, fetchReports, t])
 
   const handleViewHtml = useCallback(() => {
     if (selectedForCompare.length === 1) {

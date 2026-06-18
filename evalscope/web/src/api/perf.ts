@@ -13,6 +13,9 @@ export interface PerfTaskMeta {
 
 export interface ListPerfTasksResponse {
   tasks: PerfTaskMeta[]
+  total: number
+  page: number
+  page_size: number
   root_path?: string
   filters?: {
     available_models: string[]

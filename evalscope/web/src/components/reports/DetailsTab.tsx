@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { getAnalysis, getDataFrame } from '@/api/reports'
+import { toast } from '@/components/common/Toast'
 import Card from '@/components/ui/Card'
 import Table from '@/components/ui/Table'
 import { scoreColor } from '@/utils/colorScale'
@@ -35,8 +36,8 @@ export default function DetailsTab({ reportName, datasetName, rootPath, perfMetr
       setAnalysisLoading(true)
       try {
         const [analysisText, dfRes] = await Promise.all([
-          getAnalysis(rootPath, reportName, datasetName).catch(() => ''),
-          getDataFrame(rootPath, reportName, 'dataset', datasetName).catch(() => ({ columns: [], data: [] })),
+          getAnalysis(rootPath, reportName, datasetName).catch((e) => { toast.warning(e instanceof Error ? e.message : 'Analysis unavailable'); return '' }),
+          getDataFrame(rootPath, reportName, 'dataset', datasetName).catch((e) => { toast.warning(e instanceof Error ? e.message : 'DataFrame unavailable'); return { columns: [], data: [] } }),
         ])
         if (cancelled) return
         setAnalysis(analysisText)

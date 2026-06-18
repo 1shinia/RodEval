@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { listPerfTasks, deletePerfTask, getPerfReportUrl, type PerfTaskMeta } from '@/api/perf'
+import { toast } from '@/components/common/Toast'
 import Breadcrumb from '@/components/ui/Breadcrumb'
 import Card from '@/components/ui/Card'
-import { ExternalLink, FolderOpen, History, Search, Trash2 } from 'lucide-react'
+import { ExternalLink, FolderOpen, History, Search, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+const PAGE_SIZE = 20
 
 export default function PerfReportsPage() {
   const { t } = useLocale()
@@ -19,12 +23,20 @@ export default function PerfReportsPage() {
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [availableDatasets, setAvailableDatasets] = useState<string[]>([])
 
+  // Pagination
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
   useEffect(() => {
-    searchTimer.current = setTimeout(() => setDebouncedSearch(search), 300)
+    searchTimer.current = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 300)
     return () => clearTimeout(searchTimer.current)
   }, [search])
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (p: number) => {
     setLoading(true)
     try {
       const params: Record<string, string> = {}
@@ -34,26 +46,34 @@ export default function PerfReportsPage() {
       if (filterDataset) params.dataset = filterDataset
       params.sort_by = 'time'
       params.sort_order = sortOrder
+      params.page = String(p)
+      params.page_size = String(PAGE_SIZE)
       const res = await listPerfTasks(params)
       setHistory(res.tasks || [])
+      setTotal(res.total || 0)
       if (res.root_path && !rootPath) setRootPath(res.root_path)
       if (res.filters) {
         setAvailableModels(res.filters.available_models)
         setAvailableDatasets(res.filters.available_datasets)
       }
-    } catch { /* ignore */ }
+    } catch {
+      toast.error(t('common.loadFailed'))
+    }
     finally { setLoading(false) }
   }, [rootPath, debouncedSearch, filterModel, filterDataset, sortOrder])
 
-  useEffect(() => { loadHistory() }, [loadHistory])
+  useEffect(() => { loadHistory(page) }, [loadHistory, page])
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1) }, [filterModel, filterDataset, sortOrder, debouncedSearch])
 
   const handleViewReport = (tid: string) => window.open(getPerfReportUrl(tid), '_blank')
 
   const handleDelete = useCallback(async (tid: string) => {
-    if (!window.confirm('确定要删除该压测记录吗？')) return
-    try { await deletePerfTask(tid); loadHistory() }
-    catch (e) { alert(e instanceof Error ? e.message : '删除失败') }
-  }, [loadHistory])
+    if (!window.confirm(t('perf.confirmDelete'))) return
+    try { await deletePerfTask(tid); toast.success(t('common.deleteSuccess')); loadHistory(page) }
+    catch (e) { toast.error(e instanceof Error ? e.message : t('common.deleteFailed')) }
+  }, [loadHistory, page, t])
 
   return (
     <div className="page-enter flex flex-col gap-5">
@@ -62,7 +82,7 @@ export default function PerfReportsPage() {
         <FolderOpen size={16} className="text-[var(--text-muted)] shrink-0" />
         <input type="text" value={rootPath} onChange={(e) => setRootPath(e.target.value)}
           className="flex-1 px-3 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)] transition-all duration-[var(--transition)]"
-          placeholder="输出目录路径" />
+          placeholder={t('perf.outputDir')} />
       </div>
 
       {/* Filter bar */}
@@ -71,48 +91,48 @@ export default function PerfReportsPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)]" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)]"
-            placeholder="搜索..." />
+            placeholder={t('perf.search')} />
         </div>
         <select value={filterModel} onChange={(e) => setFilterModel(e.target.value)}
           className="px-2 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] cursor-pointer max-w-[140px] truncate focus:outline-none focus:border-[var(--accent)]">
-          <option value="">全部模型</option>
+          <option value="">{t('perf.allModels')}</option>
           {availableModels.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <select value={filterDataset} onChange={(e) => setFilterDataset(e.target.value)}
           className="px-2 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] cursor-pointer max-w-[120px] truncate focus:outline-none focus:border-[var(--accent)]">
-          <option value="">全部数据集</option>
+          <option value="">{t('perf.allDatasets')}</option>
           {availableDatasets.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
         <button onClick={() => setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
           className="px-2 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer">
-          {sortOrder === 'desc' ? '↓ 最新' : '↑ 最早'}
+          {sortOrder === 'desc' ? t('perf.sortNewest') : t('perf.sortOldest')}
         </button>
       </div>
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-12 gap-2 text-[var(--text-dim)]">
           <div className="w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm">加载中...</p>
+          <p className="text-sm">{t('perf.loading')}</p>
         </div>
       ) : history.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-3 text-[var(--text-dim)]">
           <History size={40} />
-          <h3 className="text-lg font-semibold text-[var(--text)]">暂无压测记录</h3>
-          <p className="text-sm text-[var(--text-muted)]">运行一次性能测试后将在此显示</p>
+          <h3 className="text-lg font-semibold text-[var(--text)]">{t('perf.noRecords')}</h3>
+          <p className="text-sm text-[var(--text-muted)]">{t('perf.noRecordsHint')}</p>
         </div>
       ) : (
-        <Card title="压测历史">
+        <Card title={t('perf.historyTitle')}>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)]">
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">任务 ID</th>
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">模型</th>
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">数据集</th>
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">API</th>
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">并发配置数</th>
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">时间</th>
-                  <th className="text-right py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">操作</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.taskId')}</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.model')}</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.datasetLabel')}</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.api')}</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.concurrencyCount')}</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.time')}</th>
+                  <th className="text-right py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,7 +148,7 @@ export default function PerfReportsPage() {
                       {item.has_report && (
                         <button onClick={() => handleViewReport(item.task_id)}
                           className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded text-[var(--accent)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer">
-                          <ExternalLink size={13} />报告
+                          <ExternalLink size={13} />{t('perf.report')}
                         </button>
                       )}
                       <button onClick={() => handleDelete(item.task_id)}
@@ -141,6 +161,38 @@ export default function PerfReportsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-3 pb-1">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className={cn(
+                  'p-1.5 rounded-[var(--radius-sm)] border border-[var(--border)] transition-colors',
+                  page <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[var(--bg-card2)] cursor-pointer',
+                )}
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="type-body-sm text-[var(--text-muted)] tabular-nums">
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className={cn(
+                  'p-1.5 rounded-[var(--radius-sm)] border border-[var(--border)] transition-colors',
+                  page >= totalPages ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[var(--bg-card2)] cursor-pointer',
+                )}
+                aria-label="Next page"
+              >
+                <ChevronRight size={16} />
+              </button>
+              <span className="type-body-xs text-[var(--text-dim)] ml-2">{t('perf.totalCount', { n: total })}</span>
+            </div>
+          )}
         </Card>
       )}
     </div>

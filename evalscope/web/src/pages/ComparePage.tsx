@@ -3,6 +3,7 @@ import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import { getPredictions, getChartUrl } from '@/api/reports'
+import { toast } from '@/components/common/Toast'
 import type { ReportData, PredictionRow } from '@/api/types'
 import { getDisplayNames, parseReportName } from '@/utils/reportParser'
 import Breadcrumb from '@/components/ui/Breadcrumb'
@@ -113,7 +114,10 @@ export default function ComparePage() {
     setDataLoaded(false)
     loadMultiReports(reportNames)
       .then((list) => { setReports(list); setDataLoaded(true) })
-      .catch(() => setDataLoaded(true))
+      .catch((e) => {
+        toast.error(e instanceof Error ? e.message : t('common.loadFailed'))
+        setDataLoaded(true)
+      })
   }, [reportNames, loadMultiReports])
 
   // ------------------------------------------------------------------ //
@@ -235,7 +239,7 @@ export default function ComparePage() {
       setMergedPredictions(merged)
       setPage(1)
     } catch (e) {
-      console.error('Failed to load predictions:', e)
+      toast.error(e instanceof Error ? e.message : t('common.loadFailed'))
     } finally {
       setPredictionsLoading(false)
     }

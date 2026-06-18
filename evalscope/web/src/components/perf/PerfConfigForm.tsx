@@ -101,7 +101,7 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
     if (prefixLength) config.prefix_length = Number(prefixLength)
     if (extraArgs.trim()) {
       try { config.extra_args = JSON.parse(extraArgs) }
-      catch { newErrors.extra_args = 'JSON 格式无效' }
+      catch { newErrors.extra_args = t('perf.invalidJson') }
     }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -183,15 +183,15 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
               <option value="llama_cpp">llama.cpp</option>
             </select>
           </FormField>
-          <FormField label="Tokenizer 路径">
+          <FormField label={t('perf.tokenizerPath')}>
             <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
           </FormField>
         </>)}
 
-        {/* ── 数据集 ── */}
+        {/* ── Dataset ── */}
         <FormField label={t('perf.dataset')}>
           <select value={dataset} onChange={(e) => setDataset(e.target.value)} className={FORM_INPUT_CLASS}>
-            <option value="openqa">openqa（默认）</option>
+            <option value="openqa">{t('perf.datasetDefault', { name: 'openqa' })}</option>
             <option value="random">random</option>
             <option value="random_vl">random_vl</option>
             <option value="random_multi_turn">random_multi_turn</option>
@@ -200,20 +200,20 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
             <option value="longalpaca">longalpaca</option>
             <option value="line_by_line">line_by_line</option>
             <option value="speed_benchmark">speed_benchmark</option>
-            <option value="custom">其他（手动输入）</option>
+            <option value="custom">{t('perf.datasetCustom')}</option>
           </select>
         </FormField>
 
         <FormField label={t('perf.rate')}>
-          <input type="number" value={rate} onChange={(e) => setRate(e.target.value)} className={FORM_INPUT_CLASS} placeholder="请求/秒" />
+          <input type="number" value={rate} onChange={(e) => setRate(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderReqPerSec')} />
         </FormField>
 
         {dataset === 'custom' && (
           <>
-            <FormField label="自定义数据集名称">
-              <input value={customDataset} onChange={(e) => setCustomDataset(e.target.value)} className={FORM_INPUT_CLASS} placeholder="输入数据集名称" />
+            <FormField label={t('perf.customDatasetName')}>
+              <input value={customDataset} onChange={(e) => setCustomDataset(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.customDatasetNamePh')} />
             </FormField>
-            <FormField label="数据集路径">
+            <FormField label={t('perf.customDatasetPath')}>
               <input value={datasetPath} onChange={(e) => setDatasetPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/datasets/my_perf_data.jsonl" />
             </FormField>
           </>
@@ -230,33 +230,33 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
 
         {/* ── Token / Prompt ── */}
         <FormField label={t('perf.maxTokens')}>
-          <input type="number" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} className={FORM_INPUT_CLASS} placeholder="默认 2048" />
+          <input type="number" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderDefaultVal', { v: '2048' })} />
         </FormField>
 
         <FormField label={t('perf.minTokens')}>
-          <input type="number" value={minTokens} onChange={(e) => setMinTokens(e.target.value)} className={FORM_INPUT_CLASS} placeholder="不限制" />
+          <input type="number" value={minTokens} onChange={(e) => setMinTokens(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderNoLimit')} />
         </FormField>
 
         <FormField label={t('perf.maxPromptLen')}>
-          <input type="number" value={maxPromptLen} onChange={(e) => setMaxPromptLen(e.target.value)} className={FORM_INPUT_CLASS} placeholder="默认 131072" />
+          <input type="number" value={maxPromptLen} onChange={(e) => setMaxPromptLen(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderDefaultVal', { v: '131072' })} />
         </FormField>
 
         <FormField label={t('perf.minPromptLen')}>
-          <input type="number" value={minPromptLen} onChange={(e) => setMinPromptLen(e.target.value)} className={FORM_INPUT_CLASS} placeholder="默认 0" />
+          <input type="number" value={minPromptLen} onChange={(e) => setMinPromptLen(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderDefaultVal', { v: '0' })} />
         </FormField>
 
         {/* API mode: Tokenizer path shown here */}
         {!isLocal && (
-          <FormField label="Tokenizer 路径">
+          <FormField label={t('perf.tokenizerPath')}>
             <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
           </FormField>
         )}
       </div>
 
       {/* ── 高级选项 ── */}
-      <Collapsible header={<span className="text-sm text-[var(--accent)]">更多参数</span>} defaultOpen={false} chevronAfter chevronColor="var(--accent)">
+      <Collapsible header={<span className="text-sm text-[var(--accent)]">{t('perf.moreParams')}</span>} defaultOpen={false} chevronAfter chevronColor="var(--accent)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-          <FormField label="Prefix 长度">
+          <FormField label={t('perf.prefixLength')}>
             <input type="number" value={prefixLength} onChange={(e) => setPrefixLength(e.target.value.replace(/[^0-9]/g, ''))} className={FORM_INPUT_CLASS} placeholder="0" />
           </FormField>
 

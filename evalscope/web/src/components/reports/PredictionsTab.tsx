@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Hash, List, CircleCheck, CircleX, HelpCircle, Search, MessageSquare, AlertCircle } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
+import { toast } from '@/components/common/Toast'
 import type { PredictionRow, ReportData } from '@/api/types'
 import { getPredictions, getDataFrame } from '@/api/reports'
 import Select from '@/components/ui/Select'
@@ -56,7 +57,7 @@ export default function PredictionsTab({ reportName, datasetName, rootPath, init
         setSelectedSubset(target)
         setPredictions([])
       } catch (e) {
-        console.error('Failed to load subsets:', e)
+        toast.error(e instanceof Error ? e.message : 'Failed to load subsets')
       }
     }
     loadSubsets()
@@ -71,7 +72,7 @@ export default function PredictionsTab({ reportName, datasetName, rootPath, init
       const res = await getPredictions(rootPath, reportName, datasetName, selectedSubset)
       setPredictions(res.predictions)
     } catch (e) {
-      console.error('Failed to load predictions:', e)
+      toast.error(e instanceof Error ? e.message : 'Failed to load predictions')
       setPredictions([])
     } finally {
       setLoading(false)
