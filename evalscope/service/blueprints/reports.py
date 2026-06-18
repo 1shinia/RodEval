@@ -9,6 +9,7 @@ import mimetypes
 import os
 import plotly.express as px
 import plotly.graph_objects as go
+import uuid
 from datetime import datetime
 from flask import Blueprint, jsonify, request, send_file
 from typing import List
@@ -35,7 +36,7 @@ from evalscope.utils.data_utils import (
 )
 from evalscope.utils.io_utils import OutputsStructure
 from evalscope.utils.logger import get_logger
-from ..utils import OUTPUT_DIR, validate_root_path
+from ..utils import OUTPUT_DIR, validate_report_name, validate_root_path
 
 logger = get_logger()
 
@@ -297,8 +298,9 @@ def list_reports():
         }), 200
 
     except Exception as e:
-        logger.error(f'Failed to list reports: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to list reports: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to list reports', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/scan', methods=['GET'])
@@ -313,8 +315,9 @@ def scan_reports():
         reports = scan_for_report_folders(root)
         return jsonify({'reports': reports}), 200
     except Exception as e:
-        logger.error(f'Failed to scan reports: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to scan reports: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to scan reports', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/load', methods=['GET'])
@@ -331,15 +334,19 @@ def load_report():
 
     try:
         root = _root_path()
+        validate_report_name(report_name, root)
         report_list, datasets, task_cfg = load_single_report(root, report_name)
         return jsonify({
             'report_list': [r.to_dict() for r in report_list],
             'datasets': datasets,
             'task_config': task_cfg,
         }), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        logger.error(f'Failed to load report {report_name}: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to load report {report_name}: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to load report', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/load_multi', methods=['GET'])
@@ -357,13 +364,18 @@ def load_multi():
     names = [n.strip() for n in names_raw.split(';') if n.strip()]
     try:
         root = _root_path()
+        for name in names:
+            validate_report_name(name, root)
         report_list = load_multi_report(root, names)
         return jsonify({
             'report_list': [r.to_dict() for r in report_list],
         }), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        logger.error(f'Failed to load multi reports: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to load multi reports: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to load reports', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/dataframe', methods=['GET'])
@@ -385,6 +397,7 @@ def get_dataframe():
 
     try:
         root = _root_path()
+        validate_report_name(report_name, root)
         report_list, datasets, _ = load_single_report(root, report_name)
         acc_df, _ = get_acc_report_df(report_list)
 
@@ -403,9 +416,12 @@ def get_dataframe():
             'columns': list(df.columns),
             'data': _df_to_records(df),
         }), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        logger.error(f'Failed to get dataframe: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to get dataframe: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to get dataframe', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/predictions', methods=['GET'])
@@ -427,15 +443,19 @@ def get_predictions():
 
     try:
         root = _root_path()
+        report_dir = validate_report_name(report_name, root)
         prefix, model_name, _ = process_report_name(report_name)
-        work_dir = os.path.join(root, prefix)
+        work_dir = report_dir
         df = get_model_prediction(work_dir, model_name, dataset_name, subset_name)
         return jsonify({
             'predictions': _df_to_records(df),
         }), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        logger.error(f'Failed to get predictions: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to get predictions: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to get predictions', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/analysis', methods=['GET'])
@@ -455,12 +475,16 @@ def get_analysis():
 
     try:
         root = _root_path()
+        validate_report_name(report_name, root)
         report_list, _, _ = load_single_report(root, report_name)
         analysis = get_report_analysis(report_list, dataset_name)
         return jsonify({'analysis': analysis}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        logger.error(f'Failed to get analysis: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to get analysis: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to get analysis', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/delete', methods=['DELETE'])
@@ -489,8 +513,9 @@ def delete_report():
         logger.info(f'Deleted report: {report_dir}')
         return jsonify({'ok': True}), 200
     except Exception as e:
-        logger.error(f'Failed to delete report {report_name}: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to delete report {report_name}: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to delete report', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/html', methods=['GET'])
@@ -521,8 +546,9 @@ def get_html_report():
 
         return send_file(report_html, mimetype='text/html')
     except Exception as e:
-        logger.error(f'Failed to get HTML report: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to get HTML report: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to get HTML report', 'error_id': error_id}), 500
 
 
 @bp_reports.route('/chart', methods=['GET'])
@@ -553,6 +579,8 @@ def get_chart():
                     names = [single]
                 else:
                     return jsonify({'error': 'report_names or report_name is required for radar'}), 400
+            for name in names:
+                validate_report_name(name, root)
             report_list = load_multi_report(root, names)
             acc_df, _ = get_acc_report_df(report_list)
             fig = plot_multi_report_radar(acc_df)
@@ -562,6 +590,8 @@ def get_chart():
             names = [n.strip() for n in names_raw.split(';') if n.strip()]
             if not names:
                 return jsonify({'error': 'report_names is required for grouped_bar'}), 400
+            for name in names:
+                validate_report_name(name, root)
             report_list = load_multi_report(root, names)
             acc_df, _ = get_acc_report_df(report_list)
             color_seq = ['#816DF8', '#0F9C7E', '#fbbf24', '#a78bfa', '#63b3ed']
@@ -591,8 +621,9 @@ def get_chart():
             subset_name = request.args.get('subset_name', '')
             if not report_name or not dataset_name or not subset_name:
                 return jsonify({'error': 'report_name, dataset_name and subset_name are required for histogram'}), 400
+            report_dir = validate_report_name(report_name, root)
             prefix, model_name, _ = process_report_name(report_name)
-            work_dir = os.path.join(root, prefix)
+            work_dir = report_dir
             pred_df = get_model_prediction(work_dir, model_name, dataset_name, subset_name)
             if pred_df is not None and not pred_df.empty and 'NScore' in pred_df.columns:
                 fig = px.histogram(
@@ -613,6 +644,7 @@ def get_chart():
             report_name = request.args.get('report_name')
             if not report_name:
                 return jsonify({'error': 'report_name is required'}), 400
+            validate_report_name(report_name, root)
             report_list, datasets, _ = load_single_report(root, report_name)
             acc_df, _ = get_acc_report_df(report_list)
 
@@ -639,6 +671,9 @@ def get_chart():
         html = html.replace('</head>', f'  {plotly_script}\n</head>')
         return html, 200, {'Content-Type': 'text/html'}
 
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        logger.error(f'Failed to generate chart: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to generate chart: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to generate chart', 'error_id': error_id}), 500

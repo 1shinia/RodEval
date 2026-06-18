@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from flask import Blueprint, jsonify, request, send_file
 from tabulate import tabulate
 
@@ -228,8 +229,9 @@ def run_performance_test():
             'table': table_str
         })
     except Exception as e:
-        logger.error(f'[{task_id}] Task failed: {e}')
-        return jsonify({'status': 'error', 'task_id': task_id, 'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] [{task_id}] Task failed: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
 
 
 @bp_perf.route('/stop', methods=['POST'])
@@ -277,8 +279,9 @@ def delete_performance_test():
         logger.info(f'Deleted perf task: {task_id}')
         return jsonify({'ok': True, 'task_id': task_id}), 200
     except Exception as e:
-        logger.error(f'Failed to delete perf task {task_id}: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to delete perf task {task_id}: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to delete task', 'error_id': error_id}), 500
 
 
 @bp_perf.route('/report', methods=['GET'])
@@ -327,8 +330,9 @@ def get_performance_log():
         result = get_log_content(task_id, os.path.join('perf', 'benchmark.log'), start_line, page)
         return jsonify(result), 200
     except Exception as e:
-        logger.error(f'Failed to get performance log: {str(e)}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to get performance log: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to get log', 'error_id': error_id}), 500
 
 
 @bp_perf.route('/progress', methods=['GET'])
@@ -355,5 +359,6 @@ def get_performance_progress():
     except FileNotFoundError:
         return jsonify({'percent': 0.0}), 200
     except Exception as e:
-        logger.error(f'Failed to get progress for task {task_id}: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to get progress for task {task_id}: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to get progress', 'error_id': error_id}), 500

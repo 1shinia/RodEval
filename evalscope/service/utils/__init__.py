@@ -8,7 +8,14 @@ from .benchmarks import (
     discover_all_benchmarks,
     parse_benchmark_description,
 )
-from .log import OUTPUT_DIR, create_log_file, get_log_content, validate_root_path, validate_task_id
+from .log import (
+    OUTPUT_DIR,
+    create_log_file,
+    get_log_content,
+    validate_report_name,
+    validate_root_path,
+    validate_task_id,
+)
 from .process import (
     get_running_tasks,
     run_eval_wrapper,
@@ -24,6 +31,7 @@ __all__ = [
     'get_log_content',
     'get_running_tasks',
     'validate_root_path',
+    'validate_report_name',
     'validate_task_id',
     'run_eval_wrapper',
     'run_perf_wrapper',

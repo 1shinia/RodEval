@@ -36,6 +36,30 @@ def validate_root_path(root: str) -> str:
     return resolved
 
 
+def validate_report_name(report_name: str, root: str) -> str:
+    """Validate that *report_name* resolves to a path within *root*.
+
+    Uses ``process_report_name`` to extract the directory prefix, then
+    checks that the resolved absolute path does not escape *root*.
+
+    Returns the resolved absolute path of the report directory.
+    Raises ValueError if the report_name format is invalid or the path
+    escapes the allowed directory.
+    """
+    from evalscope.utils.data_utils import process_report_name
+
+    try:
+        prefix, _, _ = process_report_name(report_name)
+    except (ValueError, IndexError) as exc:
+        raise ValueError('Invalid report_name format') from exc
+
+    resolved = os.path.realpath(os.path.join(root, prefix))
+    root_resolved = os.path.realpath(root)
+    if resolved != root_resolved and not resolved.startswith(root_resolved + os.sep):
+        raise ValueError('Invalid report_name: path escapes output directory')
+    return resolved
+
+
 def create_log_file(task_id: str, sub_path: str) -> str:
     """Create an empty log file for a given task so that log polling does not raise FileNotFoundError.
 

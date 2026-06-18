@@ -1,6 +1,7 @@
 import json
 import os
 import pandas as pd
+import uuid
 from flask import Blueprint, current_app, jsonify, request, send_file
 from tabulate import tabulate
 from typing import Any, Dict, List
@@ -204,8 +205,9 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             'table': table_str
         })
     except Exception as e:
-        logger.error(f'[{task_id}] {label} failed: {e}')
-        return jsonify({'status': 'error', 'task_id': task_id, 'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] [{task_id}] {label} failed: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
 
 
 @bp_eval.route('/invoke', methods=['POST'])
@@ -243,8 +245,14 @@ def run_evaluation():
                 f'eval_type={launch_result.eval_type}'
             )
         except Exception as e:
-            logger.error(f'[{task_id}] Launch failed: {e}')
-            return jsonify({'status': 'error', 'task_id': task_id, 'error': str(e)}), 500
+            error_id = uuid.uuid4().hex[:8]
+            logger.error(f'[{error_id}] [{task_id}] Launch failed: {e}', exc_info=True)
+            return jsonify({
+                'status': 'error',
+                'task_id': task_id,
+                'error': 'Model launch failed',
+                'error_id': error_id
+            }), 500
 
     # ── Build TaskConfig ───────────────────────────────────────────
     try:
@@ -255,7 +263,14 @@ def run_evaluation():
     except Exception as e:
         if launch_result:
             launcher_stop(launch_result)
-        return jsonify({'status': 'error', 'task_id': task_id, 'error': str(e)}), 400
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] [{task_id}] Config build failed: {e}', exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'task_id': task_id,
+            'error': 'Invalid configuration',
+            'error_id': error_id
+        }), 400
 
     task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
     logger.info(
@@ -343,8 +358,9 @@ def get_evaluation_progress():
     except FileNotFoundError:
         return jsonify({'percent': 0.0}), 200
     except Exception as e:
-        logger.error(f'Failed to get progress for task {task_id}: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to get progress for task {task_id}: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to get progress', 'error_id': error_id}), 500
 
 
 @bp_eval.route('/report', methods=['GET'])
@@ -393,8 +409,9 @@ def get_evaluation_log():
         result = get_log_content(task_id, os.path.join('logs', 'eval_log.log'), start_line, page)
         return jsonify(result), 200
     except Exception as e:
-        logger.error(f'Failed to get evaluation log: {str(e)}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to get evaluation log: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to get log', 'error_id': error_id}), 500
 
 
 @bp_eval.route('/benchmarks', methods=['GET'])
@@ -450,5 +467,6 @@ def list_benchmarks():
 
         return jsonify(result), 200
     except Exception as e:
-        logger.error(f'Failed to list benchmarks: {e}')
-        return jsonify({'error': str(e)}), 500
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to list benchmarks: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to list benchmarks', 'error_id': error_id}), 500

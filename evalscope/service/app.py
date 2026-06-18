@@ -91,36 +91,17 @@ def create_app(outputs: str = None):
     def not_found(error):
         return jsonify({
             'error': 'Endpoint not found',
-            'available_endpoints': {
-                'GET  /health': 'Health check',
-                'GET  /api/v1/config': 'Get runtime configuration',
-                'GET  /api/v1/tasks/running': 'List currently running tasks',
-                'GET  /api/v1/reports/media/file': 'Serve a local media file (image/audio/video) by path',
-                'POST /api/v1/eval/invoke': 'Run model evaluation task (blocking)',
-                'GET  /api/v1/eval/benchmarks': 'List supported benchmarks with descriptions',
-                'GET  /api/v1/eval/log': 'Get evaluation log',
-                'GET  /api/v1/eval/progress': 'Get real-time evaluation progress',
-                'GET  /api/v1/eval/report': 'Get HTML evaluation report',
-                'POST /api/v1/eval/resume/invoke': 'Resume a previous evaluation (blocking)',
-                'POST /api/v1/perf/invoke': 'Run performance benchmark task (blocking)',
-                'GET  /api/v1/perf/log': 'Get performance benchmark log',
-                'GET  /api/v1/perf/progress': 'Get real-time performance benchmark progress',
-                'GET  /api/v1/perf/report': 'Get HTML performance benchmark report',
-                'GET  /api/v1/reports/scan': 'Scan available report folders',
-                'GET  /api/v1/reports/list': 'Filterable, paginated report listing',
-                'GET  /api/v1/reports/load': 'Load a single report',
-                'GET  /api/v1/reports/load_multi': 'Load multiple reports',
-                'GET  /api/v1/reports/dataframe': 'Get report data as JSON table',
-                'GET  /api/v1/reports/predictions': 'Get model predictions',
-                'GET  /api/v1/reports/analysis': 'Get AI analysis text',
-                'GET  /api/v1/reports/html': 'Get HTML report file',
-            }
         }), 404
 
     @app.errorhandler(500)
     def internal_error(error):
-        logger.error(f'Internal server error: {str(error)}')
-        return jsonify({'error': 'Internal server error', 'message': str(error)}), 500
+        logger.error(f'Internal server error: {str(error)}', exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+    @app.errorhandler(Exception)
+    def handle_unhandled(error):
+        logger.error(f'Unhandled exception: {str(error)}', exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
     return app
 
