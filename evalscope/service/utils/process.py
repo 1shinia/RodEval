@@ -72,6 +72,19 @@ def get_running_tasks() -> list[dict]:
         return result
 
 
+def count_running_tasks(task_type: str | None = None) -> int:
+    """Return the number of currently running tasks.
+
+    If *task_type* is given (e.g. ``'eval'`` or ``'perf'``), only count
+    tasks of that type.  Otherwise count all running tasks.
+    """
+    with _active_lock:
+        return sum(
+            1 for info in _active_processes.values()
+            if info.process and info.process.is_alive() and (task_type is None or info.task_type == task_type)
+        )
+
+
 def unregister_process(task_id: str) -> None:
     """Remove a finished / stopped subprocess from the registry."""
     with _active_lock:

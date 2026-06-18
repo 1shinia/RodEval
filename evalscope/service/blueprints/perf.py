@@ -10,6 +10,7 @@ from evalscope.perf.utils.rich_display import EmbeddingResultAnalyzer, LLMResult
 from evalscope.utils.logger import get_logger
 from ..utils import (
     OUTPUT_DIR,
+    count_running_tasks,
     create_log_file,
     get_log_content,
     run_in_subprocess,
@@ -179,6 +180,16 @@ def run_performance_test():
 
     Returns the benchmark result when the task completes.
     """
+    # --- Concurrency guard ---
+    max_perf = int(os.environ.get('MAX_CONCURRENT_PERF', '1'))
+    running = count_running_tasks('perf')
+    if running >= max_perf:
+        return jsonify({
+            'error': f'已有 {running} 个压测任务运行中，最大并发 {max_perf}，请等待完成后再试',
+            'running': running,
+            'max': max_perf,
+        }), 429
+
     data = request.get_json()
     if not data:
         return jsonify({'error': 'Request body is required'}), 400

@@ -17,6 +17,7 @@ from .log import (
     validate_task_id,
 )
 from .process import (
+    count_running_tasks,
     get_running_tasks,
     run_eval_wrapper,
     run_in_subprocess,
@@ -27,6 +28,7 @@ from .process import (
 
 __all__ = [
     'OUTPUT_DIR',
+    'count_running_tasks',
     'create_log_file',
     'get_log_content',
     'get_running_tasks',

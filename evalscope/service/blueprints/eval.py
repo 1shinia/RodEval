@@ -17,6 +17,7 @@ from ..utils import (
     DEFAULT_TEXT_BENCHMARKS,
     OUTPUT_DIR,
     build_benchmark_entry,
+    count_running_tasks,
     create_log_file,
     discover_all_benchmarks,
     get_log_content,
@@ -228,6 +229,16 @@ def run_evaluation():
          "model_path": "/data/models/qwen.gguf", "backend": "auto",
          "backend_args": {"n_ctx": 2048}, "datasets": ["gsm8k"], "limit": 10}
     """
+    # --- Concurrency guard ---
+    max_eval = int(os.environ.get('MAX_CONCURRENT_EVAL', '2'))
+    running = count_running_tasks('eval')
+    if running >= max_eval:
+        return jsonify({
+            'error': f'已有 {running} 个评估任务运行中，最大并发 {max_eval}，请等待完成后再试',
+            'running': running,
+            'max': max_eval,
+        }), 429
+
     data, task_id = _parse_request()
     model_source = data.get('model_source')
 
