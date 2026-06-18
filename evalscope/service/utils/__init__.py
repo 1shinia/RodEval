@@ -18,18 +18,22 @@ from .log import (
 )
 from .process import (
     count_running_tasks,
+    finalize_slot,
     get_running_tasks,
     run_eval_wrapper,
     run_in_subprocess,
     run_perf_wrapper,
     serialize_result,
     stop_process,
+    try_reserve_slot,
+    unregister_process,
 )
 
 __all__ = [
     'OUTPUT_DIR',
     'count_running_tasks',
     'create_log_file',
+    'finalize_slot',
     'get_log_content',
     'get_running_tasks',
     'validate_root_path',
@@ -39,6 +43,8 @@ __all__ = [
     'run_perf_wrapper',
     'serialize_result',
     'stop_process',
+    'try_reserve_slot',
+    'unregister_process',
     'run_in_subprocess',
     'DEFAULT_TEXT_BENCHMARKS',
     'DEFAULT_MULTIMODAL_BENCHMARKS',

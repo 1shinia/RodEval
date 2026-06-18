@@ -25,6 +25,8 @@ from ..utils import (
     run_in_subprocess,
     serialize_result,
     stop_process,
+    try_reserve_slot,
+    unregister_process,
     validate_task_id,
 )
 
@@ -229,79 +231,84 @@ def run_evaluation():
          "model_path": "/data/models/qwen.gguf", "backend": "auto",
          "backend_args": {"n_ctx": 2048}, "datasets": ["gsm8k"], "limit": 10}
     """
-    # --- Concurrency guard ---
-    max_eval = int(os.environ.get('MAX_CONCURRENT_EVAL', '2'))
-    running = count_running_tasks('eval')
-    if running >= max_eval:
+    # --- Concurrency guard (atomic check + reserve) ---
+    data, task_id = _parse_request()
+    model = data.get('model', '')
+    if not try_reserve_slot(task_id, 'eval', model=model):
+        max_eval = int(os.environ.get('MAX_CONCURRENT_EVAL', '2'))
+        running = count_running_tasks('eval')
         return jsonify({
             'error': f'已有 {running} 个评估任务运行中，最大并发 {max_eval}，请等待完成后再试',
             'running': running,
             'max': max_eval,
         }), 429
 
-    data, task_id = _parse_request()
-    model_source = data.get('model_source')
+    # Slot reserved – must clean up placeholder on any early return
+    # before the subprocess is registered (which replaces it).
+    try:
+        model_source = data.get('model_source')
 
-    # ── Local model: launch inference backend ──────────────────────
-    launch_result: LaunchResult | None = None
-    if model_source == ModelSource.LOCAL:
-        model_path = data['model_path']
-        backend = data.get('backend', LocalBackend.AUTO)
-        backend_args = data.get('backend_args', {})
-        logger.info(f'[{task_id}] Launching local model: path={model_path} backend={backend}')
+        # ── Local model: launch inference backend ──────────────────────
+        launch_result: LaunchResult | None = None
+        if model_source == ModelSource.LOCAL:
+            model_path = data['model_path']
+            backend = data.get('backend', LocalBackend.AUTO)
+            backend_args = data.get('backend_args', {})
+            logger.info(f'[{task_id}] Launching local model: path={model_path} backend={backend}')
+            try:
+                launch_result = launch(model_path, backend=backend, backend_args=backend_args)
+                logger.info(
+                    f'[{task_id}] Launched: backend={launch_result.backend} '
+                    f'eval_type={launch_result.eval_type}'
+                )
+            except Exception as e:
+                error_id = uuid.uuid4().hex[:8]
+                logger.error(f'[{error_id}] [{task_id}] Launch failed: {e}', exc_info=True)
+                return jsonify({
+                    'status': 'error',
+                    'task_id': task_id,
+                    'error': 'Model launch failed',
+                    'error_id': error_id
+                }), 500
+
+        # ── Build TaskConfig ───────────────────────────────────────────
         try:
-            launch_result = launch(model_path, backend=backend, backend_args=backend_args)
-            logger.info(
-                f'[{task_id}] Launched: backend={launch_result.backend} '
-                f'eval_type={launch_result.eval_type}'
-            )
+            if launch_result is not None:
+                task_config = _build_task_config_local(data, launch_result)
+            else:
+                task_config = _build_task_config_openai(data)
         except Exception as e:
+            if launch_result:
+                launcher_stop(launch_result)
             error_id = uuid.uuid4().hex[:8]
-            logger.error(f'[{error_id}] [{task_id}] Launch failed: {e}', exc_info=True)
+            logger.error(f'[{error_id}] [{task_id}] Config build failed: {e}', exc_info=True)
             return jsonify({
                 'status': 'error',
                 'task_id': task_id,
-                'error': 'Model launch failed',
+                'error': 'Invalid configuration',
                 'error_id': error_id
-            }), 500
+            }), 400
 
-    # ── Build TaskConfig ───────────────────────────────────────────
-    try:
-        if launch_result is not None:
-            task_config = _build_task_config_local(data, launch_result)
-        else:
-            task_config = _build_task_config_openai(data)
-    except Exception as e:
-        if launch_result:
-            launcher_stop(launch_result)
-        error_id = uuid.uuid4().hex[:8]
-        logger.error(f'[{error_id}] [{task_id}] Config build failed: {e}', exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'task_id': task_id,
-            'error': 'Invalid configuration',
-            'error_id': error_id
-        }), 400
-
-    task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
-    logger.info(
-        f'[{task_id}] Running: model={task_config.model} '
-        f'eval_type={task_config.eval_type} datasets={task_config.datasets}'
-    )
-
-    # ── Execute ────────────────────────────────────────────────────
-    try:
-        # Server-mode launchers (llama_cpp, vllm, etc.) provide process
-        # isolation via a separate server process. The eval itself is just
-        # HTTP calls — safe to run directly without a subprocess.
-        use_direct = (
-            launch_result is not None
-            and (is_direct_eval_type(task_config.eval_type or '') or launch_result.api_url is not None)
+        task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+        logger.info(
+            f'[{task_id}] Running: model={task_config.model} '
+            f'eval_type={task_config.eval_type} datasets={task_config.datasets}'
         )
-        return _execute_task(task_id, task_config, label='Task', use_direct=use_direct)
+
+        # ── Execute ────────────────────────────────────────────────────
+        try:
+            use_direct = (
+                launch_result is not None
+                and (is_direct_eval_type(task_config.eval_type or '') or launch_result.api_url is not None)
+            )
+            return _execute_task(task_id, task_config, label='Task', use_direct=use_direct)
+        finally:
+            if launch_result:
+                launcher_stop(launch_result)
     finally:
-        if launch_result:
-            launcher_stop(launch_result)
+        # Clean up the placeholder if the subprocess was never registered
+        # (i.e. we returned early before _execute_task / run_in_subprocess).
+        unregister_process(task_id)
 
 
 @bp_eval.route('/stop', methods=['POST'])

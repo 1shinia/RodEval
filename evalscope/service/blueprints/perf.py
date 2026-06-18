@@ -17,6 +17,8 @@ from ..utils import (
     run_perf_wrapper,
     serialize_result,
     stop_process,
+    try_reserve_slot,
+    unregister_process,
     validate_root_path,
     validate_task_id,
 )
@@ -180,28 +182,10 @@ def run_performance_test():
 
     Returns the benchmark result when the task completes.
     """
-    # --- Concurrency guard ---
-    max_perf = int(os.environ.get('MAX_CONCURRENT_PERF', '1'))
-    running = count_running_tasks('perf')
-    if running >= max_perf:
-        return jsonify({
-            'error': f'已有 {running} 个压测任务运行中，最大并发 {max_perf}，请等待完成后再试',
-            'running': running,
-            'max': max_perf,
-        }), 429
-
+    # --- Parse task_id first (needed for slot reservation) ---
     data = request.get_json()
     if not data:
         return jsonify({'error': 'Request body is required'}), 400
-
-    # url is required for remote APIs, but local models auto-generate their own URL
-    api_type = data.get('api', 'openai')
-    required_fields = ['model']
-    if not api_type.startswith('local'):
-        required_fields.append('url')
-    for field in required_fields:
-        if field not in data:
-            return jsonify({'error': f'{field} is required'}), 400
 
     task_id = request.headers.get('EvalScope-Task-Id')
     if not task_id:
@@ -211,38 +195,62 @@ def run_performance_test():
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
-    # Default to openai API
-    if 'api' not in data:
-        data['api'] = 'openai'
-
-    perf_args = PerfArguments.from_dict(data)
-    perf_args.no_timestamp = True
-    perf_args.outputs_dir = os.path.join(OUTPUT_DIR, task_id)
-    perf_args.name = 'perf'
-    perf_args.enable_progress_tracker = True
-    perf_args.no_test_connection = True
-
-    logger.info(f'[{task_id}] Running performance benchmark for model: {perf_args.model}')
-    logger.info(f'[{task_id}] URL: {perf_args.url}')
-
-    create_log_file(task_id, os.path.join('perf', 'benchmark.log'))
+    # --- Concurrency guard (atomic check + reserve) ---
+    model = data.get('model', '')
+    if not try_reserve_slot(task_id, 'perf', model=model):
+        max_perf = int(os.environ.get('MAX_CONCURRENT_PERF', '1'))
+        running = count_running_tasks('perf')
+        return jsonify({
+            'error': f'已有 {running} 个压测任务运行中，最大并发 {max_perf}，请等待完成后再试',
+            'running': running,
+            'max': max_perf,
+        }), 429
 
     try:
-        result = run_in_subprocess(
-            run_perf_wrapper, perf_args, task_id=task_id, task_type='perf', model=perf_args.model
-        )
-        table_str = _build_perf_table(result, api_type=perf_args.api)
-        logger.info(f'[{task_id}] Task completed successfully')
-        return jsonify({
-            'status': 'completed',
-            'task_id': task_id,
-            'result': serialize_result(result),
-            'table': table_str
-        })
-    except Exception as e:
-        error_id = uuid.uuid4().hex[:8]
-        logger.error(f'[{error_id}] [{task_id}] Task failed: {e}', exc_info=True)
-        return jsonify({'status': 'error', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
+        # url is required for remote APIs, but local models auto-generate their own URL
+        api_type = data.get('api', 'openai')
+        required_fields = ['model']
+        if not api_type.startswith('local'):
+            required_fields.append('url')
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'{field} is required'}), 400
+
+        # Default to openai API
+        if 'api' not in data:
+            data['api'] = 'openai'
+
+        perf_args = PerfArguments.from_dict(data)
+        perf_args.no_timestamp = True
+        perf_args.outputs_dir = os.path.join(OUTPUT_DIR, task_id)
+        perf_args.name = 'perf'
+        perf_args.enable_progress_tracker = True
+        perf_args.no_test_connection = True
+
+        logger.info(f'[{task_id}] Running performance benchmark for model: {perf_args.model}')
+        logger.info(f'[{task_id}] URL: {perf_args.url}')
+
+        create_log_file(task_id, os.path.join('perf', 'benchmark.log'))
+
+        try:
+            result = run_in_subprocess(
+                run_perf_wrapper, perf_args, task_id=task_id, task_type='perf', model=perf_args.model
+            )
+            table_str = _build_perf_table(result, api_type=perf_args.api)
+            logger.info(f'[{task_id}] Task completed successfully')
+            return jsonify({
+                'status': 'completed',
+                'task_id': task_id,
+                'result': serialize_result(result),
+                'table': table_str
+            })
+        except Exception as e:
+            error_id = uuid.uuid4().hex[:8]
+            logger.error(f'[{error_id}] [{task_id}] Task failed: {e}', exc_info=True)
+            return jsonify({'status': 'error', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
+    finally:
+        # Clean up the placeholder if the subprocess was never registered
+        unregister_process(task_id)
 
 
 @bp_perf.route('/stop', methods=['POST'])

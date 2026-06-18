@@ -77,12 +77,67 @@ def count_running_tasks(task_type: str | None = None) -> int:
 
     If *task_type* is given (e.g. ``'eval'`` or ``'perf'``), only count
     tasks of that type.  Otherwise count all running tasks.
+
+    Note: entries with ``process=None`` (placeholder slots reserved by
+    :func:`try_reserve_slot`) are also counted so that the number
+    reflects actual concurrency usage.
     """
     with _active_lock:
         return sum(
             1 for info in _active_processes.values()
-            if info.process and info.process.is_alive() and (task_type is None or info.task_type == task_type)
+            if (info.process is None or info.process.is_alive()) and (task_type is None or info.task_type == task_type)
         )
+
+
+def try_reserve_slot(task_id: str, task_type: str, model: str = '') -> bool:
+    """Atomically check the concurrency limit and reserve a slot.
+
+    Returns ``True`` if the slot was reserved (count < max), ``False`` if
+    the limit has been reached.  When ``True`` a placeholder *TaskInfo* is
+    inserted into the registry so that subsequent calls see the increased
+    count immediately — closing the race window between checking and
+    registering.
+
+    The caller MUST call :func:`finalize_slot` (or :func:`unregister_process`)
+    to either attach the real process or clean up the placeholder.
+    """
+    max_key = f'MAX_CONCURRENT_{task_type.upper()}'
+    max_slots = int(os.environ.get(max_key, '2' if task_type == 'eval' else '1'))
+    with _active_lock:
+        running = sum(
+            1 for info in _active_processes.values()
+            if info.task_type == task_type and (info.process is None or info.process.is_alive())
+        )
+        if running >= max_slots:
+            return False
+        # Insert a placeholder so other threads see the slot as taken
+        _active_processes[task_id] = TaskInfo(
+            task_id=task_id,
+            task_type=task_type,
+            model=model,
+            process=None,  # will be filled in by finalize_slot()
+        )
+        return True
+
+
+def finalize_slot(task_id: str, proc: multiprocessing.Process) -> None:
+    """Attach the real subprocess to a previously reserved slot.
+
+    If no placeholder exists (e.g. ``run_in_subprocess`` was called
+    without a prior ``try_reserve_slot``), a fresh entry is created.
+    """
+    with _active_lock:
+        info = _active_processes.get(task_id)
+        if info is not None:
+            info.process = proc
+        else:
+            # No placeholder — register fresh (backward compatible).
+            _active_processes[task_id] = TaskInfo(
+                task_id=task_id,
+                task_type='',
+                model='',
+                process=proc,
+            )
 
 
 def unregister_process(task_id: str) -> None:
@@ -189,7 +244,9 @@ def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwarg
     p.start()
 
     if task_id:
-        register_process(task_id, p, task_type=task_type, model=model)
+        # If a placeholder was reserved by try_reserve_slot, attach the
+        # real process to it; otherwise register a fresh entry.
+        finalize_slot(task_id, p)
 
     res = None
     # Poll for the result while the child is alive so we continuously drain
