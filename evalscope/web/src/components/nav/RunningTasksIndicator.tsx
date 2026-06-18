@@ -90,6 +90,7 @@ export default function RunningTasksIndicator() {
       <button
         ref={buttonRef}
         onClick={() => setOpen(!open)}
+        aria-label={t('common.runningTasks')}
         className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200 ${
           count > 0
             ? 'text-[var(--accent)] hover:bg-[var(--bg-card2)]'

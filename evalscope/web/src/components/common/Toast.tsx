@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { X, CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react'
+import { useLocale } from '@/contexts/LocaleContext'
 
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
@@ -57,6 +58,7 @@ export const toast: ToastApi = {
 
 export default function ToastContainer() {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const { t } = useLocale()
 
   useEffect(() => {
     externalAdd = (t: Toast) => {
@@ -76,11 +78,11 @@ export default function ToastContainer() {
 
   return (
     <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none">
-      {toasts.map((t) => {
-        const cfg = typeConfig[t.type]
+      {toasts.map((toast) => {
+        const cfg = typeConfig[toast.type]
         return (
           <div
-            key={t.id}
+            key={toast.id}
             className={cn(
               'pointer-events-auto flex items-center gap-3 min-w-[280px] max-w-[420px]',
               'px-4 py-3 rounded-[var(--radius)] border shadow-[var(--shadow)]',
@@ -88,10 +90,11 @@ export default function ToastContainer() {
               cfg.className,
             )}
           >
-            <span className={cn('shrink-0', typeIconColor[t.type])}>{cfg.icon}</span>
-            <span className="text-sm text-[var(--text)] flex-1 break-words">{t.message}</span>
+            <span className={cn('shrink-0', typeIconColor[toast.type])}>{cfg.icon}</span>
+            <span className="text-sm text-[var(--text)] flex-1 break-words">{toast.message}</span>
             <button
-              onClick={() => dismiss(t.id)}
+              onClick={() => dismiss(toast.id)}
+              aria-label={t('common.close')}
               className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors cursor-pointer"
             >
               <X size={14} />

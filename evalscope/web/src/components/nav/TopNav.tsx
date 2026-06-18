@@ -68,7 +68,7 @@ export default function TopNav() {
           <LocaleToggle />
           <ThemeToggle />
           <button onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card2)] transition-all duration-200" aria-label="Toggle menu">
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card2)] transition-all duration-200" aria-label={t('common.toggleMenu')}>
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>

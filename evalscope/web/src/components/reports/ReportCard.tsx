@@ -1,3 +1,4 @@
+import React from 'react'
 import { ChevronRight, Trash2 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { cn } from '@/lib/utils'
@@ -48,7 +49,7 @@ function Checkbox({ checked }: { checked: boolean }) {
   )
 }
 
-export default function ReportCard({ report, selected, onSelect, onClick, onDelete }: ReportCardProps) {
+function ReportCard({ report, selected, onSelect, onClick, onDelete }: ReportCardProps) {
   const { t } = useLocale()
 
   const formattedDate = report.timestamp ? formatTimestamp(report.timestamp) : ''
@@ -124,7 +125,7 @@ export default function ReportCard({ report, selected, onSelect, onClick, onDele
       {onDelete && (
         <button
           type="button"
-          aria-label="Delete report"
+          aria-label={t('common.delete')}
           onClick={(e) => {
             e.stopPropagation()
             onDelete(report.name)
@@ -151,3 +152,5 @@ export default function ReportCard({ report, selected, onSelect, onClick, onDele
     </div>
   )
 }
+
+export default React.memo(ReportCard)

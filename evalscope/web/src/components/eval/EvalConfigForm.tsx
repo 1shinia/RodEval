@@ -299,7 +299,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
           {backend !== 'auto' && (
             <>
               <button type="button" onClick={() => setShowBackendOpts(!showBackendOpts)}
-                className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline cursor-pointer">
+                className="flex items-center gap-1 text-sm text-[var(--accent)] hover:underline cursor-pointer">
                 {t('eval.backendAdvanced')}
                 {showBackendOpts ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
@@ -313,7 +313,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
                     if (p.type === 'checkbox') {
                       return (
                         <div key={p.key} className="flex items-end pb-0.5">
-                          <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer">
+                          <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] cursor-pointer">
                             <input type="checkbox"
                               checked={val === 'true'}
                               onChange={(e) => setParam(p.key, e.target.checked ? 'true' : 'false')}
@@ -525,11 +525,11 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
               </select>
             </FormField>
             <div className="flex items-end gap-4 pb-0.5">
-              <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer">
+              <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] cursor-pointer">
                 <input type="checkbox" checked={stream} onChange={(e) => setStream(e.target.checked)} className="accent-[var(--accent)]" />
                 {t('eval.stream')}
               </label>
-              <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer">
+              <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] cursor-pointer">
                 <input type="checkbox" checked={ignoreErrors} onChange={(e) => setIgnoreErrors(e.target.checked)} className="accent-[var(--accent)]" />
                 {t('eval.ignoreErrors')}
               </label>

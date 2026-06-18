@@ -1,3 +1,4 @@
+import React from 'react'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -6,7 +7,7 @@ interface Props {
   onChange: (ds: string) => void
 }
 
-export default function DatasetNav({ datasets, active, onChange }: Props) {
+function DatasetNav({ datasets, active, onChange }: Props) {
   return (
     <nav
       className="flex flex-col gap-0.5 py-3 pr-3"
@@ -50,3 +51,5 @@ export default function DatasetNav({ datasets, active, onChange }: Props) {
     </nav>
   )
 }
+
+export default React.memo(DatasetNav)

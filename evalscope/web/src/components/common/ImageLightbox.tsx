@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface Props {
   src: string
@@ -16,6 +17,7 @@ const DEFAULT_INLINE = 'rounded-lg cursor-zoom-in border border-[var(--border)] 
 /** Click-to-zoom image with portal-rendered overlay. Used by both Markdown img and ContentBlock images. */
 export default function ImageLightbox({ src, alt = '', style, className }: Props) {
   const [open, setOpen] = useState(false)
+  const { t } = useLocale()
   if (!src) return null
   return (
     <>
@@ -35,6 +37,7 @@ export default function ImageLightbox({ src, alt = '', style, className }: Props
           <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setOpen(false)}
+              aria-label={t('common.close')}
               className="absolute -top-3 -right-3 z-10 rounded-full p-1 bg-[var(--bg-card)] border border-[var(--border)] hover:bg-[var(--bg-card2)] transition-colors"
             >
               <X size={16} />

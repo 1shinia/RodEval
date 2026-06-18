@@ -1,3 +1,4 @@
+import React from 'react'
 import type { ReactNode } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import type { PerfMetrics, PercentileStats } from '@/api/types'
@@ -229,7 +230,7 @@ function Sep() {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export default function PerfMetricsPanel({ perfMetrics }: PerfMetricsPanelProps) {
+function PerfMetricsPanel({ perfMetrics }: PerfMetricsPanelProps) {
   const { t } = useLocale()
   const { n_samples, latency, throughput, usage, ttft, tpot } = perfMetrics.summary
 
@@ -330,3 +331,5 @@ export default function PerfMetricsPanel({ perfMetrics }: PerfMetricsPanelProps)
     </div>
   )
 }
+
+export default React.memo(PerfMetricsPanel)

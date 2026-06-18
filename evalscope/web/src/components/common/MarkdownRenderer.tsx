@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import React, { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -15,7 +15,7 @@ interface Props {
 
 const INLINE_IMG_STYLE = { maxHeight: 200, maxWidth: 320, display: 'inline-block', verticalAlign: 'top' as const }
 
-export default function MarkdownRenderer({ content }: Props) {
+function MarkdownRenderer({ content }: Props) {
   const { theme } = useTheme()
 
   const markdownComponents = useMemo<Components>(() => ({
@@ -70,3 +70,5 @@ export default function MarkdownRenderer({ content }: Props) {
     </div>
   )
 }
+
+export default React.memo(MarkdownRenderer)

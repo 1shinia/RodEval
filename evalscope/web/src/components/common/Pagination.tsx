@@ -1,3 +1,4 @@
+import React from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface Props {
@@ -6,7 +7,7 @@ interface Props {
   onChange: (p: number) => void
 }
 
-export default function Pagination({ page, total, onChange }: Props) {
+function Pagination({ page, total, onChange }: Props) {
   if (total <= 1) return null
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -30,3 +31,5 @@ export default function Pagination({ page, total, onChange }: Props) {
     </div>
   )
 }
+
+export default React.memo(Pagination)

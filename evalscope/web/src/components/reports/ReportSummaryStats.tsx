@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import React, { useMemo } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import type { ReportData } from '@/api/types'
 import { scoreColor } from '@/utils/colorScale'
@@ -30,7 +30,7 @@ function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
   )
 }
 
-export default function ReportSummaryStats({ reports }: Props) {
+function ReportSummaryStats({ reports }: Props) {
   const { t } = useLocale()
 
   const stats = useMemo(() => {
@@ -105,3 +105,5 @@ export default function ReportSummaryStats({ reports }: Props) {
     </div>
   )
 }
+
+export default React.memo(ReportSummaryStats)

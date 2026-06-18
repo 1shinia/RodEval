@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import Skeleton from '@/components/ui/Skeleton'
 import { AlertTriangle } from 'lucide-react'
@@ -10,7 +10,7 @@ interface PlotlyChartProps {
   title?: string
 }
 
-export default function PlotlyChart({ src, height = 400, className, title }: PlotlyChartProps) {
+function PlotlyChart({ src, height = 400, className, title }: PlotlyChartProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
@@ -63,3 +63,5 @@ export default function PlotlyChart({ src, height = 400, className, title }: Plo
     </div>
   )
 }
+
+export default React.memo(PlotlyChart)

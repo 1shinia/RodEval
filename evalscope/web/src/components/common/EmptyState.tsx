@@ -1,3 +1,4 @@
+import React from 'react'
 import type { ReactNode } from 'react'
 import { Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -19,7 +20,7 @@ interface EmptyStateProps {
  * Empty / welcome state — DESIGN.md `{components.empty-state}`.
  * 64×64 deep-well rounded-lg tile holding a 28px Lucide icon, followed by a 2-line message.
  */
-export default function EmptyState({
+function EmptyState({
   icon,
   title,
   hint,
@@ -61,3 +62,5 @@ export default function EmptyState({
     </div>
   )
 }
+
+export default React.memo(EmptyState)

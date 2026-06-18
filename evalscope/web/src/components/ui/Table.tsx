@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useMemo } from 'react'
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useLocale } from '@/contexts/LocaleContext'
 
 type SortDir = 'asc' | 'desc'
 
@@ -30,6 +31,7 @@ export default function Table<T extends Record<string, unknown>>({
 }: TableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSort?.key ?? null)
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort?.dir ?? 'desc')
+  const { t } = useLocale()
 
   const handleHeaderClick = (col: Column<T>) => {
     if (!col.sortable) return
@@ -77,6 +79,7 @@ export default function Table<T extends Record<string, unknown>>({
                 <th
                   key={col.key}
                   onClick={() => handleHeaderClick(col)}
+                  aria-label={isSortable ? t('common.sort') : undefined}
                   className={cn(
                     'px-4 py-3 text-left type-table-xs select-none',
                     isSortable && 'cursor-pointer hover:text-[var(--text)]',
