@@ -349,35 +349,6 @@ def load_report():
         return jsonify({'error': 'Failed to load report', 'error_id': error_id}), 500
 
 
-@bp_reports.route('/load_multi', methods=['GET'])
-def load_multi():
-    """Load multiple reports at once.
-
-    Query params:
-        root_path    (str): output root directory
-        report_names (str): semicolon-separated report identifiers
-    """
-    names_raw = request.args.get('report_names', '')
-    if not names_raw:
-        return jsonify({'error': 'report_names is required'}), 400
-
-    names = [n.strip() for n in names_raw.split(';') if n.strip()]
-    try:
-        root = _root_path()
-        for name in names:
-            validate_report_name(name, root)
-        report_list = load_multi_report(root, names)
-        return jsonify({
-            'report_list': [r.to_dict() for r in report_list],
-        }), 200
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        error_id = uuid.uuid4().hex[:8]
-        logger.error(f'[{error_id}] Failed to load multi reports: {e}', exc_info=True)
-        return jsonify({'error': 'Failed to load reports', 'error_id': error_id}), 500
-
-
 @bp_reports.route('/dataframe', methods=['GET'])
 def get_dataframe():
     """Get report data as a flat JSON table.

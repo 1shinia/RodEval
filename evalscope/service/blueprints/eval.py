@@ -329,29 +329,6 @@ def stop_evaluation():
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
 
 
-@bp_eval.route('/resume/invoke', methods=['POST'])
-def resume_evaluation():
-    """Resume a previously interrupted evaluation task (blocking).
-
-    Returns the evaluation result when the task completes.
-    """
-    data, task_id = _parse_request()
-
-    work_dir = os.path.join(OUTPUT_DIR, task_id)
-    if not os.path.isdir(work_dir):
-        return jsonify({'error': f'Output directory not found for task_id: {task_id}'}), 404
-
-    task_config = _build_task_config_openai(data)
-    task_config.work_dir = work_dir
-    task_config.use_cache = work_dir
-    task_config.rerun_review = True
-
-    logger.info(f'[{task_id}] Running resume task, work_dir: {work_dir}')
-    logger.info(f'[{task_id}] Model: {task_config.model}, Datasets: {task_config.datasets}')
-
-    return _execute_task(task_id, task_config, label='Resume task')
-
-
 @bp_eval.route('/progress', methods=['GET'])
 def get_evaluation_progress():
     """Get the real-time hierarchical progress of a running evaluation task.
