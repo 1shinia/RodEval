@@ -214,7 +214,6 @@ const en: Dict = {
     expectedAnswer: 'Expected Answer',
     extractedAnswer: 'Extracted Answer',
     copySuccess: 'Copied!',
-    copyLog: 'Copy Log',
     expandImage: 'Expand Image',
     generated: 'Generated Output',
     prediction: 'Prediction',
@@ -263,6 +262,7 @@ const en: Dict = {
     loadFailed: 'Load failed',
     deleteSuccess: 'Deleted successfully',
     deleteFailed: 'Delete failed',
+    copyLog: 'Copy Log',
   },
   charts: {
     scoreAxisLabel: 'Score (%)',
@@ -646,7 +646,6 @@ const zh: Dict = {
     expectedAnswer: '标准答案',
     extractedAnswer: '抽取答案',
     copySuccess: '已复制！',
-    copyLog: '复制日志',
     expandImage: '放大图片',
     generated: '生成结果',
     prediction: '预测结果',
@@ -695,6 +694,7 @@ const zh: Dict = {
     loadFailed: '加载失败',
     deleteSuccess: '删除成功',
     deleteFailed: '删除失败',
+    copyLog: '复制日志',
   },
   charts: {
     scoreAxisLabel: '得分 (%)',
