@@ -23,23 +23,23 @@ export interface MetricData {
 }
 
 export interface PercentileStats {
-  mean: number
-  std: number
-  min: number
-  '25%': number
-  '50%': number
-  '75%': number
-  '90%': number
-  '99%': number
-  max: number
+  mean: number | null
+  std: number | null
+  min: number | null
+  '25%': number | null
+  '50%': number | null
+  '75%': number | null
+  '90%': number | null
+  '99%': number | null
+  max: number | null
 }
 
 export interface PerfMetricsSummary {
   n_samples: number
   latency: PercentileStats
   throughput: {
-    avg_output_tps: number
-    avg_req_ps: number
+    avg_output_tps: number | null
+    avg_req_ps: number | null
   }
   usage: {
     input_tokens: PercentileStats

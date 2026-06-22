@@ -201,6 +201,40 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             logger.error(f'[{task_id}] {label} produced empty results: {error_msg}')
             return jsonify({'status': 'error', 'task_id': task_id, 'error': error_msg}), 500
         logger.info(f'[{task_id}] {label} completed successfully')
+
+        # Write to SQLite
+        try:
+            from datetime import datetime
+
+            from evalscope.report.combinator import get_report_list
+            from .. import db as _db
+            reports_dir = os.path.join(task_config.work_dir, 'reports')
+            report_list = get_report_list([reports_dir])
+            if report_list:
+                first = report_list[0]
+                total_num = sum(r.num or 0 for r in report_list)
+                dataset_names = [r.dataset_name for r in report_list]
+                score_sum = sum(r.score for r in report_list if r.score is not None)
+                avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
+                dataset_scores = {}
+                for r in report_list:
+                    score = r.score
+                    if score is not None and score > 1:
+                        score = score / 100
+                    dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
+                _db.upsert_eval_report(
+                    task_id=task_id,
+                    model_name=first.model_name,
+                    dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else
+                    (dataset_names[0] if dataset_names else ''),
+                    score=avg_score,
+                    num_samples=total_num,
+                    timestamp=datetime.now().isoformat(),
+                    dataset_scores=dataset_scores,
+                )
+        except Exception as e:
+            logger.debug(f'Failed to write eval to SQLite (non-fatal): {e}')
+
         return jsonify({
             'status': 'completed',
             'task_id': task_id,
@@ -358,6 +392,70 @@ def get_evaluation_progress():
         return jsonify({'error': 'Failed to get progress', 'error_id': error_id}), 500
 
 
+@bp_eval.route('/progress/stream', methods=['GET'])
+def stream_evaluation_progress():
+    """SSE stream for real-time evaluation progress updates.
+
+    Query params:
+        task_id (str): the task identifier
+
+    Returns a text/event-stream that pushes progress JSON whenever the
+    progress file changes.  The stream closes when the task reaches 100%
+    or the client disconnects.
+    """
+    import time
+
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    progress_file = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+
+    def generate():
+        last_mtime = 0
+        idle_count = 0
+        max_idle = 300  # Close after 5 minutes of no progress updates
+        while True:
+            try:
+                if os.path.isfile(progress_file):
+                    mtime = os.path.getmtime(progress_file)
+                    if mtime > last_mtime:
+                        last_mtime = mtime
+                        idle_count = 0
+                        with open(progress_file, 'r') as f:
+                            data = json.load(f)
+                        yield f'data: {json.dumps(data)}\n\n'
+                        if data.get('percent', 0) >= 100:
+                            break
+                    else:
+                        idle_count += 1
+                        if idle_count >= max_idle:
+                            yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                            break
+                else:
+                    idle_count += 1
+                    if idle_count >= max_idle:
+                        yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                        break
+                # Send heartbeat every 30s to keep connection alive
+                if idle_count % 30 == 0 and idle_count > 0:
+                    yield f': heartbeat\n\n'
+                time.sleep(1)
+            except GeneratorExit:
+                break
+            except Exception as e:
+                logger.debug(f'SSE progress stream error for {task_id}: {e}')
+                time.sleep(2)
+
+    from flask import Response
+    return Response(generate(), mimetype='text/event-stream')
+
+
 @bp_eval.route('/report', methods=['GET'])
 def get_evaluation_report():
     """Get the HTML evaluation report for a completed task.
@@ -407,6 +505,64 @@ def get_evaluation_log():
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] Failed to get evaluation log: {e}', exc_info=True)
         return jsonify({'error': 'Failed to get log', 'error_id': error_id}), 500
+
+
+@bp_eval.route('/log/stream', methods=['GET'])
+def stream_evaluation_log():
+    """SSE stream for real-time evaluation log updates.
+
+    Query params:
+        task_id (str): the task identifier
+
+    Pushes new log lines as they are appended to the log file.
+    The stream closes when the client disconnects.
+    """
+    import time
+
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    log_file = os.path.join(OUTPUT_DIR, task_id, 'logs', 'eval_log.log')
+
+    def generate():
+        last_pos = 0
+        idle_count = 0
+        max_idle = 300  # Close after 5 minutes of no new log lines
+        while True:
+            try:
+                if os.path.isfile(log_file):
+                    with open(log_file, 'r') as f:
+                        f.seek(last_pos)
+                        new_content = f.read()
+                        if new_content:
+                            last_pos = f.tell()
+                            idle_count = 0
+                            # Send as SSE event
+                            payload = json.dumps({'text': new_content})
+                            yield f'data: {payload}\n\n'
+                        else:
+                            idle_count += 1
+                            if idle_count >= max_idle:
+                                yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                                break
+                else:
+                    idle_count += 1
+                    if idle_count >= max_idle:
+                        yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                        break
+                # Send heartbeat every 30s
+                if idle_count % 30 == 0 and idle_count > 0:
+                    yield f': heartbeat\n\n'
+                time.sleep(1)
+            except GeneratorExit:
+                break
+            except Exception as e:
+                logger.debug(f'SSE log stream error for {task_id}: {e}')
+                time.sleep(2)
+
+    from flask import Response
+    return Response(generate(), mimetype='text/event-stream')
 
 
 @bp_eval.route('/benchmarks', methods=['GET'])

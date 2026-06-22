@@ -138,12 +138,30 @@ def finalize_slot(task_id: str, proc: multiprocessing.Process) -> None:
                 model='',
                 process=proc,
             )
+    # Persist to SQLite
+    try:
+        from .. import db as _db
+        _db.upsert_task_state(
+            task_id=task_id,
+            task_type=info.task_type if info else '',
+            status='running',
+            pid=proc.pid,
+            model=info.model if info else '',
+        )
+    except Exception as e:
+        logger.debug(f'Failed to persist task state for {task_id}: {e}')
 
 
 def unregister_process(task_id: str) -> None:
     """Remove a finished / stopped subprocess from the registry."""
     with _active_lock:
         _active_processes.pop(task_id, None)
+    # Remove from SQLite (task is done, no longer "running")
+    try:
+        from .. import db as _db
+        _db.delete_task_state(task_id)
+    except Exception as e:
+        logger.debug(f'Failed to clean task state for {task_id}: {e}')
 
 
 def stop_process(task_id: str) -> bool:

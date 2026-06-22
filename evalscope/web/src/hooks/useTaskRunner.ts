@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryParams } from '@/hooks/useQueryParams'
-import { usePolling } from '@/hooks/usePolling'
+import { useSSE } from '@/hooks/useSSE'
 import { toast } from '@/components/common/Toast'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/types'
 
@@ -25,7 +25,6 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<EvalInvokeResponse | null>(null)
   const [logText, setLogText] = useState('')
-  const [logLine, setLogLine] = useState(0)
   const [progress, setProgress] = useState(0)
   const [copied, setCopied] = useState(false)
   const resumedRef = useRef(false)
@@ -66,12 +65,10 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
             }
           } catch { /* ignore */ }
           setLogText(logAcc)
-          setLogLine(nextLine)
           setRunning(false)
           setResult({ status: 'ok', task_id: urlTaskId })
         } else {
           setLogText(logAcc)
-          setLogLine(nextLine)
         }
       }
       resume()
@@ -83,7 +80,6 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     setTaskId(id)
     setRunning(true)
     setLogText('')
-    setLogLine(0)
     setProgress(0)
     setResult(null)
     setCopied(false)
@@ -95,12 +91,11 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       toast.error(String(e))
     } finally {
       setRunning(false)
-      // Fetch complete final log + progress (from line 0 to avoid stale closure on logLine)
+      // Fetch complete final log + progress
       try {
         const finalLog = await api.getLog(id, 0, 999999)
         if (finalLog.text) {
           setLogText(finalLog.text)
-          setLogLine(finalLog.tail_line)
         }
         const finalProg = await api.getProgress(id)
         setProgress(finalProg.percent ?? 100)
@@ -115,18 +110,20 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     setResult({ status: 'stopped', task_id: taskId })
   }
 
-  const progressFn = useCallback(async () => {
-    if (!taskId) throw new Error('no task')
-    return api.getProgress(taskId)
-  }, [taskId, api])
+  // Build SSE URLs for real-time streaming
+  const progressStreamUrl = useMemo(() => {
+    if (!taskId) return null
+    return `/api/v1/${taskPrefix}/progress/stream?task_id=${taskId}`
+  }, [taskId, taskPrefix])
 
-  const logFn = useCallback(async () => {
-    if (!taskId) throw new Error('no task')
-    return api.getLog(taskId, logLine)
-  }, [taskId, logLine, api])
+  const logStreamUrl = useMemo(() => {
+    if (!taskId) return null
+    return `/api/v1/${taskPrefix}/log/stream?task_id=${taskId}`
+  }, [taskId, taskPrefix])
 
-  usePolling<ProgressResponse>({
-    fn: progressFn, enabled: running && !!taskId, interval: 5000,
+  useSSE<ProgressResponse>({
+    url: progressStreamUrl,
+    enabled: running && !!taskId,
     onData: (d) => {
       setProgress(d.percent ?? 0)
       if (d.percent >= 100) {
@@ -136,9 +133,10 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     },
   })
 
-  usePolling<LogResponse>({
-    fn: logFn, enabled: running && !!taskId, interval: 5000,
-    onData: (d) => { if (d.text) { setLogText((prev) => prev + d.text); setLogLine(d.tail_line) } },
+  useSSE<LogResponse>({
+    url: logStreamUrl,
+    enabled: running && !!taskId,
+    onData: (d) => { if (d.text) { setLogText((prev) => prev + d.text) } },
   })
 
   const reportUrl = useMemo(() => (taskId ? api.getReportUrl(taskId) : null), [taskId, api])

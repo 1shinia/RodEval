@@ -209,6 +209,9 @@ def _build_report_meta(report_name: str, root: str) -> dict:
 def list_reports():
     """Return a filterable, paginated list of reports with metadata.
 
+    Uses SQLite for fast queries.  Falls back to filesystem scan if the
+    DB is not initialised.
+
     Query params:
         root_path  (str):   output root directory (required)
         search     (str):   fuzzy search on model/dataset name
@@ -226,7 +229,44 @@ def list_reports():
         if not root or not os.path.isdir(root):
             return jsonify({'error': 'root_path is required and must be an existing directory'}), 400
 
-        # --- Scan & load metadata ---
+        search = request.args.get('search', '').strip().lower()
+        models_filter = request.args.get('models', '').strip()
+        datasets_filter = request.args.get('datasets', '').strip()
+        score_min = request.args.get('score_min', type=float)
+        score_max = request.args.get('score_max', type=float)
+        sort_by = request.args.get('sort_by', 'time')
+        sort_order = request.args.get('sort_order', 'desc')
+        page = max(1, request.args.get('page', 1, type=int))
+        page_size = max(1, min(100, request.args.get('page_size', 20, type=int)))
+
+        # --- Try SQLite first ---
+        try:
+            from .. import db as _db
+            items, total, available_models, available_datasets = _db.query_eval_reports(
+                search=search,
+                models=models_filter,
+                datasets=datasets_filter,
+                score_min=score_min,
+                score_max=score_max,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                page=page,
+                page_size=page_size,
+            )
+            return jsonify({
+                'reports': items,
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'filters': {
+                    'available_models': available_models,
+                    'available_datasets': available_datasets,
+                },
+            }), 200
+        except Exception as db_err:
+            logger.debug(f'SQLite query failed, falling back to filesystem: {db_err}')
+
+        # --- Fallback: filesystem scan (original logic) ---
         raw_reports = scan_for_report_folders(root)
         items = []
         for rn in raw_reports:
@@ -234,37 +274,23 @@ def list_reports():
             if meta is not None:
                 items.append(meta)
 
-        # Collect available filter values before filtering
         available_models = sorted({it['model_name'] for it in items})
         available_datasets = sorted({ds for it in items for ds in it['_datasets']})
 
-        # --- Filters ---
-        search = request.args.get('search', '').strip().lower()
         if search:
             items = [it for it in items if search in it['model_name'].lower() or search in it['dataset_name'].lower()]
-
-        models_filter = request.args.get('models', '').strip()
         if models_filter:
             model_set = {m.strip().lower() for m in models_filter.split(';') if m.strip()}
             items = [it for it in items if it['model_name'].lower() in model_set]
-
-        datasets_filter = request.args.get('datasets', '').strip()
         if datasets_filter:
             ds_set = {d.strip().lower() for d in datasets_filter.split(';') if d.strip()}
             items = [it for it in items if any(d.lower() in ds_set for d in it['_datasets'])]
-
-        score_min = request.args.get('score_min', type=float)
-        score_max = request.args.get('score_max', type=float)
         if score_min is not None:
             items = [it for it in items if it['score'] >= score_min]
         if score_max is not None:
             items = [it for it in items if it['score'] <= score_max]
 
-        # --- Sort ---
-        sort_by = request.args.get('sort_by', 'time')
-        sort_order = request.args.get('sort_order', 'desc')
         reverse = sort_order == 'desc'
-
         sort_key_map = {
             'score': lambda x: x['score'],
             'model': lambda x: x['model_name'].lower(),
@@ -274,14 +300,10 @@ def list_reports():
         key_fn = sort_key_map.get(sort_by, sort_key_map['time'])
         items.sort(key=key_fn, reverse=reverse)
 
-        # --- Paginate ---
-        page = max(1, request.args.get('page', 1, type=int))
-        page_size = max(1, min(100, request.args.get('page_size', 20, type=int)))
         total = len(items)
         start = (page - 1) * page_size
         page_items = items[start:start + page_size]
 
-        # Strip internal keys before returning
         for it in page_items:
             it.pop('_datasets', None)
             it.pop('_scores', None)
@@ -482,6 +504,14 @@ def delete_report():
         import shutil
         shutil.rmtree(report_dir)
         logger.info(f'Deleted report: {report_dir}')
+
+        # Sync SQLite
+        try:
+            from .. import db as _db
+            _db.delete_eval_report(report_name)
+        except Exception as e:
+            logger.debug(f'Failed to delete from SQLite (non-fatal): {e}')
+
         return jsonify({'ok': True}), 200
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]

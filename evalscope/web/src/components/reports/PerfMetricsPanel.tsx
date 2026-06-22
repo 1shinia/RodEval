@@ -25,7 +25,7 @@ interface PercTableProps {
 }
 
 function PercTable({ stats, unit, accentCol = 'var(--accent)', scale = 1 }: PercTableProps) {
-  const fmt = (v: number) => (v * scale).toFixed(scale === 1000 ? 1 : 3)
+  const fmt = (v: number | null | undefined) => v != null ? (v * scale).toFixed(scale === 1000 ? 1 : 3) : '—'
 
   const cols: { label: string; key: keyof PercentileStats; accent?: boolean }[] = [
     { label: 'Mean', key: 'mean', accent: true },
@@ -161,22 +161,22 @@ function TokenTable({ usage, labels }: TokenTableProps) {
               {row.label}
             </td>
             <td className={cn(cellBase, 'text-[var(--text)] font-medium')}>
-              {row.stats.mean.toFixed(0)}
+              {row.stats.mean != null ? row.stats.mean.toFixed(0) : '—'}
             </td>
             <td className={cn(cellBase, 'text-[var(--text-muted)]')}>
-              {row.stats.std.toFixed(0)}
+              {row.stats.std != null ? row.stats.std.toFixed(0) : '—'}
             </td>
             <td className={cn(cellBase, 'text-[var(--text-muted)]')}>
-              {row.stats['50%'].toFixed(0)}
+              {row.stats['50%'] != null ? row.stats['50%'].toFixed(0) : '—'}
             </td>
             <td className={cn(cellBase, 'text-[var(--text-muted)]')}>
-              {row.stats['99%'].toFixed(0)}
+              {row.stats['99%'] != null ? row.stats['99%'].toFixed(0) : '—'}
             </td>
             <td className={cn(cellBase, 'text-[var(--text-muted)]')}>
-              {row.stats.min.toFixed(0)}
+              {row.stats.min != null ? row.stats.min.toFixed(0) : '—'}
             </td>
             <td className={cn(cellBase, 'text-[var(--text-muted)]')}>
-              {row.stats.max.toFixed(0)}
+              {row.stats.max != null ? row.stats.max.toFixed(0) : '—'}
             </td>
             {hasCount && (
               <td className={cn(cellBase, 'text-[var(--text)] font-semibold')}>
@@ -242,18 +242,18 @@ function PerfMetricsPanel({ perfMetrics }: PerfMetricsPanelProps) {
     },
     {
       label: t('reportDetail.avgLatency'),
-      value: `${latency.mean.toFixed(3)}s`,
+      value: latency.mean != null ? `${latency.mean.toFixed(3)}s` : '—',
       color: C_LATENCY,
     },
-    ...(ttft
+    ...(ttft && ttft.mean != null
       ? [{ label: t('reportDetail.ttft'), value: `${(ttft.mean * 1000).toFixed(0)}ms`, color: C_TTFT }]
       : []),
-    ...(tpot
+    ...(tpot && tpot.mean != null
       ? [{ label: t('reportDetail.tpot'), value: `${(tpot.mean * 1000).toFixed(0)}ms`, color: C_TPOT }]
       : []),
     {
       label: t('reportDetail.outputTps'),
-      value: `${throughput.avg_output_tps.toFixed(1)} tok/s`,
+      value: throughput.avg_output_tps != null ? `${throughput.avg_output_tps.toFixed(1)} tok/s` : '—',
       color: 'var(--text)',
     },
     ...(usage.total_input_tokens !== undefined

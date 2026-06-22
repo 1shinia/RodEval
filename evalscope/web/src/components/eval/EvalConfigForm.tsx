@@ -193,6 +193,53 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
     } else {
       if (!datasets.trim()) newErrors.datasets = 'Required'
     }
+
+    // URL format
+    if (!isLocal && apiUrl.trim()) {
+      try {
+        const u = new URL(apiUrl.trim())
+        if (!['http:', 'https:'].includes(u.protocol)) {
+          newErrors.apiUrl = 'URL 必须以 http:// 或 https:// 开头'
+        }
+      } catch {
+        newErrors.apiUrl = 'URL 格式不正确'
+      }
+    }
+
+    // Numeric range checks
+    const checkPositiveInt = (val: string, key: string, label: string) => {
+      if (val) {
+        const n = Number(val)
+        if (!Number.isInteger(n) || n < 1) newErrors[key] = `${label} 必须为正整数`
+      }
+    }
+    checkPositiveInt(limit, 'limit', '样本数')
+    checkPositiveInt(evalBatchSize, 'evalBatchSize', '批大小')
+    checkPositiveInt(repeats, 'repeats', '重复次数')
+    checkPositiveInt(timeout, 'timeout', '超时时间')
+
+    if (temperature) {
+      const t = Number(temperature)
+      if (isNaN(t) || t < 0 || t > 2) newErrors.temperature = '温度范围 0~2'
+    }
+    if (topP) {
+      const p = Number(topP)
+      if (isNaN(p) || p < 0 || p > 1) newErrors.topP = 'Top P 范围 0~1'
+    }
+    if (maxTokens) {
+      const m = Number(maxTokens)
+      if (!Number.isInteger(m) || m < 1) newErrors.maxTokens = '最大 Token 数必须为正整数'
+    }
+    if (topK) {
+      const k = Number(topK)
+      if (!Number.isInteger(k) || k < 1) newErrors.topK = 'Top K 必须为正整数'
+    }
+
+    // JSON format for datasetArgs
+    if (datasetArgs) {
+      try { JSON.parse(datasetArgs) } catch { newErrors.datasetArgs = 'JSON 格式不正确' }
+    }
+
     if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return }
     setErrors({})
 
@@ -436,12 +483,12 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
             placeholder="~/.cache/modelscope/hub/datasets" />
         </FormField>
 
-        <FormField label={t('eval.limit')}>
-          <input type="number" value={limit} onChange={(e) => setLimit(e.target.value)} className={FORM_INPUT_CLASS} />
+        <FormField label={t('eval.limit')} error={errors.limit}>
+          <input type="number" value={limit} onChange={(e) => { setLimit(e.target.value.replace(/[^0-9]/g, '')); if (errors.limit) setErrors((p) => ({ ...p, limit: '' })) }} className={inputClass(errors.limit)} />
         </FormField>
 
-        <FormField label={t('eval.batchSize')}>
-          <input type="number" value={evalBatchSize} onChange={(e) => setEvalBatchSize(e.target.value)} className={FORM_INPUT_CLASS} />
+        <FormField label={t('eval.batchSize')} error={errors.evalBatchSize}>
+          <input type="number" value={evalBatchSize} onChange={(e) => { setEvalBatchSize(e.target.value.replace(/[^0-9]/g, '')); if (errors.evalBatchSize) setErrors((p) => ({ ...p, evalBatchSize: '' })) }} className={inputClass(errors.evalBatchSize)} />
         </FormField>
       </div>
 
@@ -456,56 +503,62 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
         <Card className="!p-0">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
             {/* Row 1 — 采样参数 */}
-            <FormField label={t('eval.temperature')}>
+            <FormField label={t('eval.temperature')} error={errors.temperature}>
               <input type="number" step="0.1" min={0} max={2} value={temperature}
                 onChange={(e) => {
                   let v = e.target.value.replace(/[^0-9.]/g, '')
                   if (v !== '' && Number(v) > 2) v = '2'
                   setTemperature(v)
+                  if (errors.temperature) setErrors((p) => ({ ...p, temperature: '' }))
                 }}
-                className={FORM_INPUT_CLASS} />
+                className={inputClass(errors.temperature)} />
             </FormField>
-            <FormField label={t('eval.topP')}>
+            <FormField label={t('eval.topP')} error={errors.topP}>
               <input type="number" step="0.05" min={0} max={1} value={topP}
                 onChange={(e) => {
                   let v = e.target.value.replace(/[^0-9.]/g, '')
                   if (v !== '' && Number(v) > 1) v = '1'
                   setTopP(v)
+                  if (errors.topP) setErrors((p) => ({ ...p, topP: '' }))
                 }}
-                className={FORM_INPUT_CLASS} />
+                className={inputClass(errors.topP)} />
             </FormField>
-            <FormField label={t('eval.topK')}>
+            <FormField label={t('eval.topK')} error={errors.topK}>
               <input type="number" min={1} step="1" value={topK}
                 onChange={(e) => {
                   const v = e.target.value.replace(/[^0-9]/g, '')
                   setTopK(v)
+                  if (errors.topK) setErrors((p) => ({ ...p, topK: '' }))
                 }}
-                className={FORM_INPUT_CLASS} />
+                className={inputClass(errors.topK)} />
             </FormField>
             {/* Row 2 — 长度 + 运行控制 */}
-            <FormField label={t('eval.maxTokens')}>
+            <FormField label={t('eval.maxTokens')} error={errors.maxTokens}>
               <input type="number" min={1} step="1" value={maxTokens}
                 onChange={(e) => {
                   const v = e.target.value.replace(/[^0-9]/g, '')
                   setMaxTokens(v)
+                  if (errors.maxTokens) setErrors((p) => ({ ...p, maxTokens: '' }))
                 }}
-                className={FORM_INPUT_CLASS} />
+                className={inputClass(errors.maxTokens)} />
             </FormField>
-            <FormField label={t('eval.repeats')}>
+            <FormField label={t('eval.repeats')} error={errors.repeats}>
               <input type="number" min={1} step="1" value={repeats}
                 onChange={(e) => {
                   const v = e.target.value.replace(/[^0-9]/g, '')
                   setRepeats(v)
+                  if (errors.repeats) setErrors((p) => ({ ...p, repeats: '' }))
                 }}
-                className={FORM_INPUT_CLASS} />
+                className={inputClass(errors.repeats)} />
             </FormField>
-            <FormField label={t('eval.timeout')}>
+            <FormField label={t('eval.timeout')} error={errors.timeout}>
               <input type="number" min={1} step="1" value={timeout}
                 onChange={(e) => {
                   const v = e.target.value.replace(/[^0-9]/g, '')
                   setTimeout_(v)
+                  if (errors.timeout) setErrors((p) => ({ ...p, timeout: '' }))
                 }}
-                className={FORM_INPUT_CLASS} />
+                className={inputClass(errors.timeout)} />
             </FormField>
             {/* Row 3 — 种子 + 评判 + 开关 */}
             <FormField label={t('eval.seed')}>
@@ -537,9 +590,11 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
             {/* Row 4 — 数据集参数 */}
             <div className="md:col-span-3">
               <label className={FORM_LABEL_CLASS}>{t('eval.datasetArgs')}</label>
-              <textarea value={datasetArgs} onChange={(e) => setDatasetArgs(e.target.value)}
-                className={`${FORM_INPUT_CLASS} h-20 resize-y`} style={{ fontFamily: 'var(--font-mono)' }}
+              <textarea value={datasetArgs}
+                onChange={(e) => { setDatasetArgs(e.target.value); if (errors.datasetArgs) setErrors((p) => ({ ...p, datasetArgs: '' })) }}
+                className={`${inputClass(errors.datasetArgs)} h-20 resize-y`} style={{ fontFamily: 'var(--font-mono)' }}
                 placeholder='{"gsm8k": {"few_shot_num": 4}}' />
+              {errors.datasetArgs && <p className="mt-1 text-xs text-red-500">{errors.datasetArgs}</p>}
             </div>
           </div>
         </Card>

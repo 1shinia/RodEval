@@ -57,6 +57,9 @@ bp_perf = Blueprint('perf', __name__, url_prefix='/api/v1/perf')
 def list_perf_tasks():
     """List all performance test tasks with metadata.
 
+    Uses SQLite for fast queries.  Falls back to filesystem scan if the
+    DB is not initialised.
+
     Query params:
         root_path  (str): output root directory (default: OUTPUT_DIR)
         search     (str): search in model name and dataset
@@ -73,6 +76,8 @@ def list_perf_tasks():
     filter_dataset = request.args.get('dataset', '').strip()
     sort_by = request.args.get('sort_by', 'time')
     sort_order = request.args.get('sort_order', 'desc')
+    page = max(1, request.args.get('page', 1, type=int))
+    page_size = max(1, min(100, request.args.get('page_size', 20, type=int)))
 
     try:
         root = validate_root_path(root)
@@ -82,6 +87,33 @@ def list_perf_tasks():
     if not os.path.isdir(root):
         return jsonify({'tasks': [], 'root_path': root, 'error': f'Directory not found: {root}'}), 200
 
+    # --- Try SQLite first ---
+    try:
+        from .. import db as _db
+        items, total, available_models, available_datasets = _db.query_perf_tasks(
+            search=search,
+            filter_model=filter_model,
+            filter_dataset=filter_dataset,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            page=page,
+            page_size=page_size,
+        )
+        return jsonify({
+            'tasks': items,
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'root_path': root,
+            'filters': {
+                'available_models': available_models,
+                'available_datasets': available_datasets,
+            },
+        }), 200
+    except Exception as db_err:
+        logger.debug(f'SQLite query failed, falling back to filesystem: {db_err}')
+
+    # --- Fallback: filesystem scan (original logic) ---
     tasks = []
     all_models = set()
     all_datasets = set()
@@ -92,7 +124,6 @@ def list_perf_tasks():
         if not os.path.isdir(task_dir) or not os.path.isdir(perf_dir):
             continue
 
-        # Default metadata
         meta = {
             'task_id': entry,
             'model': 'N/A',
@@ -103,7 +134,6 @@ def list_perf_tasks():
             'timestamp': '',
         }
 
-        # Try to read args from first run subdirectory (look in task_dir and perf_dir)
         try:
             search_dirs = [task_dir, perf_dir]
             for search_dir in search_dirs:
@@ -123,10 +153,9 @@ def list_perf_tasks():
                         break
                 if meta['model'] != 'N/A':
                     break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f'Failed to read args for task {entry}: {e}')
 
-        # Count run subdirs (look in both task_dir and perf_dir)
         try:
             run_count = 0
             for search_dir in [task_dir, perf_dir]:
@@ -135,16 +164,15 @@ def list_perf_tasks():
                         1 for s in os.listdir(search_dir) if os.path.isdir(os.path.join(search_dir, s)) and s != 'perf'
                     )
             meta['runs'] = run_count
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f'Failed to count runs for task {entry}: {e}')
 
-        # Timestamp from mtime
         try:
             mtime = os.path.getmtime(task_dir)
             from datetime import datetime
             meta['timestamp'] = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f'Failed to get timestamp for task {entry}: {e}')
 
         tasks.append(meta)
         if meta['model'] != 'N/A':
@@ -152,7 +180,6 @@ def list_perf_tasks():
         if meta['dataset'] != 'N/A':
             all_datasets.add(meta['dataset'])
 
-    # Apply filters
     if search:
         tasks = [t for t in tasks if search in t['model'].lower() or search in t['dataset'].lower()]
     if filter_model:
@@ -160,17 +187,12 @@ def list_perf_tasks():
     if filter_dataset:
         tasks = [t for t in tasks if t['dataset'] == filter_dataset]
 
-    # Sort
     if sort_by == 'model':
         tasks.sort(key=lambda t: t['model'].lower(), reverse=(sort_order == 'desc'))
     else:
-        # Default: sort by time (already in reverse order from listdir)
         if sort_order == 'asc':
             tasks.reverse()
 
-    # Paginate
-    page = max(1, request.args.get('page', 1, type=int))
-    page_size = max(1, min(100, request.args.get('page_size', 20, type=int)))
     total = len(tasks)
     start = (page - 1) * page_size
     page_tasks = tasks[start:start + page_size]
@@ -250,6 +272,33 @@ def run_performance_test():
             )
             table_str = _build_perf_table(result, api_type=perf_args.api)
             logger.info(f'[{task_id}] Task completed successfully')
+
+            # Write to SQLite
+            try:
+                from datetime import datetime
+
+                from .. import db as _db
+                perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
+                has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                runs = 0
+                for search_dir in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
+                    if os.path.isdir(search_dir):
+                        runs += sum(
+                            1 for s in os.listdir(search_dir)
+                            if os.path.isdir(os.path.join(search_dir, s)) and s != 'perf'
+                        )
+                _db.upsert_perf_task(
+                    task_id=task_id,
+                    model=perf_args.model,
+                    api=perf_args.api,
+                    dataset=perf_args.dataset_label or perf_args.dataset or 'N/A',
+                    runs=runs,
+                    has_report=has_report,
+                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                )
+            except Exception as e:
+                logger.debug(f'Failed to write perf to SQLite (non-fatal): {e}')
+
             return jsonify({
                 'status': 'completed',
                 'task_id': task_id,
@@ -308,6 +357,14 @@ def delete_performance_test():
     try:
         shutil.rmtree(task_dir)
         logger.info(f'Deleted perf task: {task_id}')
+
+        # Sync SQLite
+        try:
+            from .. import db as _db
+            _db.delete_perf_task(task_id)
+        except Exception as e:
+            logger.debug(f'Failed to delete from SQLite (non-fatal): {e}')
+
         return jsonify({'ok': True, 'task_id': task_id}), 200
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
@@ -366,6 +423,62 @@ def get_performance_log():
         return jsonify({'error': 'Failed to get log', 'error_id': error_id}), 500
 
 
+@bp_perf.route('/log/stream', methods=['GET'])
+def stream_performance_log():
+    """SSE stream for real-time performance log updates.
+
+    Query params:
+        task_id (str): the task identifier
+
+    Pushes new log lines as they are appended to the log file.
+    The stream closes when the client disconnects.
+    """
+    import time
+
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    log_file = os.path.join(OUTPUT_DIR, task_id, 'perf', 'benchmark.log')
+
+    def generate():
+        last_pos = 0
+        idle_count = 0
+        max_idle = 300  # Close after 5 minutes of no new log lines
+        while True:
+            try:
+                if os.path.isfile(log_file):
+                    with open(log_file, 'r') as f:
+                        f.seek(last_pos)
+                        new_content = f.read()
+                        if new_content:
+                            last_pos = f.tell()
+                            idle_count = 0
+                            payload = json.dumps({'text': new_content})
+                            yield f'data: {payload}\n\n'
+                        else:
+                            idle_count += 1
+                            if idle_count >= max_idle:
+                                yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                                break
+                else:
+                    idle_count += 1
+                    if idle_count >= max_idle:
+                        yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                        break
+                if idle_count % 30 == 0 and idle_count > 0:
+                    yield f': heartbeat\n\n'
+                time.sleep(1)
+            except GeneratorExit:
+                break
+            except Exception as e:
+                logger.debug(f'SSE log stream error for {task_id}: {e}')
+                time.sleep(2)
+
+    from flask import Response
+    return Response(generate(), mimetype='text/event-stream')
+
+
 @bp_perf.route('/progress', methods=['GET'])
 def get_performance_progress():
     """Get the real-time hierarchical progress of a running perf benchmark task.
@@ -393,3 +506,66 @@ def get_performance_progress():
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] Failed to get progress for task {task_id}: {e}', exc_info=True)
         return jsonify({'error': 'Failed to get progress', 'error_id': error_id}), 500
+
+
+@bp_perf.route('/progress/stream', methods=['GET'])
+def stream_performance_progress():
+    """SSE stream for real-time performance progress updates.
+
+    Query params:
+        task_id (str): the task identifier
+
+    Returns a text/event-stream that pushes progress JSON whenever the
+    progress file changes.  The stream closes when the task reaches 100%
+    or the client disconnects.
+    """
+    import time
+
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    progress_file = os.path.join(OUTPUT_DIR, task_id, 'perf', 'progress.json')
+
+    def generate():
+        last_mtime = 0
+        idle_count = 0
+        max_idle = 300  # Close after 5 minutes of no progress updates
+        while True:
+            try:
+                if os.path.isfile(progress_file):
+                    mtime = os.path.getmtime(progress_file)
+                    if mtime > last_mtime:
+                        last_mtime = mtime
+                        idle_count = 0
+                        with open(progress_file, 'r') as f:
+                            data = json.load(f)
+                        yield f'data: {json.dumps(data)}\n\n'
+                        if data.get('percent', 0) >= 100:
+                            break
+                    else:
+                        idle_count += 1
+                        if idle_count >= max_idle:
+                            yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                            break
+                else:
+                    idle_count += 1
+                    if idle_count >= max_idle:
+                        yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                        break
+                if idle_count % 30 == 0 and idle_count > 0:
+                    yield f': heartbeat\n\n'
+                time.sleep(1)
+            except GeneratorExit:
+                break
+            except Exception as e:
+                logger.debug(f'SSE progress stream error for {task_id}: {e}')
+                time.sleep(2)
+
+    from flask import Response
+    return Response(generate(), mimetype='text/event-stream')

@@ -6,6 +6,7 @@ from datetime import datetime
 from flask import Flask, jsonify, send_from_directory
 
 from evalscope.utils.logger import get_logger
+from . import db as _db
 from .blueprints import bp_eval, bp_perf, bp_reports
 from .utils import OUTPUT_DIR as _DEFAULT_ROOT
 
@@ -70,6 +71,15 @@ def create_app(outputs: str = None):
     app.register_blueprint(bp_perf)
     app.register_blueprint(bp_reports)
 
+    # --- Initialise SQLite metadata store --------------------------------
+    outputs_root = app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT
+    try:
+        _db.init_db(outputs_root)
+        _db.backfill(outputs_root)
+        _db.recover_stale_tasks()
+    except Exception as e:
+        logger.warning(f'SQLite metadata store init failed (non-fatal): {e}')
+
     @app.route('/health', methods=['GET'])
     def health_check():
         """Health check endpoint."""
@@ -85,9 +95,31 @@ def create_app(outputs: str = None):
 
     @app.route('/api/v1/tasks/running', methods=['GET'])
     def get_running_tasks():
-        """Return a list of currently running tasks with metadata."""
+        """Return a list of currently running tasks with metadata.
+
+        Merges in-memory registry with SQLite-persisted state so that
+        tasks surviving a server restart are still visible.
+        """
         from .utils import get_running_tasks as _get_running_tasks
         tasks = _get_running_tasks()
+        seen_ids = {t['task_id'] for t in tasks}
+
+        # Add SQLite-persisted tasks that are still marked 'running'
+        try:
+            db_tasks = _db.list_running_tasks()
+            for dt in db_tasks:
+                if dt['task_id'] not in seen_ids:
+                    tasks.append({
+                        'task_id': dt['task_id'],
+                        'task_type': dt['task_type'],
+                        'model': dt['model'],
+                        'start_time': dt['started_at'],
+                        'elapsed_seconds': None,
+                        'source': 'sqlite',  # indicate this was recovered from DB
+                    })
+        except Exception as e:
+            logger.debug(f'Failed to load SQLite running tasks: {e}')
+
         return jsonify({'tasks': tasks, 'count': len(tasks)})
 
     # --- SPA static-file serving ------------------------------------------
@@ -121,13 +153,18 @@ def create_app(outputs: str = None):
     return app
 
 
-def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, outputs: str = None):
-    """Run the Flask service.
+def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, outputs: str = None, threads: int = 16):
+    """Run the EvalScope service.
+
+    Uses waitress (multi-threaded WSGI server) for proper concurrent request
+    handling.  Falls back to Flask's built-in dev server if waitress is not
+    installed or if ``debug=True``.
 
     Args:
         outputs: Root directory for evaluation outputs. If provided, the web
                  dashboard will use this as the default scan path instead of
                  ``./outputs``.
+        threads: Number of worker threads for waitress (default: 4).
     """
 
     # Force the multiprocessing start method to 'spawn' to avoid issues with
@@ -135,7 +172,6 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
     multiprocessing.set_start_method('spawn', force=True)
     app = create_app(outputs=outputs)
 
-    logger.info(f'Starting EvalScope service on {host}:{port}')
     logger.info('Available endpoints:')
     logger.info('  GET  /health                         - Health check')
     logger.info('  GET  /api/v1/config                  - Get runtime configuration')
@@ -144,11 +180,14 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
     logger.info('  GET  /api/v1/eval/benchmarks         - List supported benchmarks with descriptions')
     logger.info('  GET  /api/v1/eval/log                - Get evaluation log')
     logger.info('  GET  /api/v1/eval/progress           - Get real-time evaluation progress')
+    logger.info('  GET  /api/v1/eval/progress/stream    - SSE stream for eval progress')
+    logger.info('  GET  /api/v1/eval/log/stream         - SSE stream for eval log')
     logger.info('  GET  /api/v1/eval/report             - Get HTML evaluation report')
-    logger.info('  POST /api/v1/eval/resume/invoke      - Resume a previous evaluation (blocking)')
     logger.info('  POST /api/v1/perf/invoke             - Run performance benchmark task (blocking)')
     logger.info('  GET  /api/v1/perf/log                - Get performance benchmark log')
     logger.info('  GET  /api/v1/perf/progress           - Get real-time performance benchmark progress')
+    logger.info('  GET  /api/v1/perf/progress/stream    - SSE stream for perf progress')
+    logger.info('  GET  /api/v1/perf/log/stream         - SSE stream for perf log')
     logger.info('  GET  /api/v1/perf/report             - Get HTML performance benchmark report')
     logger.info('Refer to docs for parameters: https://evalscope.readthedocs.io/en/latest/user_guides/service.html')
 
@@ -158,7 +197,18 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
     logger.info(f'Dashboard: {dashboard_url}')
     print(f'\n  🌐 EvalScope Dashboard: {dashboard_url}\n')
 
-    app.run(host=host, port=port, debug=debug)
+    if debug:
+        logger.info('Debug mode: using Flask dev server')
+        app.run(host=host, port=port, debug=True)
+    else:
+        try:
+            from waitress import serve
+            logger.info(f'Starting with waitress on {host}:{port} (threads={threads})')
+            serve(app, host=host, port=port, threads=threads, _quiet=False)
+        except ImportError:
+            logger.warning('waitress not installed, falling back to Flask dev server (single-threaded)')
+            logger.warning('Install waitress for production use: pip install waitress')
+            app.run(host=host, port=port, debug=False)
 
 
 if __name__ == '__main__':

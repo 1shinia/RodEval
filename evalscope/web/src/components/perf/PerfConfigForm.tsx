@@ -59,6 +59,59 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
       if (!model.trim()) newErrors.model = 'Required'
       if (!url.trim()) newErrors.url = 'Required'
     }
+
+    // URL format
+    if (!isLocal && url.trim()) {
+      try {
+        const u = new URL(url.trim())
+        if (!['http:', 'https:'].includes(u.protocol)) {
+          newErrors.url = 'URL 必须以 http:// 或 https:// 开头'
+        }
+      } catch {
+        newErrors.url = 'URL 格式不正确'
+      }
+    }
+
+    // Parallel & number: comma-separated positive integers
+    const checkCommaSepPosInt = (val: string, key: string, label: string) => {
+      if (val) {
+        const parts = val.replace(/，/g, ',').split(',').map((s) => s.trim()).filter(Boolean)
+        for (const p of parts) {
+          const n = Number(p)
+          if (!Number.isInteger(n) || n < 1) {
+            newErrors[key] = `${label} 必须为正整数（逗号分隔）`
+            break
+          }
+        }
+      }
+    }
+    checkCommaSepPosInt(parallel, 'parallel', '并发数')
+    checkCommaSepPosInt(number, 'number', '请求数')
+
+    // Rate: positive number
+    if (rate) {
+      const r = Number(rate)
+      if (isNaN(r) || r <= 0) newErrors.rate = '请求速率必须为正数'
+    }
+
+    // Token / prompt length fields: positive integers
+    const checkPosInt = (val: string, key: string, label: string) => {
+      if (val) {
+        const n = Number(val)
+        if (!Number.isInteger(n) || n < 1) newErrors[key] = `${label} 必须为正整数`
+      }
+    }
+    checkPosInt(maxTokens, 'maxTokens', '最大 Token 数')
+    checkPosInt(minTokens, 'minTokens', '最小 Token 数')
+    checkPosInt(maxPromptLen, 'maxPromptLen', '最大 Prompt 长度')
+    checkPosInt(minPromptLen, 'minPromptLen', '最小 Prompt 长度')
+
+    // prefixLength: non-negative integer
+    if (prefixLength) {
+      const n = Number(prefixLength)
+      if (!Number.isInteger(n) || n < 0) newErrors.prefixLength = '前缀长度必须为非负整数'
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
@@ -204,8 +257,10 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
           </select>
         </FormField>
 
-        <FormField label={t('perf.rate')}>
-          <input type="number" value={rate} onChange={(e) => setRate(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderReqPerSec')} />
+        <FormField label={t('perf.rate')} error={errors.rate}>
+          <input type="number" value={rate}
+            onChange={(e) => { setRate(e.target.value); if (errors.rate) setErrors((p) => ({ ...p, rate: '' })) }}
+            className={inputClass(errors.rate)} placeholder={t('perf.placeholderReqPerSec')} />
         </FormField>
 
         {dataset === 'custom' && (
@@ -220,29 +275,41 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
         )}
 
         {/* ── 压测参数 ── */}
-        <FormField label={t('perf.parallel')}>
-          <input value={parallel} onChange={(e) => setParallel(e.target.value)} className={FORM_INPUT_CLASS} placeholder="1, 4, 8" />
+        <FormField label={t('perf.parallel')} error={errors.parallel}>
+          <input value={parallel}
+            onChange={(e) => { setParallel(e.target.value); if (errors.parallel) setErrors((p) => ({ ...p, parallel: '' })) }}
+            className={inputClass(errors.parallel)} placeholder="1, 4, 8" />
         </FormField>
 
-        <FormField label={t('perf.number')}>
-          <input value={number} onChange={(e) => setNumber(e.target.value)} className={FORM_INPUT_CLASS} placeholder="10, 100" />
+        <FormField label={t('perf.number')} error={errors.number}>
+          <input value={number}
+            onChange={(e) => { setNumber(e.target.value); if (errors.number) setErrors((p) => ({ ...p, number: '' })) }}
+            className={inputClass(errors.number)} placeholder="10, 100" />
         </FormField>
 
         {/* ── Token / Prompt ── */}
-        <FormField label={t('perf.maxTokens')}>
-          <input type="number" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderDefaultVal', { v: '2048' })} />
+        <FormField label={t('perf.maxTokens')} error={errors.maxTokens}>
+          <input type="number" value={maxTokens}
+            onChange={(e) => { setMaxTokens(e.target.value.replace(/[^0-9]/g, '')); if (errors.maxTokens) setErrors((p) => ({ ...p, maxTokens: '' })) }}
+            className={inputClass(errors.maxTokens)} placeholder={t('perf.placeholderDefaultVal', { v: '2048' })} />
         </FormField>
 
-        <FormField label={t('perf.minTokens')}>
-          <input type="number" value={minTokens} onChange={(e) => setMinTokens(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderNoLimit')} />
+        <FormField label={t('perf.minTokens')} error={errors.minTokens}>
+          <input type="number" value={minTokens}
+            onChange={(e) => { setMinTokens(e.target.value.replace(/[^0-9]/g, '')); if (errors.minTokens) setErrors((p) => ({ ...p, minTokens: '' })) }}
+            className={inputClass(errors.minTokens)} placeholder={t('perf.placeholderNoLimit')} />
         </FormField>
 
-        <FormField label={t('perf.maxPromptLen')}>
-          <input type="number" value={maxPromptLen} onChange={(e) => setMaxPromptLen(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderDefaultVal', { v: '131072' })} />
+        <FormField label={t('perf.maxPromptLen')} error={errors.maxPromptLen}>
+          <input type="number" value={maxPromptLen}
+            onChange={(e) => { setMaxPromptLen(e.target.value.replace(/[^0-9]/g, '')); if (errors.maxPromptLen) setErrors((p) => ({ ...p, maxPromptLen: '' })) }}
+            className={inputClass(errors.maxPromptLen)} placeholder={t('perf.placeholderDefaultVal', { v: '131072' })} />
         </FormField>
 
-        <FormField label={t('perf.minPromptLen')}>
-          <input type="number" value={minPromptLen} onChange={(e) => setMinPromptLen(e.target.value)} className={FORM_INPUT_CLASS} placeholder={t('perf.placeholderDefaultVal', { v: '0' })} />
+        <FormField label={t('perf.minPromptLen')} error={errors.minPromptLen}>
+          <input type="number" value={minPromptLen}
+            onChange={(e) => { setMinPromptLen(e.target.value.replace(/[^0-9]/g, '')); if (errors.minPromptLen) setErrors((p) => ({ ...p, minPromptLen: '' })) }}
+            className={inputClass(errors.minPromptLen)} placeholder={t('perf.placeholderDefaultVal', { v: '0' })} />
         </FormField>
 
         {/* API mode: Tokenizer path shown here */}
@@ -256,8 +323,10 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
       {/* ── 高级选项 ── */}
       <Collapsible header={<span className="text-sm text-[var(--accent)]">{t('perf.moreParams')}</span>} defaultOpen={false} chevronAfter chevronColor="var(--accent)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-          <FormField label={t('perf.prefixLength')}>
-            <input type="number" value={prefixLength} onChange={(e) => setPrefixLength(e.target.value.replace(/[^0-9]/g, ''))} className={FORM_INPUT_CLASS} placeholder="0" />
+          <FormField label={t('perf.prefixLength')} error={errors.prefixLength}>
+            <input type="number" value={prefixLength}
+              onChange={(e) => { setPrefixLength(e.target.value.replace(/[^0-9]/g, '')); if (errors.prefixLength) setErrors((p) => ({ ...p, prefixLength: '' })) }}
+              className={inputClass(errors.prefixLength)} placeholder="0" />
           </FormField>
 
           <FormField label="Extra Args (JSON)" className="md:col-span-2" error={errors.extra_args}>
