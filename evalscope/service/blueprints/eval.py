@@ -324,6 +324,14 @@ def run_evaluation():
             }), 400
 
         task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+
+        # Save task config for resume capability
+        os.makedirs(task_config.work_dir, exist_ok=True)
+        try:
+            task_config.dump_yaml(task_config.work_dir)
+        except Exception as e:
+            logger.warning(f'[{task_id}] Failed to save task config: {e}')
+
         logger.info(
             f'[{task_id}] Running: model={task_config.model} '
             f'eval_type={task_config.eval_type} datasets={task_config.datasets}'
@@ -342,6 +350,98 @@ def run_evaluation():
     finally:
         # Clean up the placeholder if the subprocess was never registered
         # (i.e. we returned early before _execute_task / run_in_subprocess).
+        unregister_process(task_id)
+
+
+@bp_eval.route('/resume/invoke', methods=['POST'])
+def resume_evaluation():
+    """Resume an interrupted evaluation task (blocking).
+
+    Request body::
+
+        {"task_id": "eval_1782000000000"}
+
+    This endpoint:
+    1. Loads the original task_config.yaml from the task's work_dir
+    2. Sets use_cache to the work_dir (enables prediction cache reuse)
+    3. Runs the evaluation, skipping already-completed samples
+    4. Returns the same response format as /invoke
+    """
+    data = request.get_json()
+    if not data or 'task_id' not in data:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    task_id = data['task_id']
+    api_key = data.get('api_key')  # API key must be re-provided (not saved in config for security)
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    work_dir = os.path.join(OUTPUT_DIR, task_id)
+    config_file = os.path.join(work_dir, 'task_config.yaml')
+    progress_file = os.path.join(work_dir, 'progress.json')
+
+    # Check if task exists
+    if not os.path.exists(config_file):
+        return jsonify({'error': f'Task not found: {task_id}'}), 404
+
+    # Check if task is actually interrupted (status should be "running" but process is dead)
+    if os.path.exists(progress_file):
+        try:
+            with open(progress_file, 'r') as f:
+                progress = json.load(f)
+            status = progress.get('status')
+            if status == 'completed':
+                return jsonify({'error': 'Task already completed', 'task_id': task_id}), 400
+            if status == 'error':
+                # Allow resuming errored tasks
+                pass
+            # status == 'running' means interrupted (process died without cleanup)
+        except Exception as e:
+            logger.warning(f'Failed to read progress for {task_id}: {e}')
+
+    # Concurrency guard
+    model = ''  # We'll extract this from the config after loading
+    if not try_reserve_slot(task_id, 'eval', model=model):
+        max_eval = int(os.environ.get('MAX_CONCURRENT_EVAL', '2'))
+        running = count_running_tasks('eval')
+        return jsonify({
+            'error': f'已有 {running} 个评估任务运行中，最大并发 {max_eval}，请等待完成后再试',
+            'running': running,
+            'max': max_eval,
+        }), 429
+
+    try:
+        # Load original config
+        try:
+            task_config = TaskConfig.from_yaml(config_file)
+        except Exception as e:
+            error_id = uuid.uuid4().hex[:8]
+            logger.error(f'[{error_id}] [{task_id}] Failed to load config: {e}', exc_info=True)
+            return jsonify({
+                'status': 'error',
+                'task_id': task_id,
+                'error': 'Failed to load task config',
+                'error_id': error_id
+            }), 500
+
+        # Enable cache reuse - point to the same work_dir
+        task_config.use_cache = work_dir
+        task_config.work_dir = work_dir
+
+        # Re-inject API key (stripped from saved config for security)
+        if api_key:
+            task_config.api_key = api_key
+
+        logger.info(
+            f'[{task_id}] Resuming: model={task_config.model} '
+            f'datasets={task_config.datasets} use_cache={work_dir}'
+        )
+
+        # Execute (reuse _execute_task which handles subprocess + SQLite)
+        return _execute_task(task_id, task_config, label='Resume', use_direct=False)
+    finally:
         unregister_process(task_id)
 
 

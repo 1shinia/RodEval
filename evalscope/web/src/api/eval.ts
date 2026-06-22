@@ -26,6 +26,12 @@ export async function stopEvalTask(taskId: string): Promise<{ status: string; ta
   return apiPost<{ status: string; task_id: string }>(`/api/v1/eval/stop?task_id=${encodeURIComponent(taskId)}`, {})
 }
 
+export async function resumeEvalTask(taskId: string, apiKey?: string): Promise<EvalInvokeResponse> {
+  const body: Record<string, string> = { task_id: taskId }
+  if (apiKey) body.api_key = apiKey
+  return apiPost<EvalInvokeResponse>('/api/v1/eval/resume/invoke', body)
+}
+
 export async function listBenchmarks(type?: 'text' | 'multimodal', all?: boolean): Promise<BenchmarksResponse> {
   const params: Record<string, string> = {}
   if (type) params.type = type

@@ -3,7 +3,7 @@ import LogViewer from '@/components/common/LogViewer'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { useLocale } from '@/contexts/LocaleContext'
-import { ExternalLink, CheckCircle2, XCircle, Loader2, Square, OctagonX } from 'lucide-react'
+import { ExternalLink, CheckCircle2, XCircle, Loader2, Square, OctagonX, PlayCircle } from 'lucide-react'
 
 interface Props {
   running: boolean
@@ -13,9 +13,11 @@ interface Props {
   reportUrl: string | null
   readyLabel: string
   onStop?: () => void
+  onResume?: (taskId: string) => void
+  taskId?: string | null
 }
 
-export default function TaskMonitor({ running, progress, logText, result, reportUrl, readyLabel, onStop }: Props) {
+export default function TaskMonitor({ running, progress, logText, result, reportUrl, readyLabel, onStop, onResume, taskId }: Props) {
   const { t } = useLocale()
 
   return (
@@ -71,6 +73,19 @@ export default function TaskMonitor({ running, progress, logText, result, report
         >
           <Square size={14} />
           {t('common.stop')}
+        </Button>
+      )}
+
+      {/* Resume button */}
+      {!running && onResume && taskId && result && (result.status === 'stopped' || result.status === 'error') && (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => onResume(taskId)}
+          className="btn-glow"
+        >
+          <PlayCircle size={14} />
+          续跑
         </Button>
       )}
 

@@ -12,6 +12,7 @@ interface Props {
   onSubmit: (config: Record<string, unknown>) => void
   disabled?: boolean
   initialDataset?: string
+  onApiKeyChange?: (apiKey: string) => void
 }
 
 interface ParamDef {
@@ -79,7 +80,7 @@ function getParams(backend: string): ParamDef[] {
   return BACKEND_PARAMS[backend] || []
 }
 
-export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: Props) {
+export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onApiKeyChange }: Props) {
   const { t } = useLocale()
 
   // Model source
@@ -90,6 +91,11 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset }: P
   const [model, setModel] = useState('')
   const [apiUrl, setApiUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
+
+  // Notify parent of apiKey changes (for resume functionality)
+  useEffect(() => {
+    onApiKeyChange?.(apiKey)
+  }, [apiKey, onApiKeyChange])
 
   // Local model
   const [modelPath, setModelPath] = useState('')

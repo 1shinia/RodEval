@@ -18,10 +18,10 @@ logger = get_logger()
 _local = threading.local()
 _db_path: str | None = None
 
-
 # ---------------------------------------------------------------------------
 # Connection management
 # ---------------------------------------------------------------------------
+
 
 def init_db(output_dir: str) -> None:
     """Initialise the database path and create tables if needed."""
@@ -29,7 +29,8 @@ def init_db(output_dir: str) -> None:
     _db_path = os.path.join(output_dir, 'evalscope_meta.db')
     os.makedirs(output_dir, exist_ok=True)
     conn = _get_conn()
-    conn.executescript('''
+    conn.executescript(
+        '''
         CREATE TABLE IF NOT EXISTS eval_reports (
             task_id        TEXT PRIMARY KEY,
             model_name     TEXT NOT NULL,
@@ -57,7 +58,8 @@ def init_db(output_dir: str) -> None:
             started_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
-    ''')
+    '''
+    )
     conn.commit()
     logger.info(f'SQLite metadata DB ready: {_db_path}')
 
@@ -79,6 +81,7 @@ def _get_conn() -> sqlite3.Connection:
 # Eval reports CRUD
 # ---------------------------------------------------------------------------
 
+
 def upsert_eval_report(
     task_id: str,
     model_name: str,
@@ -93,8 +96,10 @@ def upsert_eval_report(
         '''INSERT OR REPLACE INTO eval_reports
            (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores)
            VALUES (?, ?, ?, ?, ?, ?, ?)''',
-        (task_id, model_name, dataset_name, score, num_samples, timestamp,
-         json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None),
+        (
+            task_id, model_name, dataset_name, score, num_samples, timestamp,
+            json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None
+        ),
     )
     conn.commit()
 
@@ -152,13 +157,11 @@ def query_eval_reports(
 
     # Available filter values (before filtering)
     avail_models = [
-        r[0] for r in conn.execute(
-            'SELECT DISTINCT model_name FROM eval_reports WHERE model_name != "" ORDER BY model_name'
-        ).fetchall()
+        r[0] for r in conn.
+        execute('SELECT DISTINCT model_name FROM eval_reports WHERE model_name != "" ORDER BY model_name').fetchall()
     ]
-    avail_datasets_raw = conn.execute(
-        'SELECT DISTINCT dataset_name FROM eval_reports WHERE dataset_name != ""'
-    ).fetchall()
+    avail_datasets_raw = conn.execute('SELECT DISTINCT dataset_name FROM eval_reports WHERE dataset_name != ""'
+                                      ).fetchall()
     avail_datasets: list[str] = []
     for r in avail_datasets_raw:
         for d in r[0].split(', '):
@@ -167,9 +170,7 @@ def query_eval_reports(
                 avail_datasets.append(d)
     avail_datasets.sort()
 
-    total = conn.execute(
-        f'SELECT COUNT(*) FROM eval_reports {where_sql}', params
-    ).fetchone()[0]
+    total = conn.execute(f'SELECT COUNT(*) FROM eval_reports {where_sql}', params).fetchone()[0]
 
     offset = (max(1, page) - 1) * page_size
     rows = conn.execute(
@@ -214,13 +215,14 @@ def query_eval_reports(
 
 def delete_eval_report(task_id: str) -> None:
     conn = _get_conn()
-    conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id,))
+    conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id, ))
     conn.commit()
 
 
 # ---------------------------------------------------------------------------
 # Perf tasks CRUD
 # ---------------------------------------------------------------------------
+
 
 def upsert_perf_task(
     task_id: str,
@@ -275,9 +277,8 @@ def query_perf_tasks(
 
     # Available filter values
     avail_models = [
-        r[0] for r in conn.execute(
-            'SELECT DISTINCT model FROM perf_tasks WHERE model != "" AND model != "N/A" ORDER BY model'
-        ).fetchall()
+        r[0] for r in conn.
+        execute('SELECT DISTINCT model FROM perf_tasks WHERE model != "" AND model != "N/A" ORDER BY model').fetchall()
     ]
     avail_datasets = [
         r[0] for r in conn.execute(
@@ -285,9 +286,7 @@ def query_perf_tasks(
         ).fetchall()
     ]
 
-    total = conn.execute(
-        f'SELECT COUNT(*) FROM perf_tasks {where_sql}', params
-    ).fetchone()[0]
+    total = conn.execute(f'SELECT COUNT(*) FROM perf_tasks {where_sql}', params).fetchone()[0]
 
     offset = (max(1, page) - 1) * page_size
     rows = conn.execute(
@@ -315,13 +314,14 @@ def query_perf_tasks(
 
 def delete_perf_task(task_id: str) -> None:
     conn = _get_conn()
-    conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id,))
+    conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id, ))
     conn.commit()
 
 
 # ---------------------------------------------------------------------------
 # Task state (running/completed/failed) — for persistence across restarts
 # ---------------------------------------------------------------------------
+
 
 def upsert_task_state(
     task_id: str,
@@ -350,7 +350,7 @@ def upsert_task_state(
 
 def delete_task_state(task_id: str) -> None:
     conn = _get_conn()
-    conn.execute('DELETE FROM task_state WHERE task_id = ?', (task_id,))
+    conn.execute('DELETE FROM task_state WHERE task_id = ?', (task_id, ))
     conn.commit()
 
 
@@ -383,9 +383,7 @@ def recover_stale_tasks() -> list[str]:
     """
     import signal
     conn = _get_conn()
-    rows = conn.execute(
-        "SELECT task_id, pid FROM task_state WHERE status = 'running'"
-    ).fetchall()
+    rows = conn.execute("SELECT task_id, pid FROM task_state WHERE status = 'running'").fetchall()
 
     orphaned: list[str] = []
     for row in rows:
@@ -416,6 +414,7 @@ def recover_stale_tasks() -> list[str]:
 # Backfill — populate DB from existing filesystem data on first startup
 # ---------------------------------------------------------------------------
 
+
 def backfill(output_dir: str) -> None:
     """Scan existing output directories and populate the metadata DB.
 
@@ -425,8 +424,6 @@ def backfill(output_dir: str) -> None:
         return
 
     conn = _get_conn()
-    existing_eval = conn.execute('SELECT COUNT(*) FROM eval_reports').fetchone()[0]
-    existing_perf = conn.execute('SELECT COUNT(*) FROM perf_tasks').fetchone()[0]
 
     # --- Backfill eval reports ---
     try:
@@ -473,7 +470,8 @@ def backfill(output_dir: str) -> None:
                 upsert_eval_report(
                     task_id=prefix,
                     model_name=first.model_name,
-                    dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else (dataset_names[0] if dataset_names else ''),
+                    dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else
+                    (dataset_names[0] if dataset_names else ''),
                     score=avg_score,
                     num_samples=total_num,
                     timestamp=timestamp,

@@ -10,6 +10,7 @@ export interface TaskApi {
   getProgress: (taskId: string) => Promise<ProgressResponse>
   getLog: (taskId: string, startLine?: number, page?: number) => Promise<LogResponse>
   getReportUrl: (taskId: string) => string
+  resume?: (taskId: string, apiKey?: string) => Promise<EvalInvokeResponse>
 }
 
 export interface UseTaskRunnerOptions {
@@ -110,6 +111,33 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     setResult({ status: 'stopped', task_id: taskId })
   }
 
+  const handleResume = async (existingTaskId: string, apiKey?: string) => {
+    setTaskId(existingTaskId)
+    setRunning(true)
+    setLogText('')
+    setProgress(0)
+    setResult(null)
+    setCopied(false)
+    try {
+      const res = await api.resume!(existingTaskId, apiKey)
+      setResult(res)
+    } catch (e) {
+      setResult({ status: 'error', task_id: existingTaskId, error: String(e) })
+      toast.error(String(e))
+    } finally {
+      setRunning(false)
+      // Fetch complete final log + progress
+      try {
+        const finalLog = await api.getLog(existingTaskId, 0, 999999)
+        if (finalLog.text) {
+          setLogText(finalLog.text)
+        }
+        const finalProg = await api.getProgress(existingTaskId)
+        setProgress(finalProg.percent ?? 100)
+      } catch { /* ignore */ }
+    }
+  }
+
   // Build SSE URLs for real-time streaming
   const progressStreamUrl = useMemo(() => {
     if (!taskId) return null
@@ -153,7 +181,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   }, [logText, result?.error])
 
   return {
-    running, progress, result, logText, reportUrl, copied,
-    handleSubmit, handleStop, copyLog,
+    running, progress, result, logText, reportUrl, copied, taskId,
+    handleSubmit, handleStop, handleResume, copyLog,
   }
 }

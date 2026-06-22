@@ -508,7 +508,10 @@ def delete_report():
         # Sync SQLite
         try:
             from .. import db as _db
-            _db.delete_eval_report(report_name)
+
+            # Extract task_id (prefix) from composite report_name
+            task_id, _, _ = process_report_name(report_name)
+            _db.delete_eval_report(task_id)
         except Exception as e:
             logger.debug(f'Failed to delete from SQLite (non-fatal): {e}')
 

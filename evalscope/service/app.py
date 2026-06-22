@@ -177,6 +177,7 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
     logger.info('  GET  /api/v1/config                  - Get runtime configuration')
     logger.info('  GET  /api/v1/tasks/running           - List currently running tasks')
     logger.info('  POST /api/v1/eval/invoke             - Run model evaluation task (blocking)')
+    logger.info('  POST /api/v1/eval/resume/invoke      - Resume interrupted evaluation task')
     logger.info('  GET  /api/v1/eval/benchmarks         - List supported benchmarks with descriptions')
     logger.info('  GET  /api/v1/eval/log                - Get evaluation log')
     logger.info('  GET  /api/v1/eval/progress           - Get real-time evaluation progress')
