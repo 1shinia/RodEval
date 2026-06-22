@@ -153,6 +153,7 @@ def _build_task_config_local(data: dict, launch_result: LaunchResult) -> TaskCon
         no_timestamp=True,
         enable_progress_tracker=True,
         analysis_report=True,
+        judge_model_args=data.get('judge_model_args') or {},
     )
     task_config.eval_type = launch_result.eval_type
     if launch_result.api_url:

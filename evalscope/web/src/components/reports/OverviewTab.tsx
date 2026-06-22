@@ -31,7 +31,7 @@ export default function OverviewTab({ reports, reportName, rootPath, taskConfig,
   const columns = [
     {
       key: 'Dataset',
-      label: 'Dataset',
+      label: t('reportDetail.dataset'),
       sortable: true,
       render: (row: Record<string, unknown>) => {
         const name = String(row.Dataset)
@@ -50,7 +50,7 @@ export default function OverviewTab({ reports, reportName, rootPath, taskConfig,
     },
     {
       key: 'Score',
-      label: 'Score',
+      label: t('reportDetail.score'),
       sortable: true,
       render: (row: Record<string, unknown>) => {
         const score = Number(row.Score)
@@ -75,7 +75,7 @@ export default function OverviewTab({ reports, reportName, rootPath, taskConfig,
     },
     {
       key: 'Samples',
-      label: 'Samples',
+      label: t('reportDetail.samples'),
       sortable: true,
       render: (row: Record<string, unknown>) => (
         <span className="text-[var(--text-muted)]">{Number(row.Samples).toLocaleString()}</span>

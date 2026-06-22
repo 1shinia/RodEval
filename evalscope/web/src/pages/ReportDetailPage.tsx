@@ -117,12 +117,12 @@ export default function ReportDetailPage() {
       <div className="page-enter p-6">
         <Breadcrumb
           items={[
-            { label: 'Reports', href: `/reports?root_path=${encodeURIComponent(rootPath)}` },
-            { label: breadcrumbLabel || 'Detail' },
+            { label: t('reports.title'), href: `/reports?root_path=${encodeURIComponent(rootPath)}` },
+            { label: breadcrumbLabel || t('reportDetail.detail') },
           ]}
         />
         <div className="mt-6 p-6 rounded-[var(--radius)] border border-[var(--danger)] bg-[var(--danger-bg)] text-[var(--danger)]">
-          <p className="text-sm">Failed to load report: {error}</p>
+          <p className="text-sm">{t('reportDetail.failedToLoad')}: {error}</p>
         </div>
       </div>
     )
@@ -133,7 +133,7 @@ export default function ReportDetailPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: 'Reports', href: `/reports?root_path=${encodeURIComponent(rootPath)}` },
+          { label: t('reports.title'), href: `/reports?root_path=${encodeURIComponent(rootPath)}` },
           { label: breadcrumbLabel },
         ]}
       />

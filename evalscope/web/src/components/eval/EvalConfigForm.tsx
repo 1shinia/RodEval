@@ -127,6 +127,11 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   const [ignoreErrors, setIgnoreErrors] = useState(false)
   const [datasetArgs, setDatasetArgs] = useState('')
 
+  // Judge model (for analysis report)
+  const [judgeModel, setJudgeModel] = useState('')
+  const [judgeApiUrl, setJudgeApiUrl] = useState('')
+  const [judgeApiKey, setJudgeApiKey] = useState('')
+
   // Validation
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -306,6 +311,16 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
     if (judgeStrategy && judgeStrategy !== 'auto') config.judge_strategy = judgeStrategy
     if (ignoreErrors) config.ignore_errors = true
     if (datasetArgs) { try { const extra = JSON.parse(datasetArgs); config.dataset_args = { ...(config.dataset_args as Record<string, unknown> || {}), ...extra } } catch { /* ignore */ } }
+
+    // Judge model args (for analysis report generation)
+    if (judgeModel.trim() || judgeApiUrl.trim() || judgeApiKey.trim()) {
+      const jma: Record<string, unknown> = {}
+      if (judgeModel.trim()) jma.model_id = judgeModel.trim()
+      if (judgeApiUrl.trim()) jma.api_url = judgeApiUrl.trim()
+      if (judgeApiKey.trim()) jma.api_key = judgeApiKey
+      config.judge_model_args = jma
+    }
+
     onSubmit(config)
   }
 
@@ -601,6 +616,25 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
                 className={`${inputClass(errors.datasetArgs)} h-20 resize-y`} style={{ fontFamily: 'var(--font-mono)' }}
                 placeholder='{"gsm8k": {"few_shot_num": 4}}' />
               {errors.datasetArgs && <p className="mt-1 text-xs text-red-500">{errors.datasetArgs}</p>}
+            </div>
+            {/* Row 5 — 评判模型（用于生成分析报告） */}
+            <div className="md:col-span-3 border-t border-[var(--border-md)] pt-4 mt-2">
+              <p className={`${FORM_LABEL_CLASS} mb-2`}>{t('eval.judgeModelTitle')}</p>
+              <p className="text-xs text-[var(--text-muted)] mb-3">{t('eval.judgeModelHint')}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField label={t('eval.judgeModel')}>
+                  <input value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)}
+                    className={FORM_INPUT_CLASS} placeholder="Qwen/Qwen3-235B-A22B" />
+                </FormField>
+                <FormField label={t('eval.judgeApiUrl')}>
+                  <input value={judgeApiUrl} onChange={(e) => setJudgeApiUrl(e.target.value)}
+                    className={FORM_INPUT_CLASS} placeholder="https://api-inference.modelscope.cn/v1/" />
+                </FormField>
+                <FormField label={t('eval.judgeApiKey')}>
+                  <input type="password" value={judgeApiKey} onChange={(e) => setJudgeApiKey(e.target.value)}
+                    className={FORM_INPUT_CLASS} placeholder="sk-..." />
+                </FormField>
+              </div>
             </div>
           </div>
         </Card>
