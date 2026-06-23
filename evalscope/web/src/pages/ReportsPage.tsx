@@ -9,6 +9,7 @@ import type { ListReportsResponse, ReportSummary } from '@/api/types'
 import Breadcrumb from '@/components/ui/Breadcrumb'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
+import ServerBadge from '@/components/ui/ServerBadge'
 import ReportFiltersBar, { type ReportFilters } from '@/components/reports/ReportFilters'
 import ReportCard from '@/components/reports/ReportCard'
 
@@ -32,6 +33,7 @@ export default function ReportsPage() {
   const {
     rootPath,
     setRootPath,
+    serverAddress,
     selectedForCompare,
     toggleSelectForCompare,
     setCompareSelection,
@@ -199,8 +201,11 @@ export default function ReportsPage() {
 
   return (
     <div className="page-enter flex flex-col gap-5">
-      {/* Breadcrumb */}
-      <Breadcrumb items={[{ label: t('reports.title') }]} />
+      {/* Header with Breadcrumb and Server Address */}
+      <div className="flex items-center justify-between">
+        <Breadcrumb items={[{ label: t('reports.title') }]} />
+        <ServerBadge address={serverAddress} />
+      </div>
 
       {/* Path bar */}
       <div className="flex items-center gap-2">

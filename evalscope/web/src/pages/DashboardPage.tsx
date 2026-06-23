@@ -11,6 +11,7 @@ import KpiCard from '@/components/ui/KpiCard'
 import ScoreChip from '@/components/ui/ScoreChip'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import PathBar from '@/components/ui/PathBar'
+import ServerBadge from '@/components/ui/ServerBadge'
 import EvalRunCard from '@/components/ui/EvalRunCard'
 import ModelGroupHeader from '@/components/ui/ModelGroupHeader'
 import EmptyState from '@/components/common/EmptyState'
@@ -190,7 +191,7 @@ const PAGE_SIZE = 20
 
 export default function DashboardPage() {
   const { t } = useLocale()
-  const { rootPath, setRootPath } = useReports()
+  const { rootPath, setRootPath, serverAddress } = useReports()
   const navigate = useNavigate()
 
   const [pathInput, setPathInput] = useState(rootPath || './outputs')
@@ -336,6 +337,12 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-5 min-h-0">
+      {/* ── Server Address ── */}
+      <div className="flex items-center justify-between">
+        <h1 className="type-heading-lg text-[var(--text)]">{t('nav.dashboard')}</h1>
+        <ServerBadge address={serverAddress} />
+      </div>
+
       {/* ── Path Bar ── */}
       <PathBar
         value={pathInput}

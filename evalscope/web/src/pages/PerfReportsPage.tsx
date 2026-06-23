@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { listPerfTasks, deletePerfTask, getPerfReportUrl, type PerfTaskMeta } from '@/api/perf'
 import { toast } from '@/components/common/Toast'
+import { api } from '@/api/client'
 import Breadcrumb from '@/components/ui/Breadcrumb'
 import Card from '@/components/ui/Card'
+import ServerBadge from '@/components/ui/ServerBadge'
 import { ExternalLink, FolderOpen, History, Search, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -14,6 +16,7 @@ export default function PerfReportsPage() {
   const [history, setHistory] = useState<PerfTaskMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [rootPath, setRootPath] = useState('')
+  const [serverAddress, setServerAddress] = useState('')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -35,6 +38,15 @@ export default function PerfReportsPage() {
     }, 300)
     return () => clearTimeout(searchTimer.current)
   }, [search])
+
+  // Fetch server address from config
+  useEffect(() => {
+    api<{ server_address?: string }>('/api/v1/config')
+      .then((cfg) => {
+        if (cfg.server_address) setServerAddress(cfg.server_address)
+      })
+      .catch(() => {/* ignore */})
+  }, [])
 
   const loadHistory = useCallback(async (p: number) => {
     setLoading(true)
@@ -77,7 +89,11 @@ export default function PerfReportsPage() {
 
   return (
     <div className="page-enter flex flex-col gap-5">
-      <Breadcrumb items={[{ label: t('nav.perfReports') }]} />
+      {/* Header with Breadcrumb and Server Address */}
+      <div className="flex items-center justify-between">
+        <Breadcrumb items={[{ label: t('nav.perfReports') }]} />
+        <ServerBadge address={serverAddress} />
+      </div>
       <div className="flex items-center gap-2">
         <FolderOpen size={16} className="text-[var(--text-muted)] shrink-0" />
         <input type="text" value={rootPath} onChange={(e) => setRootPath(e.target.value)}

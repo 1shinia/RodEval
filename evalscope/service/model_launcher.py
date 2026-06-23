@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import socket
 import subprocess
 import time
@@ -186,7 +187,7 @@ def _launch_vllm(model_path: str, port: int, extra_args=None) -> subprocess.Pope
         cmd += ['--kv-cache-dtype', str(extra_args['kv_cache_dtype'])]
     if extra_args.get('max_num_seqs'):
         cmd += ['--max-num-seqs', str(extra_args['max_num_seqs'])]
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 def _launch_sglang(model_path: str, port: int, extra_args=None) -> subprocess.Popen:
@@ -217,7 +218,7 @@ def _launch_sglang(model_path: str, port: int, extra_args=None) -> subprocess.Po
         cmd += ['--quantization', str(extra_args['quantization'])]
     if extra_args.get('kv_cache_dtype') and extra_args['kv_cache_dtype'] != 'auto':
         cmd += ['--kv-cache-dtype', str(extra_args['kv_cache_dtype'])]
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 def _launch_llama_cpp(model_path: str, port: int, extra_args=None) -> subprocess.Popen:
@@ -231,7 +232,7 @@ def _launch_llama_cpp(model_path: str, port: int, extra_args=None) -> subprocess
         cmd += ['--n_gpu_layers', str(extra_args['n_gpu_layers'])]
     if extra_args.get('n_batch'):
         cmd += ['--n_batch', str(extra_args['n_batch'])]
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 _SERVER_LAUNCHERS = {'vllm': _launch_vllm, 'sglang': _launch_sglang, 'llama_cpp': _launch_llama_cpp}
@@ -289,12 +290,20 @@ def stop(result: LaunchResult) -> None:
     if proc is None or proc.poll() is not None:
         return
     logger.info(f'[ModelLauncher] Stopping server (pid={proc.pid})')
-    proc.terminate()
+    pgid = None
     try:
+        pgid = os.getpgid(proc.pid)
+        os.killpg(pgid, signal.SIGTERM)
         proc.wait(timeout=15)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        if pgid is not None:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         proc.wait()
+    except ProcessLookupError:
+        pass
 
 
 @contextmanager

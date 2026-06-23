@@ -9,6 +9,7 @@ import { api } from '@/api/client'
 
 interface ReportsState {
   rootPath: string
+  serverAddress: string
   availableReports: string[]
   selectedReports: string[]
   /** Keyed by report_name */
@@ -22,6 +23,7 @@ interface ReportsState {
 
 type Action =
   | { type: 'SET_ROOT'; rootPath: string }
+  | { type: 'SET_SERVER_ADDRESS'; serverAddress: string }
   | { type: 'SET_AVAILABLE'; reports: string[] }
   | { type: 'SET_SELECTED'; reports: string[] }
   | { type: 'CACHE_REPORT'; name: string; data: LoadReportResponse }
@@ -37,6 +39,7 @@ const REPORT_CACHE_LIMIT = 32 // bound the in-memory cache so long sessions don'
 
 const initialState: ReportsState = {
   rootPath: INITIAL_ROOT,
+  serverAddress: '',
   availableReports: [],
   selectedReports: [],
   reportCache: {},
@@ -49,6 +52,8 @@ function reducer(state: ReportsState, action: Action): ReportsState {
   switch (action.type) {
     case 'SET_ROOT':
       return { ...state, rootPath: action.rootPath }
+    case 'SET_SERVER_ADDRESS':
+      return { ...state, serverAddress: action.serverAddress }
     case 'SET_AVAILABLE':
       return { ...state, availableReports: action.reports }
     case 'SET_SELECTED':
@@ -109,10 +114,15 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   // Fetch the server-side default outputs_root from /api/v1/config on mount
   useEffect(() => {
     let cancelled = false
-    api<{ outputs_root: string }>('/api/v1/config')
+    api<{ outputs_root: string; server_address?: string }>('/api/v1/config')
       .then((cfg) => {
-        if (!cancelled && cfg.outputs_root && !userSetRootRef.current) {
-          dispatch({ type: 'SET_ROOT', rootPath: cfg.outputs_root })
+        if (!cancelled) {
+          if (cfg.outputs_root && !userSetRootRef.current) {
+            dispatch({ type: 'SET_ROOT', rootPath: cfg.outputs_root })
+          }
+          if (cfg.server_address) {
+            dispatch({ type: 'SET_SERVER_ADDRESS', serverAddress: cfg.server_address })
+          }
         }
       })
       .catch(() => {/* ignore; keep default */})

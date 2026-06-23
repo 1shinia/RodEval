@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 import uvicorn
 from contextlib import asynccontextmanager
@@ -77,7 +78,7 @@ def start_app(args: Arguments):
                 '--port',
                 str(args.port),
             ]
-            proc = subprocess.Popen(cmd)
+            proc = subprocess.Popen(cmd, start_new_session=True)
             # Wait for server to be ready
             import requests
             import time
@@ -98,12 +99,20 @@ def start_app(args: Arguments):
             def on_exit():
                 if proc.poll() is None:
                     logger.info('Terminating llama.cpp server...')
-                    proc.terminate()
+                    pgid = None
                     try:
+                        pgid = os.getpgid(proc.pid)
+                        os.killpg(pgid, signal.SIGTERM)
                         proc.wait(timeout=10)
                     except subprocess.TimeoutExpired:
-                        proc.kill()
+                        if pgid is not None:
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
                         proc.wait()
+                    except ProcessLookupError:
+                        pass
                     logger.info('llama.cpp server terminated.')
                 else:
                     logger.info('llama.cpp server has already terminated.')
@@ -134,7 +143,8 @@ def start_app(args: Arguments):
                 args.model,
                 attn_arg,
                 str(args.port),
-            ])
+            ],
+                                    start_new_session=True)
 
             # Wait for the server to start accepting connections
             for _ in range(60):
@@ -152,12 +162,20 @@ def start_app(args: Arguments):
             def _on_exit():
                 if proc.poll() is None:
                     logger.info('Terminating transformers server...')
-                    proc.terminate()
+                    pgid = None
                     try:
+                        pgid = os.getpgid(proc.pid)
+                        os.killpg(pgid, signal.SIGTERM)
                         proc.wait(timeout=10)
                     except subprocess.TimeoutExpired:
-                        proc.kill()
+                        if pgid is not None:
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
                         proc.wait()
+                    except ProcessLookupError:
+                        pass
                     logger.info('Transformers server terminated.')
                 else:
                     logger.info('Transformers server has already terminated.')
@@ -183,20 +201,28 @@ def start_app(args: Arguments):
             '--trust-remote-code',
             '--disable-log-requests',
             '--disable-log-stats',
-        ])
+        ], start_new_session=True)
         # yapf: enable
         import atexit
 
         def on_exit():
             if proc.poll() is None:
                 logger.info('Terminating the child process...')
-                proc.terminate()
+                pgid = None
                 try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGTERM)
                     proc.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     logger.warning('Child process did not terminate within the timeout, killing it forcefully...')
-                    proc.kill()
+                    if pgid is not None:
+                        try:
+                            os.killpg(pgid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
                     proc.wait()
+                except ProcessLookupError:
+                    pass
                 logger.info('Child process terminated.')
             else:
                 logger.info('Child process has already terminated.')

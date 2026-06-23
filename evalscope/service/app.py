@@ -3,7 +3,7 @@
 import multiprocessing
 import os
 from datetime import datetime
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 
 from evalscope.utils.logger import get_logger
 from . import db as _db
@@ -89,8 +89,18 @@ def create_app(outputs: str = None):
     def get_config():
         """Return runtime configuration for the frontend."""
         outputs_root = app.config.get('OUTPUTS_ROOT')
+        # Auto-detect backend server address: get the actual server IP and port
+        # Use the socket connection to find the real server address
+        server_address = request.environ.get('HTTP_HOST', request.host)
+        # If accessed through Vite proxy, the host will be the frontend address
+        # We need to replace the port with the backend port
+        if ':' in server_address:
+            host_part = server_address.split(':')[0]
+            backend_port = request.environ.get('SERVER_PORT', '9000')
+            server_address = f'{host_part}:{backend_port}'
         return jsonify({
             'outputs_root': outputs_root or _DEFAULT_ROOT,
+            'server_address': server_address,
         })
 
     @app.route('/api/v1/tasks/running', methods=['GET'])
