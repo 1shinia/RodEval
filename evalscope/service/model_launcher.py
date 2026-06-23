@@ -127,6 +127,20 @@ _PORT_RANGE = range(19000, 19100)
 
 
 def _find_free_port() -> int:
+    """Find a free port using OS-assigned bind(0) to minimise race conditions.
+
+    Falls back to scanning _PORT_RANGE if bind(0) fails for any reason.
+    """
+    # Primary: let OS assign a free port atomically
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(('127.0.0.1', 0))
+            return s.getsockname()[1]
+    except OSError:
+        pass
+
+    # Fallback: scan the preferred range
     for port in _PORT_RANGE:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:

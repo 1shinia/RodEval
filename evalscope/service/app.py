@@ -80,10 +80,48 @@ def create_app(outputs: str = None):
     except Exception as e:
         logger.warning(f'SQLite metadata store init failed (non-fatal): {e}')
 
+    # --- Set up rotating file logging for the service --------------------
+    try:
+        from evalscope.utils.logger import setup_service_logging
+        log_file = os.path.join(outputs_root, 'evalscope_service.log')
+        setup_service_logging(log_file)
+    except Exception as e:
+        logger.debug(f'Service log rotation setup failed (non-fatal): {e}')
+
     @app.route('/health', methods=['GET'])
     def health_check():
-        """Health check endpoint."""
-        return jsonify({'status': 'ok', 'service': 'evalscope', 'timestamp': datetime.now().isoformat()})
+        """Health check endpoint with component status."""
+        checks: dict = {'status': 'ok', 'service': 'evalscope', 'timestamp': datetime.now().isoformat()}
+
+        # SQLite connectivity
+        try:
+            conn = _db._get_conn()
+            conn.execute('SELECT 1')
+            checks['sqlite'] = 'ok'
+        except Exception as e:
+            checks['sqlite'] = f'error: {e}'
+            checks['status'] = 'degraded'
+
+        # Running tasks count
+        try:
+            from .utils import get_running_tasks as _get_running_tasks
+            checks['running_tasks'] = len(_get_running_tasks())
+        except Exception:
+            checks['running_tasks'] = -1
+
+        # Disk space for output directory
+        try:
+            import shutil
+            outputs_root = app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT
+            usage = shutil.disk_usage(outputs_root)
+            checks['disk_free_gb'] = round(usage.free / (1024**3), 2)
+            if usage.free < 1024 * 1024 * 100:  # < 100 MB
+                checks['status'] = 'degraded'
+        except Exception:
+            pass
+
+        status_code = 200 if checks['status'] == 'ok' else 503
+        return jsonify(checks), status_code
 
     @app.route('/api/v1/config', methods=['GET'])
     def get_config():

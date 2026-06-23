@@ -34,7 +34,8 @@ export async function submitPerfTask(
   payload: Record<string, unknown>,
   taskId: string,
 ): Promise<EvalInvokeResponse> {
-  return apiPost<EvalInvokeResponse>('/api/v1/perf/invoke', payload, { 'EvalScope-Task-Id': taskId })
+  // Perf tasks can take minutes — use 5 min timeout
+  return apiPost<EvalInvokeResponse>('/api/v1/perf/invoke', payload, { 'EvalScope-Task-Id': taskId }, 300_000)
 }
 
 export async function getPerfProgress(taskId: string): Promise<ProgressResponse> {

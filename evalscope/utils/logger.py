@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime
 from logging import Logger
+from logging.handlers import RotatingFileHandler
 from typing import List, Optional
 
 from evalscope.constants import BEIJING_TZ, USE_OSS, LoggingConstants
@@ -109,6 +110,10 @@ class ReopenFileHandler(logging.FileHandler):
 
 # Module-level handler class: resolved once at import time from the USE_OSS env var.
 FILE_HANDLER_CLS = ReopenFileHandler if USE_OSS else logging.FileHandler
+
+# Default rotation settings for service logs (50 MB per file, keep 3 backups)
+DEFAULT_MAX_BYTES = 50 * 1024 * 1024
+DEFAULT_BACKUP_COUNT = 3
 
 
 def get_logger(
@@ -258,3 +263,31 @@ def warn_once(logger: Logger, message: str) -> None:
 
 
 _warned: List[str] = []
+
+
+def setup_service_logging(log_file: str, log_level: int = DEFAULT_LEVEL) -> None:
+    """Set up rotating file logging for the service.
+
+    Uses RotatingFileHandler to prevent unbounded log growth.
+    Call this once during service startup (e.g. in create_app).
+
+    Args:
+        log_file: Path to the log file.
+        log_level: Logging level.
+    """
+    if USE_OSS:
+        # On OSS/FUSE, use ReopenFileHandler for visibility
+        return
+
+    logger = get_logger()
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+    handler = RotatingFileHandler(
+        log_file,
+        maxBytes=DEFAULT_MAX_BYTES,
+        backupCount=DEFAULT_BACKUP_COUNT,
+        encoding='utf-8',
+    )
+    handler.setFormatter(plain_detailed_formatter if log_level == logging.DEBUG else plain_simple_formatter)
+    handler.setLevel(log_level)
+    logger.addHandler(handler)

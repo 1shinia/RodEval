@@ -5,7 +5,8 @@ export async function submitEvalTask(
   payload: Record<string, unknown>,
   taskId: string,
 ): Promise<EvalInvokeResponse> {
-  return apiPost<EvalInvokeResponse>('/api/v1/eval/invoke', payload, { 'EvalScope-Task-Id': taskId })
+  // Eval tasks can take minutes — use 5 min timeout
+  return apiPost<EvalInvokeResponse>('/api/v1/eval/invoke', payload, { 'EvalScope-Task-Id': taskId }, 300_000)
 }
 
 export async function getEvalProgress(taskId: string): Promise<ProgressResponse> {
@@ -29,7 +30,8 @@ export async function stopEvalTask(taskId: string): Promise<{ status: string; ta
 export async function resumeEvalTask(taskId: string, apiKey?: string): Promise<EvalInvokeResponse> {
   const body: Record<string, string> = { task_id: taskId }
   if (apiKey) body.api_key = apiKey
-  return apiPost<EvalInvokeResponse>('/api/v1/eval/resume/invoke', body)
+  // Resume can also take minutes
+  return apiPost<EvalInvokeResponse>('/api/v1/eval/resume/invoke', body, undefined, 300_000)
 }
 
 export async function listBenchmarks(type?: 'text' | 'multimodal', all?: boolean): Promise<BenchmarksResponse> {

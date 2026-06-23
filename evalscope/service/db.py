@@ -19,18 +19,16 @@ _local = threading.local()
 _db_path: str | None = None
 
 # ---------------------------------------------------------------------------
-# Connection management
+# Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
+SCHEMA_VERSION = 2  # Bump when adding migrations below
 
-def init_db(output_dir: str) -> None:
-    """Initialise the database path and create tables if needed."""
-    global _db_path
-    _db_path = os.path.join(output_dir, 'evalscope_meta.db')
-    os.makedirs(output_dir, exist_ok=True)
-    conn = _get_conn()
-    conn.executescript(
-        '''
+# Each migration: (target_version, description, SQL statements)
+# Migrations are applied in order; only those with version > current are run.
+_MIGRATIONS: list[tuple[int, str, str]] = [
+    (
+        1, 'initial schema + indexes', '''
         CREATE TABLE IF NOT EXISTS eval_reports (
             task_id        TEXT PRIMARY KEY,
             model_name     TEXT NOT NULL,
@@ -58,9 +56,94 @@ def init_db(output_dir: str) -> None:
             started_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_model
+            ON eval_reports(model_name);
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_dataset
+            ON eval_reports(dataset_name);
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_timestamp
+            ON eval_reports(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_score
+            ON eval_reports(score);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_model
+            ON perf_tasks(model);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_dataset
+            ON perf_tasks(dataset);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_timestamp
+            ON perf_tasks(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_task_state_status
+            ON task_state(status);
+        CREATE INDEX IF NOT EXISTS idx_task_state_task_type
+            ON task_state(task_type);
+    '''
+    ),
+    (
+        2, 'add perf_tasks extra columns', '''
+        -- Example future migration: add columns to perf_tasks
+        -- ALTER TABLE perf_tasks ADD COLUMN concurrency INTEGER DEFAULT 1;
+        -- ALTER TABLE perf_tasks ADD COLUMN duration_seconds REAL DEFAULT 0;
+        -- (No-op for now — placeholder showing the pattern)
+        SELECT 1;
+    '''
+    ),
+]
+
+
+def _get_schema_version(conn: sqlite3.Connection) -> int:
+    """Return the current schema version (0 if no version table exists)."""
+    try:
+        row = conn.execute('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1').fetchone()
+        return row[0] if row else 0
+    except sqlite3.OperationalError:
+        return 0
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply pending migrations to bring the schema up to SCHEMA_VERSION."""
+    # Ensure version tracking table exists
+    conn.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version     INTEGER PRIMARY KEY,
+            description TEXT NOT NULL,
+            applied_at  TEXT NOT NULL
+        )
     '''
     )
     conn.commit()
+
+    current = _get_schema_version(conn)
+    if current >= SCHEMA_VERSION:
+        return
+
+    for version, description, sql in _MIGRATIONS:
+        if version <= current:
+            continue
+        if version > SCHEMA_VERSION:
+            break
+        logger.info(f'DB migration v{current}→v{version}: {description}')
+        conn.executescript(sql)
+        conn.execute(
+            'INSERT INTO schema_version (version, description, applied_at) VALUES (?, ?, ?)',
+            (version, description, datetime.now().isoformat()),
+        )
+        conn.commit()
+        current = version
+
+    logger.info(f'DB schema at v{current}')
+
+
+# ---------------------------------------------------------------------------
+# Connection management
+# ---------------------------------------------------------------------------
+
+
+def init_db(output_dir: str) -> None:
+    """Initialise the database path and create tables if needed."""
+    global _db_path
+    _db_path = os.path.join(output_dir, 'evalscope_meta.db')
+    os.makedirs(output_dir, exist_ok=True)
+    conn = _get_conn()
+    _migrate(conn)
     logger.info(f'SQLite metadata DB ready: {_db_path}')
 
 
