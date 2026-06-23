@@ -481,11 +481,16 @@ def get_evaluation_progress():
         return jsonify({'error': str(e)}), 400
 
     progress_file = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+    task_dir = os.path.join(OUTPUT_DIR, task_id)
     try:
         with open(progress_file, 'r') as f:
             progress = json.load(f)
         return jsonify(progress), 200
     except FileNotFoundError:
+        # If the progress file doesn't exist AND the task directory itself
+        # doesn't exist (or was deleted), the task is not a valid running task
+        if not os.path.isdir(task_dir):
+            return jsonify({'error': f'Task not found: {task_id}'}), 404
         return jsonify({'percent': 0.0}), 200
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
