@@ -93,6 +93,25 @@ class SandboxTaskConfig(BaseArgument):
     when ``None``."""
 
 
+_SENSITIVE_KEY_PATTERNS = ('api_key', 'token', 'secret', 'password', 'passwd', 'auth')
+
+
+def _redact_sensitive(obj):
+    """Recursively redact values for keys matching sensitive patterns."""
+    if isinstance(obj, dict):
+        for key in list(obj.keys()):
+            lower = key.lower()
+            # Only match standalone keys or compound keys with underscore
+            # (api_key, auth_token), not accidental substrings (max_tokens).
+            if any(lower == p or lower.endswith('_' + p) or lower.startswith(p + '_') for p in _SENSITIVE_KEY_PATTERNS):
+                obj[key] = '***'
+            else:
+                _redact_sensitive(obj[key])
+    elif isinstance(obj, list):
+        for item in obj:
+            _redact_sensitive(item)
+
+
 class TaskConfig(BaseArgument):
     # Model-related arguments
     model: Optional[Union[str, Model, ModelAPI]] = None
@@ -514,11 +533,6 @@ class TaskConfig(BaseArgument):
         # Remove sensitive info
         result.pop('api_key', None)
 
-        # Handle nested sensitive info in judge_model_args
-        if self.judge_model_args:
-            result['judge_model_args'] = copy.deepcopy(self.judge_model_args)
-            result['judge_model_args'].pop('api_key', None)
-
         # Serialize Model objects
         if isinstance(self.model, (Model, ModelAPI)):
             result['model'] = self.model.__class__.__name__
@@ -526,6 +540,10 @@ class TaskConfig(BaseArgument):
         # Serialize GenerateConfig
         if isinstance(self.generation_config, GenerateConfig):
             result['generation_config'] = self.generation_config.model_dump(exclude_unset=True)
+
+        # Recursively redact credential-like values in nested dicts
+        # (run after serialization so GenerateConfig/model fields are covered)
+        _redact_sensitive(result)
 
         return result
 

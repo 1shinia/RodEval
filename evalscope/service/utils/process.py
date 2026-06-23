@@ -191,6 +191,13 @@ def stop_process(task_id: str) -> bool:
             # Process already exited, ignore
             pass
     logger.info(f'Task {task_id} stopped by user.')
+    # Update SQLite so the UI reflects the stopped state immediately,
+    # rather than waiting for run_in_subprocess to call unregister_process.
+    try:
+        from .. import db as _db
+        _db.delete_task_state(task_id)
+    except Exception as e:
+        logger.debug(f'Failed to clean task state for {task_id}: {e}')
     return True
 
 
@@ -225,17 +232,22 @@ def _process_worker(func, result_queue, *args, **kwargs):
     # This allows the parent to kill the entire process tree (this process +
     # any children it spawns) via os.killpg() when stopping the task.
     os.setsid()
-    with _capture_stderr() as stderr_buf:
-        try:
-            result = func(*args, **kwargs)
-            result_queue.put({'status': 'success', 'result': result})
-        except BaseException as e:
-            result_queue.put({
-                'status': 'error',
-                'error': str(e),
-                'traceback': traceback.format_exc(),
-                'stderr': stderr_buf.getvalue(),
-            })
+    try:
+        with _capture_stderr() as stderr_buf:
+            try:
+                result = func(*args, **kwargs)
+                result_queue.put({'status': 'success', 'result': result})
+            except BaseException as e:
+                result_queue.put({
+                    'status': 'error',
+                    'error': str(e),
+                    'traceback': traceback.format_exc(),
+                    'stderr': stderr_buf.getvalue(),
+                })
+    except BaseException:
+        # Suppress cleanup-phase noise (e.g. asyncio event loop AbortError
+        # during subprocess teardown) — the real result was already posted.
+        pass
 
 
 def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwargs):

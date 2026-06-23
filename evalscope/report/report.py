@@ -283,10 +283,17 @@ class Report(BaseModel):
             # Use judge_model_args if configured; otherwise fall back to the task's own model settings
             if task_config.judge_model_args:
                 judge_llm = LLMJudge(**task_config.judge_model_args)
+            elif task_config.eval_type == 'llm_ckpt':
+                # Local checkpoints would need to load a second model copy just
+                # for analysis — skip to save memory.  Users can still get an
+                # analysis by explicitly configuring judge_model_args.
+                logger.info('Skipping analysis for local model (set judge_model_args '
+                            'to use a remote judge).')
+                response = 'N/A'
+                self.analysis = response
+                return response
             else:
                 # Default to using the evaluation model itself as the judge.
-                # For local checkpoints we pass model_args (model_path etc.) so
-                # the judge can load the same weights from the filesystem.
                 judge_llm = LLMJudge(
                     api_key=task_config.api_key,
                     api_url=task_config.api_url,

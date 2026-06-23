@@ -173,11 +173,17 @@ def create_app(outputs: str = None):
     # --- SPA static-file serving ------------------------------------------
     if os.path.isdir(_WEB_DIST):
 
+        # Pre-resolve the web dist directory for path-traversal guard.
+        _web_dist_real = os.path.realpath(_WEB_DIST)
+
         @app.route('/', defaults={'path': ''})
         @app.route('/<path:path>')
         def serve_spa(path):
             """Serve the React SPA for all non-API routes."""
-            file_path = os.path.join(_WEB_DIST, path)
+            file_path = os.path.realpath(os.path.join(_WEB_DIST, path))
+            # Prevent path traversal: the resolved file must stay inside _WEB_DIST.
+            if not file_path.startswith(_web_dist_real + os.sep) and file_path != _web_dist_real:
+                return jsonify({'error': 'Not found'}), 404
             if path and os.path.isfile(file_path):
                 return send_from_directory(_WEB_DIST, path)
             return send_from_directory(_WEB_DIST, 'index.html')
