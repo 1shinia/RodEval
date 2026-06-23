@@ -284,11 +284,15 @@ class Report(BaseModel):
             if task_config.judge_model_args:
                 judge_llm = LLMJudge(**task_config.judge_model_args)
             else:
+                # Default to using the evaluation model itself as the judge.
+                # For local checkpoints we pass model_args (model_path etc.) so
+                # the judge can load the same weights from the filesystem.
                 judge_llm = LLMJudge(
                     api_key=task_config.api_key,
                     api_url=task_config.api_url,
                     model_id=task_config.model,
                     eval_type=task_config.eval_type,
+                    model_args=task_config.model_args,
                 )
 
             prompt = ANALYSIS_PROMPT.format(sections=sections, language=language, report_str=self.to_json_str())
