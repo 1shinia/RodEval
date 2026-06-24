@@ -251,8 +251,8 @@ def _launch_llama_cpp(model_path: str, port: int, extra_args=None) -> subprocess
 
 _SERVER_LAUNCHERS = {'vllm': _launch_vllm, 'sglang': _launch_sglang, 'llama_cpp': _launch_llama_cpp}
 
-# Eval types that must NOT run in a subprocess (C extensions crash on spawn)
-_DIRECT_EVAL_TYPES = {'llm_ckpt'}
+# All eval types now run in subprocess for stop/resume support.
+_DIRECT_EVAL_TYPES: set = set()
 
 # ── Main API ──────────────────────────────────────────────────────
 

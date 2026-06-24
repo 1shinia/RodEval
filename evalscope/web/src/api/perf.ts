@@ -56,6 +56,12 @@ export async function stopPerfTask(taskId: string): Promise<{ status: string; ta
   return apiPost<{ status: string; task_id: string }>(`/api/v1/perf/stop?task_id=${encodeURIComponent(taskId)}`, {})
 }
 
+export async function resumePerfTask(taskId: string, apiKey?: string): Promise<EvalInvokeResponse> {
+  const body: Record<string, string> = { task_id: taskId }
+  if (apiKey) body.api_key = apiKey
+  return apiPost<EvalInvokeResponse>('/api/v1/perf/resume/invoke', body, undefined, 300_000)
+}
+
 export async function deletePerfTask(taskId: string): Promise<{ ok: boolean }> {
   return apiDelete<{ ok: boolean }>('/api/v1/perf/delete', { task_id: taskId })
 }

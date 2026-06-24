@@ -8,9 +8,10 @@ import { FORM_INPUT_CLASS, FORM_LABEL_CLASS, inputClass } from '@/components/ui/
 interface Props {
   onSubmit: (config: Record<string, unknown>) => void
   disabled?: boolean
+  onApiKeyChange?: (key: string) => void
 }
 
-export default function PerfConfigForm({ onSubmit, disabled }: Props) {
+export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: Props) {
   const { t } = useLocale()
   const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
   const isLocal = modelSource === 'local'
@@ -21,6 +22,9 @@ export default function PerfConfigForm({ onSubmit, disabled }: Props) {
   const [url, setUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [api, setApi] = useState('openai')
+
+  // Sync API key to parent for resume
+  useEffect(() => { onApiKeyChange?.(apiKey) }, [apiKey, onApiKeyChange])
 
   // Local model fields
   const [modelPath, setModelPath] = useState('')

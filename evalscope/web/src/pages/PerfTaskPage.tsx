@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import PerfConfigForm from '@/components/perf/PerfConfigForm'
 import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
-import { submitPerfTask, stopPerfTask, getPerfProgress, getPerfLog, getPerfReportUrl } from '@/api/perf'
+import { submitPerfTask, stopPerfTask, getPerfProgress, getPerfLog, getPerfReportUrl, resumePerfTask } from '@/api/perf'
 
 const perfApi = {
   submit: submitPerfTask,
@@ -11,14 +11,19 @@ const perfApi = {
   getProgress: getPerfProgress,
   getLog: getPerfLog,
   getReportUrl: getPerfReportUrl,
+  resume: resumePerfTask,
 }
 
 export default function PerfTaskPage() {
   const { t } = useLocale()
+  const apiKeyRef = useRef('')
 
   const api = useMemo(() => perfApi, [])
-  const { running, progress, result, logText, reportUrl, copied,
-    handleSubmit, handleStop, copyLog } = useTaskRunner({ api, taskPrefix: 'perf' })
+  const { running, progress, result, logText, reportUrl, copied, taskId,
+    handleSubmit, handleStop, handleResume: rawResume, copyLog } = useTaskRunner({ api, taskPrefix: 'perf' })
+
+  const onApiKeyChange = useCallback((key: string) => { apiKeyRef.current = key }, [])
+  const handleResume = useCallback((id: string) => { rawResume(id, apiKeyRef.current || undefined) }, [rawResume])
 
   return (
     <TaskPageLayout
@@ -34,8 +39,10 @@ export default function PerfTaskPage() {
       copied={copied}
       onCopy={copyLog}
       onStop={handleStop}
+      onResume={handleResume}
+      taskId={taskId}
     >
-      <PerfConfigForm onSubmit={handleSubmit} disabled={running} />
+      <PerfConfigForm onSubmit={handleSubmit} disabled={running} onApiKeyChange={onApiKeyChange} />
     </TaskPageLayout>
   )
 }

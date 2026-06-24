@@ -261,6 +261,16 @@ def run_performance_test():
         perf_args.enable_progress_tracker = True
         perf_args.no_test_connection = True
 
+        # Save task config for resume capability (strip api_key for security)
+        os.makedirs(perf_args.outputs_dir, exist_ok=True)
+        try:
+            save_data = {k: v for k, v in data.items() if k != 'api_key'}
+            config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
+            with open(config_file, 'w') as f:
+                json.dump(save_data, f, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f'[{task_id}] Failed to save task config: {e}')
+
         logger.info(f'[{task_id}] Running performance benchmark for model: {perf_args.model}')
         logger.info(f'[{task_id}] URL: {perf_args.url}')
 
@@ -330,6 +340,141 @@ def stop_performance_test():
         return jsonify({'status': 'stopped', 'task_id': task_id}), 200
     else:
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
+
+
+@bp_perf.route('/resume/invoke', methods=['POST'])
+def resume_performance_test():
+    """Resume an interrupted performance benchmark task (blocking).
+
+    Request body::
+
+        {"task_id": "perf_1782000000000", "api_key": "sk-..."}
+
+    This endpoint:
+    1. Loads the original task_config.json from the task's work_dir
+    2. Reconstructs PerfArguments from the saved config
+    3. Runs the benchmark, reusing the same output directory
+    4. Returns the same response format as /invoke
+    """
+    data = request.get_json()
+    if not data or 'task_id' not in data:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    task_id = data['task_id']
+    api_key = data.get('api_key')  # API key must be re-provided (not saved in config for security)
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    work_dir = os.path.join(OUTPUT_DIR, task_id)
+    config_file = os.path.join(work_dir, 'task_config.json')
+
+    # Check if task exists
+    if not os.path.exists(config_file):
+        return jsonify({'error': f'Task not found or not resumable: {task_id}'}), 404
+
+    # Concurrency guard
+    model = data.get('model', '')
+    if not try_reserve_slot(task_id, 'perf', model=model):
+        max_perf = int(os.environ.get('MAX_CONCURRENT_PERF', '1'))
+        running = count_running_tasks('perf')
+        return jsonify({
+            'error': f'已有 {running} 个压测任务运行中，最大并发 {max_perf}，请等待完成后再试',
+            'running': running,
+            'max': max_perf,
+        }), 429
+
+    try:
+        # Load original config
+        try:
+            with open(config_file, 'r') as f:
+                saved_data = json.load(f)
+        except Exception as e:
+            error_id = uuid.uuid4().hex[:8]
+            logger.error(f'[{error_id}] [{task_id}] Failed to load config: {e}', exc_info=True)
+            return jsonify({
+                'status': 'error',
+                'task_id': task_id,
+                'error': 'Failed to load task config',
+                'error_id': error_id
+            }), 500
+
+        # Re-inject API key (stripped from saved config for security)
+        if api_key:
+            saved_data['api_key'] = api_key
+
+        # Build PerfArguments from saved config
+        perf_args = PerfArguments.from_dict(saved_data)
+        perf_args.no_timestamp = True
+        perf_args.outputs_dir = work_dir
+        perf_args.name = 'perf'
+        perf_args.enable_progress_tracker = True
+        perf_args.no_test_connection = True
+
+        logger.info(
+            f'[{task_id}] Resuming: model={perf_args.model} '
+            f'api={saved_data.get("api", "openai")} outputs_dir={work_dir}'
+        )
+
+        # Re-create log file (appends to existing)
+        create_log_file(task_id, os.path.join('perf', 'benchmark.log'))
+
+        # Clean up old benchmark databases from previous interrupted runs
+        # (perf library refuses to overwrite existing .db files)
+        import glob
+        for old_db in glob.glob(os.path.join(work_dir, 'perf', '**', 'benchmark_data.db'), recursive=True):
+            try:
+                os.remove(old_db)
+                logger.info(f'[{task_id}] Removed old database: {old_db}')
+            except Exception as e:
+                logger.warning(f'[{task_id}] Failed to remove {old_db}: {e}')
+
+        try:
+            result = run_in_subprocess(
+                run_perf_wrapper, perf_args, task_id=task_id, task_type='perf', model=perf_args.model
+            )
+            table_str = _build_perf_table(result, api_type=perf_args.api)
+            logger.info(f'[{task_id}] Task completed successfully')
+
+            # Update SQLite
+            try:
+                from datetime import datetime
+
+                from .. import db as _db
+                perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
+                has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                runs = 0
+                for search_dir in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
+                    if os.path.isdir(search_dir):
+                        runs += sum(
+                            1 for s in os.listdir(search_dir)
+                            if os.path.isdir(os.path.join(search_dir, s)) and s != 'perf'
+                        )
+                _db.upsert_perf_task(
+                    task_id=task_id,
+                    model=perf_args.model,
+                    api=perf_args.api,
+                    dataset=perf_args.dataset_label or perf_args.dataset or 'N/A',
+                    runs=runs,
+                    has_report=has_report,
+                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                )
+            except Exception as e:
+                logger.debug(f'Failed to write perf to SQLite (non-fatal): {e}')
+
+            return jsonify({
+                'status': 'completed',
+                'task_id': task_id,
+                'result': serialize_result(result),
+                'table': table_str
+            })
+        except Exception as e:
+            error_id = uuid.uuid4().hex[:8]
+            logger.error(f'[{error_id}] [{task_id}] Task failed: {e}', exc_info=True)
+            return jsonify({'status': 'error', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
+    finally:
+        unregister_process(task_id)
 
 
 @bp_perf.route('/delete', methods=['DELETE'])
