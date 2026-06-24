@@ -40,11 +40,8 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       const resume = async () => {
         let logAcc = ''
         let nextLine = 0
-        try {
-          const d = await api.getLog(urlTaskId, 0)
-          if (d.text) { logAcc = d.text; nextLine = d.tail_line }
-        } catch { /* ignore */ }
 
+        // Check completion first so we know whether to fetch full log or tail
         let done = false
         try {
           const p = await api.getProgress(urlTaskId)
@@ -52,8 +49,13 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
           if (p.percent >= 100) done = true
         } catch { done = true }
 
-        // If task already completed, fetch ALL remaining log pages
         if (done) {
+          // Completed: fetch full log from beginning
+          try {
+            const d = await api.getLog(urlTaskId, 0)
+            if (d.text) { logAcc = d.text; nextLine = d.tail_line }
+          } catch { /* ignore */ }
+          // Fetch all remaining pages
           try {
             let safety = 0
             while (nextLine > 0 && safety < 50) {
@@ -69,6 +71,11 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
           setRunning(false)
           setResult({ status: 'ok', task_id: urlTaskId })
         } else {
+          // Running: fetch from end so eval output is visible (config dump is at beginning)
+          try {
+            const d = await api.getLog(urlTaskId)
+            if (d.text) { logAcc = d.text; nextLine = d.tail_line }
+          } catch { /* ignore */ }
           setLogText(logAcc)
         }
       }
