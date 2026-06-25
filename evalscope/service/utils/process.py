@@ -227,6 +227,10 @@ def _process_worker(func, result_queue, *args, **kwargs):
 
     stderr is captured and forwarded through the queue so the parent process
     can surface it even when the child crashes before *func* is reached.
+
+    stdout is redirected to /dev/null to prevent BrokenPipeError from
+    libraries (e.g. Rich, tqdm) that write to stdout when the parent's
+    stdout pipe has been closed (common under web servers).
     """
     # Create a new session so this process becomes the process group leader.
     # This allows the parent to kill the entire process tree (this process +
@@ -234,16 +238,21 @@ def _process_worker(func, result_queue, *args, **kwargs):
     os.setsid()
     try:
         with _capture_stderr() as stderr_buf:
-            try:
-                result = func(*args, **kwargs)
-                result_queue.put({'status': 'success', 'result': result})
-            except BaseException as e:
-                result_queue.put({
-                    'status': 'error',
-                    'error': str(e),
-                    'traceback': traceback.format_exc(),
-                    'stderr': stderr_buf.getvalue(),
-                })
+            with open(os.devnull, 'w') as devnull:
+                original_stdout = sys.stdout
+                sys.stdout = devnull
+                try:
+                    result = func(*args, **kwargs)
+                    result_queue.put({'status': 'success', 'result': result})
+                except BaseException as e:
+                    result_queue.put({
+                        'status': 'error',
+                        'error': str(e),
+                        'traceback': traceback.format_exc(),
+                        'stderr': stderr_buf.getvalue(),
+                    })
+                finally:
+                    sys.stdout = original_stdout
     except BaseException:
         # Suppress cleanup-phase noise (e.g. asyncio event loop AbortError
         # during subprocess teardown) — the real result was already posted.

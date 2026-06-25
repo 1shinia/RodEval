@@ -225,16 +225,10 @@ class OpenaiPlugin(DefaultApiPlugin):
                 # Calculate output tokens
                 output_tokens += self._count_output_tokens(full_response_content)
         else:
-            raise ValueError(
-                'Error: Unable to retrieve usage information\n\n'
-                'This error occurs when:\n'
-                '1. The API response does not contain usage data, AND\n'
-                '2. No tokenizer has been specified or found.\n\n'
-                'To resolve this issue, do ONE of the following:\n'
-                "a) Ensure that the API you're using supports and returns usage information, OR\n"
-                'b) Specify a tokenizer using the `--tokenizer-path` parameter.\n\n'
-                'If you continue to experience issues, '
-                'please open an issue on our GitHub repository https://github.com/modelscope/evalscope .'
+            logger.warning(
+                'Unable to calculate token counts: no usage data in API response '
+                'and no tokenizer configured.  Token metrics will be 0.  '
+                'Specify --tokenizer-path to enable token counting.'
             )
         return input_tokens, output_tokens
 

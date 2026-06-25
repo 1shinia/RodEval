@@ -113,7 +113,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
 
   // Common
   const [limit, setLimit] = useState('5')
-  const [evalBatchSize, setEvalBatchSize] = useState('16')
+  const [evalBatchSize, setEvalBatchSize] = useState('1')
   const [showMore, setShowMore] = useState(false)
   const [repeats, setRepeats] = useState('1')
   const [timeout, setTimeout_] = useState('60')
