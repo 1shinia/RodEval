@@ -38,6 +38,7 @@ export default function Collapsible({
   return (
     <div style={style}>
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
         style={{
           display: 'flex',

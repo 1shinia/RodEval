@@ -199,6 +199,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
     if (!isLocal && !model.trim()) newErrors.model = 'Required'
     if (isLocal && !modelPath.trim()) newErrors.modelPath = 'Required'
     if (!isLocal && !apiUrl.trim()) newErrors.apiUrl = 'Required'
+    if (!isLocal && !apiKey.trim()) newErrors.apiKey = 'Required'
     if (isLocalDataset) {
       if (!datasetPath.trim()) newErrors.datasetPath = 'Required'
     } else {
@@ -447,8 +448,8 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
               onChange={(e) => { setApiUrl(e.target.value); if (errors.apiUrl) setErrors((p) => ({ ...p, apiUrl: '' })) }}
               className={inputClass(errors.apiUrl)} placeholder="http://localhost:8000/v1" />
           </FormField>
-          <FormField label={t('eval.apiKey')}>
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className={FORM_INPUT_CLASS} placeholder="sk-..." />
+          <FormField label={t('eval.apiKey')} required error={errors.apiKey}>
+            <input type="password" value={apiKey} onChange={(e) => { setApiKey(e.target.value); if (errors.apiKey) setErrors((p) => ({ ...p, apiKey: '' })) }} className={inputClass(errors.apiKey)} placeholder="sk-..." />
           </FormField>
         </>)}
 
