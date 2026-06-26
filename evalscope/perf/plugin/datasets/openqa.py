@@ -18,13 +18,18 @@ class OpenqaDatasetPlugin(DatasetPluginBase):
 
     def build_messages(self) -> Iterator[List[Dict]]:
         if not self.query_parameters.dataset_path:
-            from modelscope import dataset_snapshot_download
-
             file_name = 'open_qa.jsonl'
+            # Try local cache first to avoid ModelScope API call (GFW-blocked)
             import contextlib
             import os as _os
-            with contextlib.redirect_stdout(open(_os.devnull, 'w')):
-                local_path = dataset_snapshot_download('AI-ModelScope/HC3-Chinese', allow_patterns=[file_name])
+            cache_dir = os.path.expanduser('~/.cache/modelscope/hub/datasets/AI-ModelScope/HC3-Chinese')
+            cached_file = os.path.join(cache_dir, file_name)
+            if os.path.isfile(cached_file):
+                local_path = cache_dir
+            else:
+                from modelscope import dataset_snapshot_download
+                with contextlib.redirect_stdout(open(_os.devnull, 'w')):
+                    local_path = dataset_snapshot_download('AI-ModelScope/HC3-Chinese', allow_patterns=[file_name])
             self.query_parameters.dataset_path = os.path.join(local_path, file_name)
 
         for item in self.dataset_line_by_line(self.query_parameters.dataset_path):

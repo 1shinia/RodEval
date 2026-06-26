@@ -64,9 +64,15 @@ class ShareGPTDatasetPluginBase(DatasetPluginBase):
         if not self.query_parameters.dataset_path:
             import contextlib
             import os as _os
-            from modelscope import dataset_snapshot_download
-            with contextlib.redirect_stdout(open(_os.devnull, 'w')):
-                local_path = dataset_snapshot_download('swift/sharegpt', allow_patterns=[self.FILE_NAME])
+            repo = 'swift/sharegpt'
+            cache_dir = os.path.expanduser(f'~/.cache/modelscope/hub/datasets/{repo}')
+            cached_file = os.path.join(cache_dir, self.FILE_NAME)
+            if os.path.isfile(cached_file):
+                local_path = cache_dir
+            else:
+                from modelscope import dataset_snapshot_download
+                with contextlib.redirect_stdout(open(_os.devnull, 'w')):
+                    local_path = dataset_snapshot_download(repo, allow_patterns=[self.FILE_NAME])
             self.query_parameters.dataset_path = os.path.join(local_path, self.FILE_NAME)
 
         for item in self.dataset_line_by_line(self.query_parameters.dataset_path):
