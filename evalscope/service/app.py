@@ -1,7 +1,9 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """Flask service for EvalScope evaluation and performance testing."""
+import logging
 import multiprocessing
 import os
+import time
 from datetime import datetime
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -97,6 +99,9 @@ def create_app(outputs: str = None):
             logger.info('Startup cleanup: removed %d old task dirs, freed %.1f MB', result['removed'], freed_mb)
     except Exception as e:
         logger.debug(f'Startup log cleanup failed (non-fatal): {e}')
+
+    # --- Access logging --------------------------------------------------
+    _setup_access_logging(app, outputs_root)
 
     @app.route('/health', methods=['GET'])
     def health_check():
@@ -215,6 +220,50 @@ def create_app(outputs: str = None):
         return jsonify({'error': 'Internal server error'}), 500
 
     return app
+
+
+def _setup_access_logging(app: Flask, outputs_root: str) -> None:
+    """Add before/after-request hooks to log client IP and request metadata.
+
+    Writes to ``evalscope_access.log`` with rotation (50 MB × 3 backups).
+    Skips the ``/health`` endpoint to keep noise low.
+    Enabled by default; set ``EVALSCOPE_ACCESS_LOG=0`` to disable.
+    """
+    if os.environ.get('EVALSCOPE_ACCESS_LOG', '1') == '0':
+        return
+
+    access_log = logging.getLogger('evalscope.access')
+    access_log.propagate = False
+
+    log_path = os.path.join(outputs_root, 'evalscope_access.log')
+    handler = logging.handlers.RotatingFileHandler(log_path, maxBytes=50 * 1024 * 1024, backupCount=3, encoding='utf-8')
+    handler.setFormatter(logging.Formatter('%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+    access_log.addHandler(handler)
+    access_log.setLevel(logging.INFO)
+
+    @app.before_request
+    def _capture_start():
+        request._start_time = time.time()
+
+    @app.after_request
+    def _log_access(response):
+        if request.path == '/health':
+            return response
+
+        elapsed = (time.time() - getattr(request, '_start_time', time.time())) * 1000
+        client_ip = (
+            request.headers.get('X-Forwarded-For', '').split(',')[0].strip() or request.headers.get('X-Real-IP', '')
+            or request.remote_addr or '-'
+        )
+        access_log.info(
+            '%s %s %s %d %.0fms',
+            client_ip,
+            request.method,
+            request.path,
+            response.status_code,
+            elapsed,
+        )
+        return response
 
 
 def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, outputs: str = None, threads: int = 16):
