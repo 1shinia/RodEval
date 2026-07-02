@@ -76,6 +76,7 @@ def create_app(outputs: str = None):
     # --- Initialise SQLite metadata store --------------------------------
     outputs_root = app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT
     try:
+        _db.write_service_pid(outputs_root)
         _db.init_db(outputs_root)
         _db.backfill(outputs_root)
         _db.recover_stale_tasks()

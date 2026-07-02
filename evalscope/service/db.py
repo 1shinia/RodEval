@@ -482,38 +482,72 @@ def get_all_task_states() -> list[dict]:
 
 
 def recover_stale_tasks() -> list[str]:
-    """Mark 'running' tasks whose PID is dead as 'orphaned'.
+    """Mark 'running' tasks from a previous service instance as 'orphaned'.
 
     Called on server startup to clean up stale state from a previous crash.
+    Uses a PID file (``evalscope_service.pid`` in the outputs directory) to
+    determine whether the previous service instance is still alive.  If the
+    old service is dead, all running tasks are marked orphaned regardless
+    of their child-process liveness (eval children use os.setsid() and can
+    outlive the parent service).
+
     Returns the list of task_ids that were marked orphaned.
     """
-    import signal
     conn = _get_conn()
-    rows = conn.execute("SELECT task_id, pid FROM task_state WHERE status = 'running'").fetchall()
 
-    orphaned: list[str] = []
-    for row in rows:
-        pid = row['pid']
-        if pid is None:
-            orphaned.append(row['task_id'])
-            continue
-        # Check if the process is still alive
-        try:
-            os.kill(pid, 0)  # Signal 0 = check existence, no actual signal sent
-        except (OSError, ProcessLookupError):
-            orphaned.append(row['task_id'])
+    if _db_path is None:
+        return []
 
+    pid_file = os.path.join(os.path.dirname(_db_path), 'evalscope_service.pid')
+    old_pid = _read_service_pid(pid_file)
+
+    # If old service is still alive, its tasks are legitimate — skip recovery.
+    if old_pid is not None and _pid_alive(old_pid):
+        logger.info(f'Previous service (PID {old_pid}) is still running — skipping stale task recovery.')
+        return []
+
+    rows = conn.execute("SELECT task_id FROM task_state WHERE status = 'running'").fetchall()
+    if not rows:
+        return []
+
+    orphaned = [row['task_id'] for row in rows]
     now = datetime.now().isoformat()
     for tid in orphaned:
         conn.execute(
             "UPDATE task_state SET status = 'orphaned', updated_at = ? WHERE task_id = ?",
             (now, tid),
         )
-    if orphaned:
-        conn.commit()
-        logger.info(f'Recovered {len(orphaned)} stale tasks: {orphaned}')
-
+    conn.commit()
+    logger.info(f'Recovered {len(orphaned)} stale tasks from dead service (PID {old_pid}): {orphaned}')
     return orphaned
+
+
+def write_service_pid(output_dir: str) -> None:
+    """Write the current process PID to ``evalscope_service.pid``.
+
+    Must be called once on service startup, before :func:`recover_stale_tasks`.
+    """
+    pid_file = os.path.join(output_dir, 'evalscope_service.pid')
+    with open(pid_file, 'w') as f:
+        f.write(str(os.getpid()))
+
+
+def _read_service_pid(pid_file: str) -> int | None:
+    """Read a PID from *pid_file*; return None if the file is missing or corrupt."""
+    try:
+        with open(pid_file) as f:
+            return int(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _pid_alive(pid: int) -> bool:
+    """Return True if a process with *pid* exists."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
 
 
 # ---------------------------------------------------------------------------

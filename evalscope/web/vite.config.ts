@@ -16,11 +16,13 @@ export default defineConfig({
     proxy: {
       '/api/v1': {
         target: 'http://127.0.0.1:9002',
-        changeOrigin: false,
+        changeOrigin: true,
+        xfwd: true,
       },
       '/health': {
         target: 'http://127.0.0.1:9002',
-        changeOrigin: false,
+        changeOrigin: true,
+        xfwd: true,
       },
     },
   },
