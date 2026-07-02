@@ -685,3 +685,7 @@ def backfill(output_dir: str) -> None:
 
     # Force WAL checkpoint after bulk backfill writes
     checkpoint_db()
+
+    # Update query planner statistics after bulk insert
+    conn.execute('PRAGMA optimize')
+    logger.debug('DB statistics optimized')
