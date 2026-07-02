@@ -130,6 +130,14 @@ def _build_task_config_openai(data: dict) -> TaskConfig:
     """Build a TaskConfig for OpenAI API mode."""
     if not data.get('eval_type'):
         data['eval_type'] = EvalType.OPENAI_API
+    # Auto-fill judge model args from eval model config when not provided
+    if not data.get('judge_model_args'):
+        data['judge_model_args'] = {
+            'model_id': data.get('model'),
+            'api_url': data.get('api_url'),
+            'api_key': data.get('api_key'),
+            'eval_type': 'openai_api',
+        }
     task_config = TaskConfig.from_dict(data)
     task_config.no_timestamp = True
     task_config.enable_progress_tracker = True

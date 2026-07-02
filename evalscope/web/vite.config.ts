@@ -15,11 +15,11 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api/v1': {
-        target: 'http://127.0.0.1:9000',
+        target: 'http://127.0.0.1:9002',
         changeOrigin: false,
       },
       '/health': {
-        target: 'http://127.0.0.1:9000',
+        target: 'http://127.0.0.1:9002',
         changeOrigin: false,
       },
     },

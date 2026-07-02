@@ -88,6 +88,16 @@ def create_app(outputs: str = None):
     except Exception as e:
         logger.debug(f'Service log rotation setup failed (non-fatal): {e}')
 
+    # --- Clean up old task logs (retention policy) -----------------------
+    try:
+        from .utils.log import cleanup_old_task_logs
+        result = cleanup_old_task_logs()
+        if result.get('removed'):
+            freed_mb = result['freed_bytes'] / (1024 * 1024)
+            logger.info('Startup cleanup: removed %d old task dirs, freed %.1f MB', result['removed'], freed_mb)
+    except Exception as e:
+        logger.debug(f'Startup log cleanup failed (non-fatal): {e}')
+
     @app.route('/health', methods=['GET'])
     def health_check():
         """Health check endpoint with component status."""
@@ -267,4 +277,12 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
 
 
 if __name__ == '__main__':
-    run_service()
+    import argparse
+    parser = argparse.ArgumentParser(description='EvalScope Service')
+    parser.add_argument('--port', type=int, default=9000, help='Port to listen on (default: 9000)')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to bind to')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--outputs', type=str, default=None, help='Output directory')
+    parser.add_argument('--threads', type=int, default=16, help='Worker threads')
+    args = parser.parse_args()
+    run_service(host=args.host, port=args.port, debug=args.debug, outputs=args.outputs, threads=args.threads)

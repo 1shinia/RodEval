@@ -111,9 +111,39 @@ class ReopenFileHandler(logging.FileHandler):
 # Module-level handler class: resolved once at import time from the USE_OSS env var.
 FILE_HANDLER_CLS = ReopenFileHandler if USE_OSS else logging.FileHandler
 
+
+def _make_file_handler(
+    log_file: str,
+    file_mode: str = 'w',
+    max_bytes: Optional[int] = None,
+    backup_count: Optional[int] = None,
+) -> logging.FileHandler:
+    """Create a file handler, using RotatingFileHandler when rotation params are set.
+
+    On OSS/FUSE mounts, always uses ReopenFileHandler regardless of rotation settings.
+    """
+    if USE_OSS:
+        return ReopenFileHandler(log_file, mode=file_mode, encoding='utf-8')
+    if max_bytes is not None:
+        return RotatingFileHandler(
+            log_file,
+            mode=file_mode,
+            encoding='utf-8',
+            maxBytes=max_bytes,
+            backupCount=backup_count or 1,
+        )
+    return logging.FileHandler(log_file, mode=file_mode, encoding='utf-8')
+
+
 # Default rotation settings for service logs (50 MB per file, keep 3 backups)
 DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 DEFAULT_BACKUP_COUNT = 3
+
+# Rotation settings for task logs — configurable via environment variables.
+# Task logs (eval/perf) use smaller defaults to prevent unbounded growth
+# across potentially hundreds of tasks.
+TASK_LOG_MAX_BYTES = int(os.getenv('EVALSCOPE_TASK_LOG_MAX_BYTES', str(10 * 1024 * 1024)))  # 10 MB
+TASK_LOG_BACKUP_COUNT = int(os.getenv('EVALSCOPE_TASK_LOG_BACKUP_COUNT', '2'))
 
 
 def get_logger(
@@ -122,6 +152,8 @@ def get_logger(
     log_level: int = DEFAULT_LEVEL,
     file_mode: str = 'w',
     force: bool = False,
+    max_bytes: Optional[int] = None,
+    backup_count: Optional[int] = None,
 ):
     """Get logging logger
 
@@ -131,6 +163,8 @@ def get_logger(
         log_level: Logging level to set.
         file_mode: Mode to open the file when log_file is provided (default 'w').
         force: If True, reconfigure the existing logger (levels, formatters, handlers).
+        max_bytes: Max bytes per log file before rotation (default: None = no rotation).
+        backup_count: Number of backup files to keep when rotating.
     """
 
     if name:
@@ -155,7 +189,7 @@ def get_logger(
                         color_detailed_formatter if log_level == logging.DEBUG else color_simple_formatter
                     )
             # Ensure file handler points to current log_file (replace if needed)
-            add_file_handler_if_needed(logger, log_file, file_mode, log_level)
+            add_file_handler_if_needed(logger, log_file, file_mode, log_level, max_bytes, backup_count)
         return logger
 
     # handle duplicate logs to the console
@@ -176,7 +210,7 @@ def get_logger(
     handlers = [stream_handler]
 
     if is_worker0 and log_file is not None:
-        file_handler = FILE_HANDLER_CLS(log_file, mode=file_mode, encoding='utf-8')
+        file_handler = _make_file_handler(log_file, file_mode, max_bytes, backup_count)
         handlers.append(file_handler)
 
     for handler in handlers:
@@ -199,9 +233,19 @@ def get_logger(
 
 
 def configure_logging(debug: bool, log_file: Optional[str] = None):
-    """Configure logging level based on the debug flag."""
+    """Configure logging level based on the debug flag.
+
+    When *log_file* is set, enables rotating file logging with defaults
+    from environment variables ``EVALSCOPE_TASK_LOG_MAX_BYTES`` (10 MB)
+    and ``EVALSCOPE_TASK_LOG_BACKUP_COUNT`` (2).
+    """
     if log_file:
-        get_logger(log_file=log_file, force=True)
+        get_logger(
+            log_file=log_file,
+            force=True,
+            max_bytes=TASK_LOG_MAX_BYTES,
+            backup_count=TASK_LOG_BACKUP_COUNT,
+        )
     if debug:
         get_logger(log_level=logging.DEBUG, force=True)
 
@@ -211,6 +255,8 @@ def add_file_handler_if_needed(
     log_file: Optional[str],
     file_mode: str,
     log_level: int,
+    max_bytes: Optional[int] = None,
+    backup_count: Optional[int] = None,
 ) -> None:
     """Ensure logger has a FileHandler targeting log_file.
     - If no FileHandler exists, add one.
@@ -250,7 +296,7 @@ def add_file_handler_if_needed(
         except Exception:
             pass
 
-    file_handler = FILE_HANDLER_CLS(target_path, mode=file_mode, encoding='utf-8')
+    file_handler = _make_file_handler(target_path, file_mode, max_bytes, backup_count)
     file_handler.setFormatter(plain_detailed_formatter if log_level == logging.DEBUG else plain_simple_formatter)
     file_handler.setLevel(log_level)
     logger.addHandler(file_handler)
@@ -268,20 +314,26 @@ _warned: List[str] = []
 def setup_service_logging(log_file: str, log_level: int = DEFAULT_LEVEL) -> None:
     """Set up rotating file logging for the service.
 
+    Creates two log files:
+      - ``log_file`` — all levels (INFO+), rotating at 50 MB × 3 backups.
+      - ``log_file`` with ``.error`` suffix — ERROR+ only, same rotation policy.
+
     Uses RotatingFileHandler to prevent unbounded log growth.
     Call this once during service startup (e.g. in create_app).
 
     Args:
-        log_file: Path to the log file.
-        log_level: Logging level.
+        log_file: Path to the main log file. The error log is derived from this.
+        log_level: Logging level for the main handler.
     """
     if USE_OSS:
         # On OSS/FUSE, use ReopenFileHandler for visibility
         return
 
     logger = get_logger()
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    log_dir = os.path.dirname(log_file)
+    os.makedirs(log_dir, exist_ok=True)
 
+    # --- Main handler: all levels (INFO+) ---
     handler = RotatingFileHandler(
         log_file,
         maxBytes=DEFAULT_MAX_BYTES,
@@ -291,3 +343,16 @@ def setup_service_logging(log_file: str, log_level: int = DEFAULT_LEVEL) -> None
     handler.setFormatter(plain_detailed_formatter if log_level == logging.DEBUG else plain_simple_formatter)
     handler.setLevel(log_level)
     logger.addHandler(handler)
+
+    # --- Error-only handler ---
+    base, ext = os.path.splitext(log_file)
+    error_log_file = f'{base}.error{ext}'
+    error_handler = RotatingFileHandler(
+        error_log_file,
+        maxBytes=DEFAULT_MAX_BYTES,
+        backupCount=DEFAULT_BACKUP_COUNT,
+        encoding='utf-8',
+    )
+    error_handler.setFormatter(plain_detailed_formatter)
+    error_handler.setLevel(logging.ERROR)
+    logger.addHandler(error_handler)

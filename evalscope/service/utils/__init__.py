@@ -10,6 +10,7 @@ from .benchmarks import (
 )
 from .log import (
     OUTPUT_DIR,
+    cleanup_old_task_logs,
     create_log_file,
     get_log_content,
     validate_report_name,

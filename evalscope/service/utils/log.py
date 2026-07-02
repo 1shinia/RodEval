@@ -130,3 +130,118 @@ def get_log_content(task_id: str, sub_path: str, start_line: int = None, page: i
     tail_line = head_line + len(lines)
     # Use ''.join to preserve original newlines in each line
     return {'text': ''.join(lines), 'head_line': head_line, 'tail_line': tail_line, 'total_lines': total_lines}
+
+
+# Retention policy for old task logs (default 30 days, configurable via env var).
+_RETENTION_DAYS = int(os.getenv('EVALSCOPE_LOG_RETENTION_DAYS', '30'))
+
+
+def cleanup_old_task_logs() -> dict:
+    """Remove task output directories older than the retention period.
+
+    Uses SQLite metadata (``finished_at``) when available; falls back to
+    directory modification time.  Skips directories that are currently
+    running (checked against the in-memory registry).
+
+    Returns:
+        dict with keys ``removed`` (int), ``skipped_running`` (int),
+        ``freed_bytes`` (int), ``errors`` (list of str).
+    """
+    import shutil
+    import time
+
+    from evalscope.utils.logger import get_logger
+
+    logger = get_logger()
+    cutoff = time.time() - _RETENTION_DAYS * 86400
+    removed = 0
+    skipped_running = 0
+    freed_bytes = 0
+    errors: list = []
+
+    if not os.path.isdir(OUTPUT_DIR):
+        return {'removed': 0, 'skipped_running': 0, 'freed_bytes': 0, 'errors': ['output_dir not found']}
+
+    # Gather running task IDs from the in-memory registry.
+    running_ids: set = set()
+    try:
+        from ..utils.process import get_running_tasks as _get_running
+        for t in _get_running():
+            running_ids.add(t['task_id'])
+    except Exception:
+        pass
+
+    # Try SQLite for finished_at timestamps.
+    db_finished: dict = {}
+    try:
+        from .. import db as _db
+        conn = _db._get_conn()
+        rows = conn.execute('SELECT task_id, finished_at FROM task_state WHERE finished_at IS NOT NULL').fetchall()
+        db_finished = {r['task_id']: r['finished_at'] for r in rows}
+    except Exception:
+        pass
+
+    for entry in os.scandir(OUTPUT_DIR):
+        if not entry.is_dir():
+            continue
+        dir_name = entry.name
+
+        # Never clean up the service log or metadata DB.
+        if dir_name.startswith('evalscope_'):
+            continue
+
+        # Skip running tasks.
+        if dir_name in running_ids:
+            skipped_running += 1
+            continue
+
+        # Determine age: prefer SQLite finished_at, fall back to mtime.
+        if dir_name in db_finished:
+            try:
+                # finished_at is ISO format: '2026-06-01T12:00:00'
+                ts = time.mktime(time.strptime(db_finished[dir_name][:19], '%Y-%m-%dT%H:%M:%S'))
+            except Exception:
+                ts = entry.stat().st_mtime
+        else:
+            ts = entry.stat().st_mtime
+
+        if ts >= cutoff:
+            continue  # still within retention window
+
+        # Remove the directory.
+        try:
+            dir_size = _dir_size(entry.path)
+            shutil.rmtree(entry.path)
+            removed += 1
+            freed_bytes += dir_size
+        except Exception as e:
+            errors.append(f'{dir_name}: {e}')
+
+    if removed > 0:
+        logger.info(
+            'Log retention cleanup: removed %d old task directories, freed %.1f MB (%d running tasks skipped)', removed,
+            freed_bytes / (1024 * 1024), skipped_running
+        )
+    if errors:
+        for err in errors:
+            logger.warning('Log retention cleanup error: %s', err)
+
+    return {
+        'removed': removed,
+        'skipped_running': skipped_running,
+        'freed_bytes': freed_bytes,
+        'errors': errors,
+    }
+
+
+def _dir_size(path: str) -> int:
+    """Return total size of a directory tree in bytes."""
+    total = 0
+    for dirpath, _dirnames, filenames in os.walk(path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            try:
+                total += os.path.getsize(fp)
+            except OSError:
+                pass
+    return total
