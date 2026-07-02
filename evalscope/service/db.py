@@ -525,6 +525,7 @@ def backfill(output_dir: str) -> None:
     """Scan existing output directories and populate the metadata DB.
 
     Safe to run multiple times (uses INSERT OR REPLACE).
+    Skips directories already present in the DB to avoid redundant work.
     """
     if not os.path.isdir(output_dir):
         return
@@ -536,8 +537,17 @@ def backfill(output_dir: str) -> None:
         from evalscope.utils.data_utils import load_single_report, scan_for_report_folders
         raw_reports = scan_for_report_folders(output_dir)
         eval_count = 0
+        eval_skipped = 0
+        # Pre-fetch existing task IDs to skip redundant processing
+        existing_eval = {r[0] for r in conn.execute('SELECT task_id FROM eval_reports').fetchall()}
         for rn in raw_reports:
             try:
+                # Extract task_id (prefix) from composite report_name
+                from evalscope.utils.data_utils import process_report_name
+                prefix, _, _ = process_report_name(rn)
+                if prefix in existing_eval:
+                    eval_skipped += 1
+                    continue
                 report_list, datasets, _ = load_single_report(output_dir, rn)
                 if not report_list:
                     continue
@@ -587,17 +597,24 @@ def backfill(output_dir: str) -> None:
             except Exception as e:
                 logger.debug(f'Backfill: skip eval report {rn}: {e}')
         if eval_count:
-            logger.info(f'Backfill: indexed {eval_count} eval reports')
+            logger.info(f'Backfill: indexed {eval_count} eval reports ({eval_skipped} already in DB)')
     except Exception as e:
         logger.warning(f'Backfill: eval reports failed: {e}')
 
     # --- Backfill perf tasks ---
     try:
         perf_count = 0
+        perf_skipped = 0
+        existing_perf = {r[0] for r in conn.execute('SELECT task_id FROM perf_tasks').fetchall()}
         for entry in sorted(os.listdir(output_dir), reverse=True):
             task_dir = os.path.join(output_dir, entry)
             perf_dir = os.path.join(task_dir, 'perf')
             if not os.path.isdir(task_dir) or not os.path.isdir(perf_dir):
+                continue
+
+            # Skip entries already in DB
+            if entry in existing_perf:
+                perf_skipped += 1
                 continue
 
             model = 'N/A'
@@ -658,7 +675,7 @@ def backfill(output_dir: str) -> None:
             )
             perf_count += 1
         if perf_count:
-            logger.info(f'Backfill: indexed {perf_count} perf tasks')
+            logger.info(f'Backfill: indexed {perf_count} perf tasks ({perf_skipped} already in DB)')
     except Exception as e:
         logger.warning(f'Backfill: perf tasks failed: {e}')
 
