@@ -156,8 +156,27 @@ def _get_conn() -> sqlite3.Connection:
         conn = sqlite3.connect(_db_path, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA journal_mode=WAL')
+        # Aggressive auto-checkpoint: flush WAL after ~800 KB instead of 4 MB default
+        conn.execute('PRAGMA wal_autocheckpoint=200')
         _local.conn = conn
     return conn
+
+
+def checkpoint_db() -> dict:
+    """Force a WAL checkpoint to truncate the write-ahead log.
+
+    Returns a dict with ``busy``, ``log``, ``checkpointed`` page counts.
+    Call after bulk writes (e.g. backfill) or periodically on a busy server.
+    """
+    conn = _get_conn()
+    # TRUNCATE: reset the WAL file to zero bytes after checkpoint
+    row = conn.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
+    result = {'busy': row[0], 'log': row[1], 'checkpointed': row[2]}
+    if result['checkpointed'] > 0:
+        logger.debug(
+            'WAL checkpoint: %d pages moved, %d in log, %d busy', result['checkpointed'], result['log'], result['busy']
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -204,20 +223,24 @@ def query_eval_reports(
     params: list[Any] = []
 
     if search:
-        where.append('(LOWER(model_name) LIKE ? OR LOWER(dataset_name) LIKE ?)')
+        # SQLite LIKE is case-insensitive for ASCII — no LOWER() needed, index-friendly
+        where.append('(model_name LIKE ? OR dataset_name LIKE ?)')
         params.extend([f'%{search}%', f'%{search}%'])
     if models:
         model_set = [m.strip().lower() for m in models.split(';') if m.strip()]
         if model_set:
-            placeholders = ','.join('?' for _ in model_set)
-            where.append(f'LOWER(model_name) IN ({placeholders})')
-            params.extend(model_set)
+            # Individual comparisons with COLLATE NOCASE (IN doesn't support it)
+            model_conds = []
+            for m in model_set:
+                model_conds.append('model_name = ? COLLATE NOCASE')
+                params.append(m)
+            where.append(f'({" OR ".join(model_conds)})')
     if datasets:
         ds_set = [d.strip().lower() for d in datasets.split(';') if d.strip()]
         if ds_set:
             ds_conds = []
             for ds in ds_set:
-                ds_conds.append('LOWER(dataset_name) LIKE ?')
+                ds_conds.append('dataset_name LIKE ?')
                 params.append(f'%{ds}%')
             where.append(f'({" OR ".join(ds_conds)})')
     if score_min is not None:
@@ -341,7 +364,7 @@ def query_perf_tasks(
     params: list[Any] = []
 
     if search:
-        where.append('(LOWER(model) LIKE ? OR LOWER(dataset) LIKE ?)')
+        where.append('(model LIKE ? OR dataset LIKE ?)')
         params.extend([f'%{search}%', f'%{search}%'])
     if filter_model:
         where.append('model = ?')
@@ -642,3 +665,6 @@ def backfill(output_dir: str) -> None:
     total_eval = conn.execute('SELECT COUNT(*) FROM eval_reports').fetchone()[0]
     total_perf = conn.execute('SELECT COUNT(*) FROM perf_tasks').fetchone()[0]
     logger.info(f'Backfill complete: {total_eval} eval reports, {total_perf} perf tasks in DB')
+
+    # Force WAL checkpoint after bulk backfill writes
+    checkpoint_db()
