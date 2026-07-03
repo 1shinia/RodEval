@@ -461,14 +461,34 @@ def delete_task_state(task_id: str) -> None:
 
 
 def list_running_tasks() -> list[dict]:
-    """Return all tasks with status='running'."""
+    """Return all tasks with status='running'.
+
+    As a safety net, any task whose child PID is no longer alive is
+    automatically marked 'orphaned' and excluded from the result.
+    This catches edge cases where the subprocess died without the
+    parent updating task_state (e.g. OOM kill, segfault).
+    """
     conn = _get_conn()
     rows = conn.execute(
         '''SELECT task_id, task_type, status, pid, model, started_at, updated_at
            FROM task_state WHERE status = 'running'
            ORDER BY started_at DESC'''
     ).fetchall()
-    return [dict(r) for r in rows]
+    alive = []
+    now = datetime.now().isoformat()
+    for r in rows:
+        pid = r['pid']
+        if pid and _pid_alive(pid):
+            alive.append(dict(r))
+        else:
+            conn.execute(
+                "UPDATE task_state SET status = 'orphaned', updated_at = ? WHERE task_id = ?",
+                (now, r['task_id']),
+            )
+            logger.info(f"Auto-orphaned zombie task {r['task_id']} (PID {pid} dead)")
+    if alive and len(alive) < len(rows):
+        conn.commit()
+    return alive
 
 
 def get_all_task_states() -> list[dict]:

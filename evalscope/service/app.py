@@ -76,10 +76,14 @@ def create_app(outputs: str = None):
     # --- Initialise SQLite metadata store --------------------------------
     outputs_root = app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT
     try:
-        _db.write_service_pid(outputs_root)
+        # recover_stale_tasks MUST run BEFORE write_service_pid:
+        # it reads the PID file to check if the old service is still alive.
+        # If we write the new PID first, it sees the new (alive) PID and
+        # skips recovery — leaving zombie 'running' tasks forever.
         _db.init_db(outputs_root)
         _db.backfill(outputs_root)
         _db.recover_stale_tasks()
+        _db.write_service_pid(outputs_root)
     except Exception as e:
         logger.warning(f'SQLite metadata store init failed (non-fatal): {e}')
 
