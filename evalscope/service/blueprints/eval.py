@@ -637,6 +637,11 @@ def stream_evaluation_log():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
     log_file = os.path.join(OUTPUT_DIR, task_id, 'logs', 'eval_log.log')
 
     def generate():

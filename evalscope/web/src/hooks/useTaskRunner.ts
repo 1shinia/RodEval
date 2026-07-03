@@ -35,7 +35,6 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     if (urlTaskId && !resumedRef.current) {
       resumedRef.current = true
       setTaskId(urlTaskId)
-      setRunning(true)
 
       const resume = async () => {
         let logAcc = ''
@@ -46,11 +45,15 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
         try {
           const p = await api.getProgress(urlTaskId)
           setProgress(p.percent ?? 0)
-          if (p.percent >= 100) done = true
+          // Also treat error/stopped tasks as done to prevent SSE log re-streaming
+          const status = typeof p.status === 'string' ? p.status : ''
+          if ((p.percent ?? 0) >= 100 || status === 'error' || status === 'stopped') {
+            done = true
+          }
         } catch { done = true }
 
         if (done) {
-          // Completed: fetch full log from beginning
+          // Completed/error/stopped: fetch full log from beginning
           try {
             const d = await api.getLog(urlTaskId, 0)
             if (d.text) { logAcc = d.text; nextLine = d.tail_line }
@@ -68,15 +71,16 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
             }
           } catch { /* ignore */ }
           setLogText(logAcc)
-          setRunning(false)
+          // Keep running=false – prevents SSE from connecting and duplicating log content
           setResult({ status: 'ok', task_id: urlTaskId })
         } else {
-          // Running: fetch from end so eval output is visible (config dump is at beginning)
+          // Running: fetch tail, then enable SSE for real-time streaming
           try {
             const d = await api.getLog(urlTaskId)
             if (d.text) { logAcc = d.text; nextLine = d.tail_line }
           } catch { /* ignore */ }
           setLogText(logAcc)
+          setRunning(true)  // Only now enable SSE – task is confirmed running
         }
       }
       resume()

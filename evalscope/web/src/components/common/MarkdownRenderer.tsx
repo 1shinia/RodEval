@@ -62,7 +62,20 @@ function MarkdownRenderer({ content }: Props) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
-        urlTransform={(url) => url}
+        urlTransform={(url) => {
+          // Only allow safe URL protocols to prevent XSS via javascript:/data: URIs
+          const allowed = ['http:', 'https:', 'mailto:', '#', '/']
+          try {
+            const parsed = new URL(url, window.location.origin)
+            if (allowed.some(p => p.endsWith(':') ? parsed.protocol === p : url.startsWith(p))) {
+              return url
+            }
+          } catch {
+            // Relative URLs or fragments are safe
+            if (url.startsWith('/') || url.startsWith('#') || url.startsWith('.')) return url
+          }
+          return ''
+        }}
         components={markdownComponents}
       >
         {content}
