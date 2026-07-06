@@ -178,15 +178,35 @@ def stop_process(task_id: str) -> bool:
     proc = info.process
     if proc.is_alive() and proc.pid is not None:
         try:
-            # Get process group ID (child called os.setsid() on startup)
-            pgid = os.getpgid(proc.pid)
-            # Send SIGTERM to entire process group
-            os.killpg(pgid, signal.SIGTERM)
-            proc.join(timeout=3)
-            if proc.is_alive():
-                # Force kill the entire process group
-                os.killpg(pgid, signal.SIGKILL)
-                proc.join(timeout=2)
+            # Get process group ID (child calls os.setsid() on startup).
+            # BUT: there is a race window between p.start() and os.setsid()
+            # where the child is still in the parent's process group.
+            # os.killpg() during that window would kill the Flask server!
+            child_pgid = os.getpgid(proc.pid)
+            parent_pgid = os.getpgid(os.getpid())
+
+            if child_pgid == parent_pgid:
+                # Child has not yet called os.setsid() — it's still in our
+                # process group.  Use os.kill() to target only the child.
+                logger.warning(
+                    f'Task {task_id} is still in the parent process group '
+                    '(os.setsid() not yet called). Using os.kill() instead of '
+                    'os.killpg() to avoid killing the service.'
+                )
+                os.kill(proc.pid, signal.SIGTERM)
+                proc.join(timeout=3)
+                if proc.is_alive():
+                    os.kill(proc.pid, signal.SIGKILL)
+                    proc.join(timeout=2)
+            else:
+                # Child is in its own process group — safe to use killpg
+                # to clean up the entire process tree.
+                os.killpg(child_pgid, signal.SIGTERM)
+                proc.join(timeout=3)
+                if proc.is_alive():
+                    # Force kill the entire process group
+                    os.killpg(child_pgid, signal.SIGKILL)
+                    proc.join(timeout=2)
         except ProcessLookupError:
             # Process already exited, ignore
             pass
