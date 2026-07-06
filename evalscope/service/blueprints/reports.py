@@ -133,6 +133,15 @@ def _df_to_records(df) -> list:
     return json.loads(df.to_json(orient='records', force_ascii=False))
 
 
+def _report_dir_exists(report_name: str, root: str) -> bool:
+    """Check that the report's directory still exists on disk."""
+    try:
+        prefix, _, _ = process_report_name(report_name)
+        return os.path.isdir(os.path.join(root, prefix))
+    except Exception:
+        return False
+
+
 def _extract_timestamp(report_name: str, root: str) -> str:
     """Try to extract a timestamp from the report directory name or fall back to mtime."""
     try:
@@ -253,6 +262,23 @@ def list_reports():
                 page=page,
                 page_size=page_size,
             )
+            # Sanity: filter out reports whose directories no longer exist
+            items = [it for it in items if _report_dir_exists(it['name'], root)]
+            # If filesystem check pruned items, re-count total
+            if len(items) < page_size:
+                all_total = _db.query_eval_reports(
+                    search=search,
+                    models=models_filter,
+                    datasets=datasets_filter,
+                    score_min=score_min,
+                    score_max=score_max,
+                    sort_by=sort_by,
+                    sort_order=sort_order,
+                    page=1,
+                    page_size=10000,
+                )[0]
+                all_filtered = [r for r in all_total if _report_dir_exists(r['name'], root)]
+                total = len(all_filtered)
             return jsonify({
                 'reports': items,
                 'total': total,
@@ -506,14 +532,15 @@ def delete_report():
         logger.info(f'Deleted report: {report_dir}')
 
         # Sync SQLite
+        task_id, _, _ = process_report_name(report_name)
         try:
             from .. import db as _db
 
             # Extract task_id (prefix) from composite report_name
-            task_id, _, _ = process_report_name(report_name)
             _db.delete_eval_report(task_id)
+            logger.info(f'Deleted from SQLite: {task_id}')
         except Exception as e:
-            logger.debug(f'Failed to delete from SQLite (non-fatal): {e}')
+            logger.warning(f'Failed to delete {task_id} from SQLite: {e}')
 
         return jsonify({'ok': True}), 200
     except Exception as e:

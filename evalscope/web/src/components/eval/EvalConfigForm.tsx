@@ -116,7 +116,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   const [evalBatchSize, setEvalBatchSize] = useState('1')
   const [showMore, setShowMore] = useState(false)
   const [repeats, setRepeats] = useState('1')
-  const [timeout, setTimeout_] = useState('60')
+  const [timeout, setTimeout_] = useState('300')
   const [stream, setStream] = useState(false)
   const [temperature, setTemperature] = useState('')
   const [topP, setTopP] = useState('')
