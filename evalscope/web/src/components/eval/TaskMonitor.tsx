@@ -3,7 +3,7 @@ import LogViewer from '@/components/common/LogViewer'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { useLocale } from '@/contexts/LocaleContext'
-import { ExternalLink, CheckCircle2, XCircle, Loader2, Square, OctagonX, PlayCircle } from 'lucide-react'
+import { ExternalLink, CheckCircle2, XCircle, Loader2, Square, OctagonX, PlayCircle, WifiOff } from 'lucide-react'
 
 interface Props {
   running: boolean
@@ -15,10 +15,12 @@ interface Props {
   onStop?: () => void
   onResume?: (taskId: string) => void
   taskId?: string | null
+  sseState?: { status: string; message: string }
 }
 
-export default function TaskMonitor({ running, progress, logText, result, reportUrl, readyLabel, onStop, onResume, taskId }: Props) {
+export default function TaskMonitor({ running, progress, logText, result, reportUrl, readyLabel, onStop, onResume, taskId, sseState }: Props) {
   const { t } = useLocale()
+  const isReconnecting = sseState?.status === 'reconnecting'
 
   return (
     <div className="space-y-4">
@@ -50,6 +52,14 @@ export default function TaskMonitor({ running, progress, logText, result, report
         )}
         {!running && !result && (
           <span className="text-[var(--text-muted)]">{readyLabel}</span>
+        )}
+
+        {/* SSE connection state indicator */}
+        {isReconnecting && (
+          <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded bg-[var(--warning-bg)] text-[var(--warning-color)] text-xs">
+            <WifiOff size={12} />
+            <span>{sseState!.message}</span>
+          </div>
         )}
       </div>
 

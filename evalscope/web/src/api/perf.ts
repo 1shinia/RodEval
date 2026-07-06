@@ -34,8 +34,9 @@ export async function submitPerfTask(
   payload: Record<string, unknown>,
   taskId: string,
 ): Promise<EvalInvokeResponse> {
-  // Perf tasks can take minutes — use 5 min timeout
-  return apiPost<EvalInvokeResponse>('/api/v1/perf/invoke', payload, { 'EvalScope-Task-Id': taskId }, 300_000)
+  // Perf tasks can run for hours — no client-side timeout (0 = disable).
+  // Progress is tracked via SSE; the HTTP response only arrives on completion.
+  return apiPost<EvalInvokeResponse>('/api/v1/perf/invoke', payload, { 'EvalScope-Task-Id': taskId }, 0)
 }
 
 export async function getPerfProgress(taskId: string): Promise<ProgressResponse> {
@@ -59,7 +60,8 @@ export async function stopPerfTask(taskId: string): Promise<{ status: string; ta
 export async function resumePerfTask(taskId: string, apiKey?: string): Promise<EvalInvokeResponse> {
   const body: Record<string, string> = { task_id: taskId }
   if (apiKey) body.api_key = apiKey
-  return apiPost<EvalInvokeResponse>('/api/v1/perf/resume/invoke', body, undefined, 300_000)
+  // Resume can also run for hours — no client-side timeout.
+  return apiPost<EvalInvokeResponse>('/api/v1/perf/resume/invoke', body, undefined, 0)
 }
 
 export async function deletePerfTask(taskId: string): Promise<{ ok: boolean }> {

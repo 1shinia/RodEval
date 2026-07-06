@@ -307,7 +307,7 @@ def run_performance_test():
                     timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 )
             except Exception as e:
-                logger.debug(f'Failed to write perf to SQLite (non-fatal): {e}')
+                logger.warning(f'Failed to write perf to SQLite (non-fatal): {e}')
 
             return jsonify({
                 'status': 'completed',
@@ -461,7 +461,7 @@ def resume_performance_test():
                     timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 )
             except Exception as e:
-                logger.debug(f'Failed to write perf to SQLite (non-fatal): {e}')
+                logger.warning(f'Failed to write perf to SQLite (non-fatal): {e}')
 
             return jsonify({
                 'status': 'completed',
@@ -583,6 +583,11 @@ def stream_performance_log():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+    # Support resume: client can pass last_pos (byte offset) to skip already-seen content
+    try:
+        initial_pos = int(request.args.get('last_pos', 0))
+    except (ValueError, TypeError):
+        initial_pos = 0
 
     try:
         validate_task_id(task_id)
@@ -592,7 +597,7 @@ def stream_performance_log():
     log_file = os.path.join(OUTPUT_DIR, task_id, 'perf', 'benchmark.log')
 
     def generate():
-        last_pos = 0
+        last_pos = initial_pos
         idle_count = 0
         max_idle = 300  # Close after 5 minutes of no new log lines
         while True:
@@ -604,7 +609,7 @@ def stream_performance_log():
                         if new_content:
                             last_pos = f.tell()
                             idle_count = 0
-                            payload = json.dumps({'text': new_content})
+                            payload = json.dumps({'text': new_content, 'pos': last_pos})
                             yield f'data: {payload}\n\n'
                         else:
                             idle_count += 1

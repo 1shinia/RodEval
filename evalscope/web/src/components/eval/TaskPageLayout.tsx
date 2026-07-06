@@ -20,13 +20,14 @@ interface Props {
   onStop: () => void
   onResume?: (taskId: string) => void
   taskId?: string | null
+  sseState?: { status: string; message: string }
   children: ReactNode
 }
 
 export default function TaskPageLayout({
   title, configTitle, statusTitle, readyLabel,
   running, progress, result, logText, reportUrl,
-  copied, onCopy, onStop, onResume, taskId, children,
+  copied, onCopy, onStop, onResume, taskId, sseState, children,
 }: Props) {
   const { t } = useLocale()
   return (
@@ -54,6 +55,7 @@ export default function TaskPageLayout({
             onStop={onStop}
             onResume={onResume}
             taskId={taskId}
+            sseState={sseState}
           />
         </Card>
       </div>

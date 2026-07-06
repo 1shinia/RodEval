@@ -23,27 +23,28 @@ export default function EvalTaskPage() {
 
   const api = useMemo(() => evalApi, [])
   const { running, progress, result, logText, reportUrl, copied, taskId,
-    handleSubmit, handleStop, handleResume: rawResume, copyLog } = useTaskRunner({ api, taskPrefix: 'eval' })
+    handleSubmit, handleStop, handleResume: rawResume, copyLog, sseState } = useTaskRunner({ api, taskPrefix: 'eval' })
 
   const onApiKeyChange = useCallback((key: string) => { apiKeyRef.current = key }, [])
   const handleResume = useCallback((id: string) => { rawResume(id, apiKeyRef.current || undefined) }, [rawResume])
 
   return (
     <TaskPageLayout
-      title={t('eval.title')}
-      configTitle={t('eval.config')}
-      statusTitle={t('eval.status')}
-      readyLabel={t('eval.ready')}
-      running={running}
-      progress={progress}
-      result={result}
-      logText={logText}
-      reportUrl={reportUrl}
-      copied={copied}
-      onCopy={copyLog}
-      onStop={handleStop}
-      onResume={handleResume}
-      taskId={taskId}
+    title={t('eval.title')}
+    configTitle={t('eval.config')}
+    statusTitle={t('eval.status')}
+    readyLabel={t('eval.ready')}
+    running={running}
+    progress={progress}
+    result={result}
+    logText={logText}
+    reportUrl={reportUrl}
+    copied={copied}
+    onCopy={copyLog}
+    onStop={handleStop}
+    onResume={handleResume}
+    taskId={taskId}
+    sseState={sseState}
     >
       <EvalConfigForm onSubmit={handleSubmit} disabled={running} initialDataset={initialDataset} onApiKeyChange={onApiKeyChange} />
     </TaskPageLayout>

@@ -10,9 +10,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 function createAbortSignal(timeoutMs: number = DEFAULT_TIMEOUT): AbortSignal {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  // Allow the timer to not block process exit (browser: no-op, but safe)
-  if (typeof (timer as any).unref === 'function') (timer as any).unref()
+  if (timeoutMs > 0) {
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    // Allow the timer to not block process exit (browser: no-op, but safe)
+    if (typeof (timer as any).unref === 'function') (timer as any).unref()
+  }
   return controller.signal
 }
 

@@ -99,8 +99,25 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       const res = await api.submit(config, id)
       setResult(res)
     } catch (e) {
-      setResult({ status: 'error', task_id: id, error: String(e) })
-      toast.error(String(e))
+      const msg = String(e)
+      // Network errors / timeouts / aborts do NOT mean the backend task
+      // stopped — the subprocess may still be running.  Keep monitoring
+      // via SSE instead of killing the progress stream.
+      const isNetworkIssue =
+        msg.includes('AbortError') ||
+        msg.includes('abort') ||
+        msg.includes('timeout') ||
+        msg.includes('network') ||
+        msg.includes('NetworkError') ||
+        msg.includes('Failed to fetch')
+      if (isNetworkIssue) {
+        toast.warning('请求中断，但任务可能在后台继续运行。请等待日志更新或刷新页面查看。')
+        // SSE is still streaming — keep running=true so monitoring continues.
+        // The SSE 'percent >= 100' handler will set result + running=false.
+        return
+      }
+      setResult({ status: 'error', task_id: id, error: msg })
+      toast.error(msg)
     } finally {
       setRunning(false)
       // Fetch complete final log + progress
@@ -160,7 +177,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     return `/api/v1/${taskPrefix}/log/stream?task_id=${taskId}`
   }, [taskId, taskPrefix])
 
-  useSSE<ProgressResponse>({
+  const progressSSE = useSSE<ProgressResponse>({
     url: progressStreamUrl,
     enabled: running && !!taskId,
     onData: (d) => {
@@ -172,7 +189,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     },
   })
 
-  useSSE<LogResponse>({
+  const logSSE = useSSE<LogResponse>({
     url: logStreamUrl,
     enabled: running && !!taskId,
     onData: (d) => { if (d.text) { setLogText((prev) => prev + d.text) } },
@@ -194,5 +211,6 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   return {
     running, progress, result, logText, reportUrl, copied, taskId,
     handleSubmit, handleStop, handleResume, copyLog,
+    sseState: logSSE.connectionState || progressSSE.connectionState,
   }
 }

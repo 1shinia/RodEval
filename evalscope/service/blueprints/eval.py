@@ -242,7 +242,7 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                     dataset_scores=dataset_scores,
                 )
         except Exception as e:
-            logger.debug(f'Failed to write eval to SQLite (non-fatal): {e}')
+            logger.warning(f'Failed to write eval to SQLite (non-fatal): {e}')
 
         return jsonify({
             'status': 'completed',
@@ -636,6 +636,11 @@ def stream_evaluation_log():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+    # Support resume: client can pass last_pos (byte offset) to skip already-seen content
+    try:
+        initial_pos = int(request.args.get('last_pos', 0))
+    except (ValueError, TypeError):
+        initial_pos = 0
 
     try:
         validate_task_id(task_id)
@@ -645,7 +650,7 @@ def stream_evaluation_log():
     log_file = os.path.join(OUTPUT_DIR, task_id, 'logs', 'eval_log.log')
 
     def generate():
-        last_pos = 0
+        last_pos = initial_pos
         idle_count = 0
         max_idle = 300  # Close after 5 minutes of no new log lines
         while True:
@@ -657,8 +662,8 @@ def stream_evaluation_log():
                         if new_content:
                             last_pos = f.tell()
                             idle_count = 0
-                            # Send as SSE event
-                            payload = json.dumps({'text': new_content})
+                            # Send as SSE event with position for resume support
+                            payload = json.dumps({'text': new_content, 'pos': last_pos})
                             yield f'data: {payload}\n\n'
                         else:
                             idle_count += 1
