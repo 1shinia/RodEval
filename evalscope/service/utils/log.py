@@ -57,6 +57,8 @@ def validate_report_name(report_name: str, root: str) -> str:
     root_resolved = os.path.realpath(root)
     if resolved != root_resolved and not resolved.startswith(root_resolved + os.sep):
         raise ValueError('Invalid report_name: path escapes output directory')
+    if not os.path.isdir(resolved):
+        raise ValueError(f'Report not found: {prefix}')
     return resolved
 
 
