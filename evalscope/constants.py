@@ -5,13 +5,19 @@ from datetime import timedelta, timezone
 
 os.environ['MODELSCOPE_LOG_LEVEL'] = '40'  # Set default log level to ERROR
 
-from modelscope.utils.constant import DEFAULT_REPOSITORY_REVISION
-from modelscope.utils.file_utils import get_dataset_cache_root, get_model_cache_root
+# Avoid importing modelscope (which forces torch) for simple constants.
+# modelscope.utils.constant.DEFAULT_REPOSITORY_REVISION is always 'master'.
+DEFAULT_REPOSITORY_REVISION = 'master'
+
+# Hardcode cache roots to avoid modelscope.utils.file_utils import (which loads torch).
+_CACHE_HOME = os.path.expanduser('~/.cache')
+DEFAULT_MODEL_CACHE_ROOT = os.path.join(_CACHE_HOME, 'modelscope', 'hub', 'models')
+DEFAULT_DATASET_CACHE_ROOT = os.path.join(_CACHE_HOME, 'modelscope', 'hub', 'datasets')
 
 DEFAULT_WORK_DIR = './outputs'
 DEFAULT_MODEL_REVISION = DEFAULT_REPOSITORY_REVISION  # master
-DEFAULT_MODEL_CACHE_DIR = get_model_cache_root()  # ~/.cache/modelscope/hub/models
-DEFAULT_DATASET_CACHE_DIR = get_dataset_cache_root()  # ~/.cache/modelscope/hub/datasets
+DEFAULT_MODEL_CACHE_DIR = DEFAULT_MODEL_CACHE_ROOT  # ~/.cache/modelscope/hub/models
+DEFAULT_DATASET_CACHE_DIR = DEFAULT_DATASET_CACHE_ROOT  # ~/.cache/modelscope/hub/datasets
 DEFAULT_ROOT_CACHE_DIR = DEFAULT_DATASET_CACHE_DIR  # compatible with old version
 DEFAULT_EVALSCOPE_CACHE_DIR = os.path.expanduser(
     os.getenv('EVALSCOPE_CACHE', '~/.cache/evalscope')

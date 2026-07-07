@@ -1,25 +1,50 @@
 import platform
 import traceback
 from pathlib import Path, PurePosixPath
+from typing import Literal
 
 from evalscope.utils import get_logger
 
 logger = get_logger()
 
+DEFAULT_DOCKERHUB_USERNAME = 'swebench'
+SwebenchArch = Literal['arm64', 'x86_64']
+SwebenchForceArch = Literal['', 'arm64', 'x86_64']
 
-def get_remote_docker_image_from_id(instance_id: str) -> str:
+
+def _is_arm_machine() -> bool:
+    return platform.machine().lower() in {'aarch64', 'arm64'}
+
+
+def _requires_x86(instance_id: str) -> bool:
+    from swebench.harness.constants import USE_X86  # type: ignore
+
+    return instance_id in USE_X86
+
+
+def resolve_swebench_arch(instance_id: str, force_arch: SwebenchForceArch = '') -> SwebenchArch:
+    """Resolve the SWE-bench Docker image architecture for an instance."""
+    if force_arch:
+        return force_arch
+
+    if _is_arm_machine() and not _requires_x86(instance_id):
+        return 'arm64'
+
+    return 'x86_64'
+
+
+def get_remote_docker_image_from_id(
+    instance_id: str,
+    dockerhub_username: str = DEFAULT_DOCKERHUB_USERNAME,
+    force_arch: SwebenchForceArch = '',
+) -> str:
     """Image name format as found on DockerHub since swebench v3.0"""
     # NOTE: The swebench library contains this logic within `make_test_spec`,
     # but this module would require significant refactoring to use it.
     updated_instance_id = instance_id.replace('__', '_1776_')
-    if platform.machine() in {'aarch64', 'arm64'}:
-        from swebench.harness.constants import USE_X86  # type: ignore
-
-        # use arm64 unless explicitly specified
-        arch = 'arm64' if instance_id not in USE_X86 else 'x86_64'
-    else:
-        arch = 'x86_64'
-    return f'swebench/sweb.eval.{arch}.{updated_instance_id}:latest'
+    arch = resolve_swebench_arch(instance_id, force_arch)
+    username = dockerhub_username or DEFAULT_DOCKERHUB_USERNAME
+    return f'{username}/sweb.eval.{arch}.{updated_instance_id}:latest'
 
 
 GIT_APPLY_CMDS = [
@@ -29,7 +54,14 @@ GIT_APPLY_CMDS = [
 ]
 
 
-def eval_instance(instance: dict, pred: str, timeout: int = 1800, log_dir: str = 'outputs'):
+def eval_instance(
+    instance: dict,
+    pred: str,
+    timeout: int = 1800,
+    log_dir: str = 'outputs',
+    dockerhub_username: str = DEFAULT_DOCKERHUB_USERNAME,
+    force_arch: SwebenchForceArch = '',
+) -> dict:
     from docker.client import DockerClient
     from swebench.harness.constants import (
         APPLY_PATCH_FAIL,
@@ -54,7 +86,12 @@ def eval_instance(instance: dict, pred: str, timeout: int = 1800, log_dir: str =
     eval_completed = False
     report = {}
     try:
-        test_spec: TestSpec = make_test_spec(instance, namespace='swebench')
+        arch = resolve_swebench_arch(instance[KEY_INSTANCE_ID], force_arch)
+        test_spec: TestSpec = make_test_spec(
+            instance,
+            namespace=dockerhub_username or DEFAULT_DOCKERHUB_USERNAME,
+            arch=arch,
+        )
         instance_id = test_spec.instance_id
         pred = {
             KEY_PREDICTION: pred,

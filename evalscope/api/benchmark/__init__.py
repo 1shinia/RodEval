@@ -1,7 +1,9 @@
 from .adapters import (
     AgentAdapter,
     AgentLoopAdapter,
+    AudioLanguageAdapter,
     DefaultDataAdapter,
+    FunctionCallAdapter,
     ImageEditAdapter,
     MultiChoiceAdapter,
     MultiTurnAdapter,

@@ -17,6 +17,7 @@ def build_images(
     force_rebuild: bool = False,
     use_remote_images: bool = True,
     force_arch: Literal['', 'arm64', 'x86_64'] = '',
+    dockerhub_username: str = 'swebench',
 ) -> Dict[str, str]:
     """This function uses the swe_bench library to build the docker images for the SWE-bench dataset.
 
@@ -28,11 +29,14 @@ def build_images(
         force_rebuild (bool, optional): Whether to force a rebuild of the images. Defaults to False.
         use_remote_images (bool, optional): Whether to try pulling images from Docker Hub before building locally. Defaults to True. See https://hub.docker.com/u/swebench
         force_arch (str, optional): Optionally force the docker images to be pulled/built for a specific architecture. Defaults to "".
+        dockerhub_username (str, optional): DockerHub user/org namespace for remote images. Defaults to "swebench".
     """  # noqa: E501
     from docker.client import DockerClient  # type: ignore
     from swebench.harness.constants import LATEST, SWEbenchInstance  # type: ignore
     from swebench.harness.docker_build import build_instance_images  # type: ignore
     from swebench.harness.test_spec.test_spec import make_test_spec  # type: ignore
+
+    from .utils import resolve_swebench_arch
 
     extra_build_instance_images_kwargs = {'tag': LATEST, 'env_image_tag': LATEST}
 
@@ -48,15 +52,17 @@ def build_images(
 
     # We also keep a mapping from instance_ids to the name of the docker image
     id_to_docker_image: Dict[str, str] = {}
+    id_to_test_spec: Dict[str, TestSpec] = {}
 
     # Note that remote images are named eg "sphinx-doc_1776_sphinx-11502"
-    namespace = 'swebench' if use_remote_images else None
+    namespace = (dockerhub_username or 'swebench') if use_remote_images else None
 
     for swebench_instance in samples_hf:
-        test_spec = make_test_spec(swebench_instance, namespace=namespace)
-        test_spec.arch = force_arch or test_spec.arch
+        arch = resolve_swebench_arch(swebench_instance['instance_id'], force_arch)
+        test_spec = make_test_spec(swebench_instance, namespace=namespace, arch=arch)
         docker_image_name = test_spec.instance_image_key
         id_to_docker_image[swebench_instance['instance_id']] = docker_image_name
+        id_to_test_spec[swebench_instance['instance_id']] = test_spec
 
     # Get list of locally available Docker images
     available_docker_images = _get_available_docker_images()
@@ -116,9 +122,10 @@ def build_images(
     # Build any remaining images locally
     if len(samples_to_build_images_for) > 0:
         logger.warning('BUILDING SWE-BENCH IMAGES. NOTE: This can take a long time.')
+        test_specs_to_build = [id_to_test_spec[s['instance_id']] for s in samples_to_build_images_for]
         build_instance_images(
             client=docker_client,
-            dataset=samples_hf,
+            dataset=test_specs_to_build,
             force_rebuild=force_rebuild,
             max_workers=max_workers,
             **extra_build_instance_images_kwargs,
