@@ -23,6 +23,7 @@ class ProgressTracker:
 
         {
           "status":          "running" | "completed" | "error",
+          "phase":           "" | "evaluating" | "evaluation_done" | "report_generating" | "completed",
           "pipeline":        "eval" | "perf",
           "total_count":     14042,
           "processed_count": 5200,
@@ -48,15 +49,18 @@ class ProgressTracker:
         pipeline: str = '',
         write_interval: float = 1.0,
         total_count: Optional[int] = None,
+        auto_complete: bool = True,
     ):
         os.makedirs(work_dir, exist_ok=True)
         self._path = os.path.join(work_dir, 'progress.json')
         self._lock = threading.Lock()
         self._processed_count: int = 0
         self._status = 'running'
+        self._phase = 'evaluating' if pipeline == 'eval' else ''
         self._pipeline = pipeline
         self._write_interval = write_interval
         self._last_write_time: float = 0.0
+        self._auto_complete = auto_complete
         if total_count is None or total_count <= 0:
             raise ValueError(f'`total_count` must be > 0, got {total_count}.')
         self._total_count: int = total_count
@@ -73,7 +77,7 @@ class ProgressTracker:
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         if exc_type is not None:
             self.set_status('error')
-        else:
+        elif self._auto_complete:
             self.set_status('completed')
         ProgressTracker._current = None
         return False
@@ -102,6 +106,12 @@ class ProgressTracker:
             self._status = status
             self._write(force=True)
 
+    def set_phase(self, phase: str) -> None:
+        """Update the current phase label (e.g. 'evaluating', 'report_generating')."""
+        with self._lock:
+            self._phase = phase
+            self._write(force=True)
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -123,6 +133,7 @@ class ProgressTracker:
             percent = round(processed / self._total_count * 100, 2)
         state = {
             'status': self._status,
+            'phase': self._phase,
             'pipeline': self._pipeline,
             'total_count': self._total_count,
             'processed_count': processed,
@@ -142,6 +153,7 @@ def make_tracker(
     pipeline: str = '',
     write_interval: float = 1.0,
     total_count: Optional[int] = None,
+    auto_complete: bool = True,
 ) -> Union['ProgressTracker', 'nullcontext']:
     """Return a ``ProgressTracker`` context manager when *enabled*, otherwise a no-op ``nullcontext``.
 
@@ -152,6 +164,10 @@ def make_tracker(
     """
     if enabled and total_count is not None and total_count > 0:
         return ProgressTracker(
-            work_dir=work_dir, pipeline=pipeline, write_interval=write_interval, total_count=total_count
+            work_dir=work_dir,
+            pipeline=pipeline,
+            write_interval=write_interval,
+            total_count=total_count,
+            auto_complete=auto_complete,
         )
     return nullcontext()

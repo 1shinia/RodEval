@@ -544,7 +544,7 @@ def stream_evaluation_progress():
                         with open(progress_file, 'r') as f:
                             data = json.load(f)
                         yield f'data: {json.dumps(data)}\n\n'
-                        if data.get('percent', 0) >= 100:
+                        if data.get('percent', 0) >= 100 and data.get('status') == 'completed':
                             break
                     else:
                         idle_count += 1

@@ -16,6 +16,29 @@ from evalscope.utils.resource_utils import compute_eval_total_count
 logger = get_logger()
 
 
+def _write_progress_phase(work_dir: str, phase: str, status: str) -> None:
+    """Update the phase and status in progress.json after the tracker has exited."""
+    import json
+    import os
+
+    progress_file = os.path.join(work_dir, 'progress.json')
+    try:
+        if os.path.isfile(progress_file):
+            with open(progress_file, 'r') as f:
+                data = json.load(f)
+        else:
+            data = {}
+        data['phase'] = phase
+        data['status'] = status
+        data['updated_at'] = current_time().isoformat()
+        tmp = progress_file + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, progress_file)
+    except Exception:
+        pass  # Non-critical — best-effort phase tracking
+
+
 def run_task(task_cfg: Union[str, dict, TaskConfig, List[TaskConfig], Namespace]) -> Union[dict, List[dict]]:
     """Run evaluation task(s) based on the provided configuration."""
     # If task_cfg is a list, run each task individually
@@ -150,6 +173,7 @@ def evaluate_model(task_config: TaskConfig, outputs: OutputsStructure) -> dict:
         work_dir=outputs.outputs_dir,
         pipeline='eval',
         total_count=compute_eval_total_count(task_config),
+        auto_complete=False,  # Don't auto-complete — we have report generation after evaluation
     )
     # Run evaluation for each evaluator (outermost progress stage)
     with tracker_ctx:
@@ -166,6 +190,9 @@ def evaluate_model(task_config: TaskConfig, outputs: OutputsStructure) -> dict:
                 # Release evaluator immediately after eval to avoid
                 # accumulating all benchmark objects in memory simultaneously
                 evaluators[i] = None
+
+    # ---- Phase: model evaluation done, report generation starts ----
+    _write_progress_phase(outputs.outputs_dir, phase='report_generating', status='running')
 
     # Make overall report
     try:
@@ -188,6 +215,9 @@ def evaluate_model(task_config: TaskConfig, outputs: OutputsStructure) -> dict:
         logger.info(f'HTML report generated: {html_path}')
     except Exception as e:
         logger.error(f'Failed to generate HTML report: {e}')
+
+    # ---- Phase: all done ----
+    _write_progress_phase(outputs.outputs_dir, phase='completed', status='completed')
     # Clean up
     if model is not None:
         import gc

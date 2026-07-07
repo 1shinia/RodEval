@@ -95,14 +95,12 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     setProgress(0)
     setResult(null)
     setCopied(false)
+    let shouldFinalize = true
     try {
       const res = await api.submit(config, id)
       setResult(res)
     } catch (e) {
       const msg = String(e)
-      // Network errors / timeouts / aborts do NOT mean the backend task
-      // stopped — the subprocess may still be running.  Keep monitoring
-      // via SSE instead of killing the progress stream.
       const isNetworkIssue =
         msg.includes('AbortError') ||
         msg.includes('abort') ||
@@ -112,20 +110,18 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
         msg.includes('Failed to fetch')
       if (isNetworkIssue) {
         toast.warning('请求中断，但任务可能在后台继续运行。请等待日志更新或刷新页面查看。')
-        // SSE is still streaming — keep running=true so monitoring continues.
-        // The SSE 'percent >= 100' handler will set result + running=false.
+        shouldFinalize = false  // keep running=true, SSE stays alive
         return
       }
       setResult({ status: 'error', task_id: id, error: msg })
       toast.error(msg)
     } finally {
+      if (!shouldFinalize) return
       setRunning(false)
       // Fetch complete final log + progress
       try {
         const finalLog = await api.getLog(id, 0, 999999)
-        if (finalLog.text) {
-          setLogText(finalLog.text)
-        }
+        if (finalLog.text) setLogText(finalLog.text)
         const finalProg = await api.getProgress(id)
         setProgress(finalProg.percent ?? 100)
       } catch { /* ignore */ }
@@ -182,7 +178,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     enabled: running && !!taskId,
     onData: (d) => {
       setProgress(d.percent ?? 0)
-      if (d.percent >= 100) {
+      if ((d.percent ?? 0) >= 100 && d.status === 'completed') {
         setRunning(false)
         setResult((prev) => prev ?? { status: 'ok', task_id: taskId! })
       }

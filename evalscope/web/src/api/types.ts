@@ -258,6 +258,8 @@ export interface LogResponse {
 
 export interface ProgressResponse {
   percent: number
+  status?: string
+  phase?: string
   current_step?: string
   [key: string]: unknown
 }
