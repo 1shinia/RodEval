@@ -137,7 +137,17 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
 
   // Dataset autocomplete
   const [benchmarkNames, setBenchmarkNames] = useState<string[]>([])
-  const GENERIC_LOCAL_TYPES = ['general_qa', 'general_mcq', 'general_fc']
+  const ALL_LOCAL_TYPES = ['general_qa', 'general_mcq', 'general_fc', 'general_vqa', 'general_vmcq', 'general_arena', 'general_t2i', 'data_collection']
+  const LOCAL_TYPE_LABEL: Record<string, string> = {
+    general_qa: 'eval.datasetLocalTypeQA',
+    general_mcq: 'eval.datasetLocalTypeMCQ',
+    general_fc: 'eval.datasetLocalTypeFC',
+    general_vqa: 'eval.datasetLocalTypeVQA',
+    general_vmcq: 'eval.datasetLocalTypeVMCQ',
+    general_arena: 'eval.datasetLocalTypeArena',
+    general_t2i: 'eval.datasetLocalTypeT2I',
+    data_collection: 'eval.datasetLocalTypeDataCollection',
+  }
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([])
   const datasetInputRef = useRef<HTMLDivElement>(null)
@@ -149,10 +159,17 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   useEffect(() => {
     listBenchmarks()
       .then((res) => {
-        const names = [
-          ...(res.text ?? []).map((b: { name: string }) => b.name),
-          ...(res.multimodal ?? []).map((b: { name: string }) => b.name),
+        const all = [
+          ...(res.text ?? []),
+          ...(res.multimodal ?? []),
         ]
+        // Filter out Custom/data-collection templates from suggestion list
+        const names: string[] = []
+        for (const b of all) {
+          if (!b.tags?.includes('Custom') && b.name !== 'data_collection') {
+            names.push(b.name)
+          }
+        }
         setBenchmarkNames(names)
       })
       .catch((e) => { toast.error(e instanceof Error ? e.message : 'Failed to load benchmarks') })
@@ -173,7 +190,9 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
     const parts = val.split(',')
     const current = parts[parts.length - 1].trim().toLowerCase()
     if (current) {
-      const matches = benchmarkNames.filter((n) => n.toLowerCase().includes(current))
+      // Search both regular benchmarks and local-only templates
+      const allPool = [...benchmarkNames, ...ALL_LOCAL_TYPES]
+      const matches = allPool.filter((n) => n.toLowerCase().includes(current))
       setFilteredSuggestions(matches.slice(0, 8))
       setShowSuggestions(matches.length > 0)
     } else {
@@ -183,6 +202,14 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   }
 
   const selectSuggestion = (name: string) => {
+    // If user picks a custom/local-only template, switch to local dataset mode
+    if (ALL_LOCAL_TYPES.includes(name)) {
+      setDatasetLocalType(name)
+      setDatasetHub('local')
+      setDatasets(name)
+      setShowSuggestions(false)
+      return
+    }
     const parts = datasets.split(/[,，]/).map((s) => s.trim())
     parts[parts.length - 1] = name
     setDatasets(parts.join(', '))
@@ -465,11 +492,11 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
         {isLocalDataset ? (<>
           <FormField label={t('eval.datasetLocalType')} required>
             <select value={datasetLocalType} onChange={(e) => setDatasetLocalType(e.target.value)} className={FORM_INPUT_CLASS}>
-              <option value="general_qa">{t('eval.datasetLocalTypeQA')}</option>
-              <option value="general_mcq">{t('eval.datasetLocalTypeMCQ')}</option>
-              <option value="general_fc">{t('eval.datasetLocalTypeFC')}</option>
+              {ALL_LOCAL_TYPES.map((lt) => (
+                <option key={lt} value={lt}>{t(LOCAL_TYPE_LABEL[lt])}</option>
+              ))}
               <option disabled>──</option>
-              {benchmarkNames.filter((n) => !GENERIC_LOCAL_TYPES.includes(n)).map((name) => (
+              {benchmarkNames.filter((n) => !ALL_LOCAL_TYPES.includes(n)).map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
