@@ -139,6 +139,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   const [judgeStrategy, setJudgeStrategy] = useState('auto')
   const [ignoreErrors, setIgnoreErrors] = useState(false)
   const [datasetArgs, setDatasetArgs] = useState('')
+  const [systemPrompt, setSystemPrompt] = useState('')
 
   // Judge model (for analysis report)
   const [judgeModel, setJudgeModel] = useState('')
@@ -353,6 +354,14 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
     if (judgeStrategy && judgeStrategy !== 'auto') config.judge_strategy = judgeStrategy
     if (ignoreErrors) config.ignore_errors = true
     if (datasetArgs) { try { const extra = JSON.parse(datasetArgs); config.dataset_args = { ...(config.dataset_args as Record<string, unknown> || {}), ...extra } } catch { /* ignore */ } }
+    if (systemPrompt.trim()) {
+      const da = (config.dataset_args || {}) as Record<string, unknown>
+      for (const key of Object.keys(da)) {
+        const entry = da[key] as Record<string, unknown>
+        da[key] = { system_prompt: systemPrompt.trim(), ...entry }
+      }
+      config.dataset_args = da
+    }
 
     // Judge model args (for analysis report generation)
     if (judgeModel.trim() || judgeApiUrl.trim() || judgeApiKey.trim()) {
@@ -657,7 +666,15 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
                 {t('eval.ignoreErrors')}
               </label>
             </div>
-            {/* Row 4 — 数据集参数 */}
+            {/* Row 4 — 系统提示 + 数据集参数 */}
+            <div className="md:col-span-3">
+              <label className={FORM_LABEL_CLASS}>System Prompt</label>
+              <textarea value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                className={`${FORM_INPUT_CLASS} h-16 resize-y`}
+                placeholder="只输出一个词作为答案，禁止任何解释。" />
+              <p className="mt-1 text-xs text-[var(--text-muted)]">提示词模板，会注入到所有数据集中。留空则使用数据集默认值。</p>
+            </div>
             <div className="md:col-span-3">
               <label className={FORM_LABEL_CLASS}>{t('eval.datasetArgs')}</label>
               <textarea value={datasetArgs}
