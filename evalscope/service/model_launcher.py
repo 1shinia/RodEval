@@ -289,7 +289,7 @@ def launch(model_path: str, backend: str = 'auto', backend_args: Optional[Dict[s
             model_args={
                 'model_path': model_path,
                 'revision': backend_args.get('revision', 'master'),
-                'precision': backend_args.get('precision', 'torch.float16'),
+                'precision': backend_args.get('precision', 'torch.float32'),
                 **({
                     'device_map': backend_args['device_map']
                 } if 'device_map' in backend_args else {})

@@ -52,7 +52,7 @@
       }
     },
     "sandbox_config": {},
-    "category": "llm"
+    "category": "vlm"
   },
   "statistics": {
     "total_samples": 17596,

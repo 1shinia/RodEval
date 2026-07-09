@@ -23,6 +23,19 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
   const [apiKey, setApiKey] = useState('')
   const [api, setApi] = useState('openai')
 
+  // Clear mode-specific fields when switching model source
+  useEffect(() => {
+    setModel('')
+    if (isLocal) {
+      setUrl('')
+      setApiKey('')
+      setApi('openai')
+    } else {
+      setModelPath('')
+      setBackend('auto')
+    }
+  }, [isLocal])  // eslint-disable-line react-hooks/exhaustive-deps
+
   // Sync API key to parent for resume
   useEffect(() => { onApiKeyChange?.(apiKey) }, [apiKey, onApiKeyChange])
 
@@ -62,6 +75,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
     } else {
       if (!model.trim()) newErrors.model = 'Required'
       if (!url.trim()) newErrors.url = 'Required'
+      if (!apiKey.trim()) newErrors.apiKey = 'Required'
     }
 
     // URL format
@@ -216,8 +230,8 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
               className={inputClass(errors.url)} placeholder="http://localhost:8000/v1" />
           </FormField>
 
-          <FormField label={t('eval.apiKey')}>
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className={FORM_INPUT_CLASS} placeholder="sk-..." />
+          <FormField label={t('eval.apiKey')} required error={errors.apiKey}>
+            <input type="password" value={apiKey} onChange={(e) => { setApiKey(e.target.value); if (errors.apiKey) setErrors((p) => ({ ...p, apiKey: '' })) }} className={inputClass(errors.apiKey)} placeholder="sk-..." />
           </FormField>
         </>)}
 

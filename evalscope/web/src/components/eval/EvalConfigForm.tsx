@@ -93,6 +93,18 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   const [apiKey, setApiKey] = useState('')
   const [evalType, setEvalType] = useState('openai')  // 'openai' | 'anthropic'
 
+  // Clear mode-specific fields when switching model source
+  useEffect(() => {
+    setModel('')
+    if (isLocal) {
+      setApiUrl('')
+      setApiKey('')
+    } else {
+      setModelPath('')
+      setBackend('auto')
+    }
+  }, [isLocal])  // eslint-disable-line react-hooks/exhaustive-deps
+
   // Notify parent of apiKey changes (for resume functionality)
   useEffect(() => {
     onApiKeyChange?.(apiKey)

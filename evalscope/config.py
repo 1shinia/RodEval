@@ -56,7 +56,7 @@ DEFAULT_TEXT_GEN_SERVICE_CONFIG = {
 
 DEFAULT_MODEL_ARGS_CHECKPOINT = {
     'revision': 'master',
-    'precision': 'torch.float16',
+    'precision': 'torch.float32',
 }
 
 
