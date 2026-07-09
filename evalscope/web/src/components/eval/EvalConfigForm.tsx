@@ -91,6 +91,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   const [model, setModel] = useState('')
   const [apiUrl, setApiUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [evalType, setEvalType] = useState('openai')  // 'openai' | 'anthropic'
 
   // Notify parent of apiKey changes (for resume functionality)
   useEffect(() => {
@@ -312,6 +313,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
     } else {
       if (apiUrl) config.api_url = apiUrl.trim()
       if (apiKey) config.api_key = apiKey
+      config.eval_type = evalType === 'anthropic' ? 'anthropic_api' : 'openai_api'
     }
 
     // Datasets
@@ -346,6 +348,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
       if (judgeModel.trim()) jma.model_id = judgeModel.trim()
       if (judgeApiUrl.trim()) jma.api_url = judgeApiUrl.trim()
       if (judgeApiKey.trim()) jma.api_key = judgeApiKey
+      jma.eval_type = evalType === 'anthropic' ? 'anthropic_api' : 'openai_api'
       config.judge_model_args = jma
     }
 
@@ -470,10 +473,16 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
               onChange={(e) => { setModel(e.target.value.trimStart()); if (errors.model) setErrors((p) => ({ ...p, model: '' })) }}
               className={inputClass(errors.model)} placeholder="Qwen/Qwen2.5-0.5B-Instruct" />
           </FormField>
+          <FormField label={t('eval.evalType')}>
+            <select value={evalType} onChange={(e) => setEvalType(e.target.value)} className={FORM_INPUT_CLASS}>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </FormField>
           <FormField label={t('eval.apiUrl')} required error={errors.apiUrl}>
             <input value={apiUrl}
               onChange={(e) => { setApiUrl(e.target.value); if (errors.apiUrl) setErrors((p) => ({ ...p, apiUrl: '' })) }}
-              className={inputClass(errors.apiUrl)} placeholder="http://localhost:8000/v1" />
+              className={inputClass(errors.apiUrl)} placeholder={evalType === 'anthropic' ? 'https://api.anthropic.com' : 'http://localhost:8000/v1'} />
           </FormField>
           <FormField label={t('eval.apiKey')} required error={errors.apiKey}>
             <input type="password" value={apiKey} onChange={(e) => { setApiKey(e.target.value); if (errors.apiKey) setErrors((p) => ({ ...p, apiKey: '' })) }} className={inputClass(errors.apiKey)} placeholder="sk-..." />

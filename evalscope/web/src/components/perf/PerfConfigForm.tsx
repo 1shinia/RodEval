@@ -201,6 +201,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
           <FormField label={t('perf.apiType')}>
             <select value={api} onChange={(e) => setApi(e.target.value)} className={FORM_INPUT_CLASS}>
               <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
               <option value="openai_responses">OpenAI Responses</option>
               <option value="openai_embedding">OpenAI Embedding</option>
               <option value="openai_rerank">OpenAI Rerank</option>

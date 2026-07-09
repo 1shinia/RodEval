@@ -66,18 +66,94 @@ def load_dataset_from_hub(
     ms_download_mode = None if not force_redownload else MSDownloadMode.FORCE_REDOWNLOAD
 
     if data_source == HubType.MODELSCOPE:
-        dataset = MsDataset.load(
-            dataset_name=data_id_or_path,
-            split=split,
-            subset_name=subset,
-            version=version,
-            trust_remote_code=trust_remote,
-            download_mode=ms_download_mode,
-            **kwargs,
-        )
-        if not isinstance(dataset, datasets.Dataset):
-            dataset = dataset.to_hf_dataset()
-        return dataset
+        try:
+            dataset = MsDataset.load(
+                dataset_name=data_id_or_path,
+                split=split,
+                subset_name=subset,
+                version=version,
+                trust_remote_code=trust_remote,
+                download_mode=ms_download_mode,
+                **kwargs,
+            )
+            if not isinstance(dataset, datasets.Dataset):
+                dataset = dataset.to_hf_dataset()
+            return dataset
+        except datasets.exceptions.DatasetGenerationError:
+            logger.warning(
+                f'MsDataset.load failed for {data_id_or_path} (split={split}, subset={subset}) '
+                f'with schema error. Falling back to snapshot download + parquet loading ...'
+            )
+            # Fallback: download raw dataset files via modelscope snapshot,
+            # then load parquet directly to bypass the datasets builder schema validation.
+            try:
+                import glob as _glob
+                import time as _time
+                from modelscope import dataset_snapshot_download
+
+                snapshot_dir = None
+                last_err = None
+
+                # Retry loop: first try local cache, then full download with backoff
+                for attempt in range(3):
+                    try:
+                        if attempt == 0:
+                            # First attempt: check local cache only (fast path)
+                            snapshot_dir = dataset_snapshot_download(
+                                dataset_id=data_id_or_path,
+                                revision=version,
+                                local_files_only=True,
+                            )
+                        else:
+                            # Retry with full download, exponential backoff
+                            delay = 2**(attempt - 1)
+                            logger.info(f'Retry {attempt}/3 for {data_id_or_path} after {delay}s ...')
+                            _time.sleep(delay)
+                            snapshot_dir = dataset_snapshot_download(
+                                dataset_id=data_id_or_path,
+                                revision=version,
+                            )
+                        if snapshot_dir:
+                            break
+                    except Exception as retry_err:
+                        last_err = retry_err
+                        logger.warning(f'Snapshot download attempt {attempt + 1}/3 failed: {retry_err}')
+                        continue
+
+                if snapshot_dir is None:
+                    raise last_err or RuntimeError('All snapshot download attempts failed')
+
+                # Try parquet files first (standard Arrow-backed datasets)
+                parquet_pattern = os.path.join(snapshot_dir, 'data', f'{split}-*.parquet')
+                parquet_files = sorted(_glob.glob(parquet_pattern))
+                if parquet_files:
+                    logger.info(
+                        f'Found {len(parquet_files)} parquet file(s) for split={split} in {snapshot_dir}. '
+                        f'Loading via datasets (parquet loader) ...'
+                    )
+                    dataset = datasets.load_dataset('parquet', data_files=parquet_files, split='train')
+                    return dataset
+
+                # No matching parquet found – fall back to loading the snapshot dir as a local dataset
+                logger.info(
+                    f'No parquet files found for split={split} in {snapshot_dir}. '
+                    f'Trying to load as local dataset directory ...'
+                )
+                load_kwargs = dict(
+                    path=snapshot_dir,
+                    name=subset if subset != 'default' else None,
+                    split=split,
+                    revision=version,
+                    download_mode=hf_download_mode,
+                    **kwargs,
+                )
+                if 'trust_remote_code' in inspect.signature(datasets.load_dataset).parameters:
+                    load_kwargs['trust_remote_code'] = trust_remote
+                dataset = datasets.load_dataset(**load_kwargs)
+                return dataset
+            except Exception as fallback_err:
+                logger.error(f'Fallback snapshot download also failed: {fallback_err}')
+                raise  # re-raise the original DatasetGenerationError
 
     if data_source in [HubType.HUGGINGFACE, HubType.LOCAL]:
         # Hugging Face datasets may fail on local mirrors that contain a stale dataset_infos.json.

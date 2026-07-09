@@ -127,16 +127,17 @@ def _parse_request() -> tuple[dict, str]:
 
 
 def _build_task_config_openai(data: dict) -> TaskConfig:
-    """Build a TaskConfig for OpenAI API mode."""
+    """Build a TaskConfig for OpenAI or Anthropic API mode."""
+    api_eval_type = data.get('eval_type') or EvalType.OPENAI_API
     if not data.get('eval_type'):
-        data['eval_type'] = EvalType.OPENAI_API
+        data['eval_type'] = api_eval_type
     # Auto-fill judge model args from eval model config when not provided
     if not data.get('judge_model_args'):
         data['judge_model_args'] = {
             'model_id': data.get('model'),
             'api_url': data.get('api_url'),
             'api_key': data.get('api_key'),
-            'eval_type': 'openai_api',
+            'eval_type': api_eval_type,
         }
     task_config = TaskConfig.from_dict(data)
     task_config.no_timestamp = True
@@ -211,8 +212,9 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             return jsonify({'status': 'error', 'task_id': task_id, 'error': error_msg}), 500
         logger.info(f'[{task_id}] {label} completed successfully')
 
-        # Write to SQLite
+        # Write to SQLite (with retry for WAL lock contention from subprocess)
         try:
+            import time as _time
             from datetime import datetime
 
             from evalscope.report.combinator import get_report_list
@@ -231,16 +233,28 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                     if score is not None and score > 1:
                         score = score / 100
                     dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
-                _db.upsert_eval_report(
-                    task_id=task_id,
-                    model_name=first.model_name,
-                    dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else
-                    (dataset_names[0] if dataset_names else ''),
-                    score=avg_score,
-                    num_samples=total_num,
-                    timestamp=datetime.now().isoformat(),
-                    dataset_scores=dataset_scores,
-                )
+                # Retry up to 3 times on lock, with backoff
+                last_err = None
+                for attempt in range(3):
+                    try:
+                        _db.upsert_eval_report(
+                            task_id=task_id,
+                            model_name=first.model_name,
+                            dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else
+                            (dataset_names[0] if dataset_names else ''),
+                            score=avg_score,
+                            num_samples=total_num,
+                            timestamp=datetime.now().isoformat(),
+                            dataset_scores=dataset_scores,
+                        )
+                        break
+                    except Exception as e:
+                        last_err = e
+                        if 'locked' not in str(e).lower() or attempt == 2:
+                            raise
+                        _time.sleep(1 + attempt * 2)
+                else:
+                    raise last_err  # type: ignore[misc]
         except Exception as e:
             logger.warning(f'Failed to write eval to SQLite (non-fatal): {e}')
 
