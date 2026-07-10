@@ -358,7 +358,58 @@ def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwarg
 
 def run_eval_wrapper(task_config: TaskConfig):
     """Run an evaluation task and return the result."""
-    return run_task(task_config)
+    result = run_task(task_config)
+    _persist_eval_report(task_config)
+    return result
+
+
+def _persist_eval_report(task_config: TaskConfig) -> None:
+    """Write the evaluation report from disk into the SQLite metadata DB."""
+    try:
+        import time as _time
+        from datetime import datetime
+
+        from evalscope.report.combinator import get_report_list
+        from evalscope.service.db import upsert_eval_report
+
+        reports_dir = os.path.join(task_config.work_dir, 'reports')
+        if not os.path.isdir(reports_dir):
+            return
+        report_list = get_report_list([reports_dir])
+        if not report_list:
+            return
+        first = report_list[0]
+        task_id = os.path.basename(task_config.work_dir.rstrip('/'))
+        total_num = sum(r.num or 0 for r in report_list)
+        dataset_names = [r.dataset_name for r in report_list]
+        score_sum = sum(r.score for r in report_list if r.score is not None)
+        avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
+        dataset_scores = {}
+        for r in report_list:
+            score = r.score
+            if score is not None and score > 1:
+                score = score / 100
+            dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
+        for attempt in range(3):
+            try:
+                upsert_eval_report(
+                    task_id=task_id,
+                    model_name=first.model_name,
+                    dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else
+                    (dataset_names[0] if dataset_names else ''),
+                    score=avg_score,
+                    num_samples=total_num,
+                    timestamp=datetime.now().isoformat(),
+                    dataset_scores=dataset_scores,
+                )
+                return
+            except Exception as e:
+                if 'locked' not in str(e).lower() or attempt == 2:
+                    raise
+                _time.sleep(1 + attempt * 2)
+    except Exception as e:
+        from evalscope.utils.logger import get_logger
+        get_logger().warning(f'Failed to persist eval report to SQLite (non-fatal): {e}')
 
 
 def run_perf_wrapper(perf_args: PerfArguments):
