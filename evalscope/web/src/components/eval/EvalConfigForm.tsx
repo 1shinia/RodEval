@@ -135,6 +135,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   const [topP, setTopP] = useState('')
   const [maxTokens, setMaxTokens] = useState('')
   const [topK, setTopK] = useState('')
+  const [thinkingMode, setThinkingMode] = useState('auto')
   const [seed, setSeed] = useState('42')
   const [judgeStrategy, setJudgeStrategy] = useState('auto')
   const [ignoreErrors, setIgnoreErrors] = useState(false)
@@ -350,6 +351,17 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
     if (maxTokens) genConfig.max_tokens = Number(maxTokens)
     if (topK) genConfig.top_k = Number(topK)
     if (Object.keys(genConfig).length > 0) config.generation_config = genConfig
+    // Thinking mode
+    if (thinkingMode !== 'auto') {
+      const enableThinking = thinkingMode === 'on'
+      if (isLocal) {
+        const ma = (config.model_args || {}) as Record<string, unknown>
+        config.model_args = { ...ma, enable_thinking: enableThinking }
+      } else {
+        genConfig.extra_body = { ...(genConfig.extra_body || {}), enable_thinking: enableThinking }
+        config.generation_config = genConfig
+      }
+    }
     if (seed && seed !== '42') config.seed = Number(seed)
     if (judgeStrategy && judgeStrategy !== 'auto') config.judge_strategy = judgeStrategy
     if (ignoreErrors) config.ignore_errors = true
@@ -611,6 +623,18 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
                 }}
                 className={inputClass(errors.topK)} />
             </FormField>
+            {/* Thinking mode */}
+            <div className="md:col-span-3 border-t border-[var(--border-md)] pt-3">
+              <div className="flex items-center gap-4">
+                <FormField label={t('eval.thinkingMode')}>
+                  <select value={thinkingMode} onChange={(e) => setThinkingMode(e.target.value)} className={FORM_INPUT_CLASS}>
+                    <option value="auto">{t('eval.thinkingModeAuto')}</option>
+                    <option value="on">{t('eval.thinkingModeOn')}</option>
+                    <option value="off">{t('eval.thinkingModeOff')}</option>
+                  </select>
+                </FormField>
+              </div>
+            </div>
             {/* Row 2 — 长度 + 运行控制 */}
             <FormField label={t('eval.maxTokens')} error={errors.maxTokens}>
               <input type="number" min={1} step="1" value={maxTokens}

@@ -56,6 +56,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
   const [minPromptLen, setMinPromptLen] = useState('')
   const [tokenizerPath, setTokenizerPath] = useState('')
   const [prefixLength, setPrefixLength] = useState('')
+  const [thinkingMode, setThinkingMode] = useState('auto')
   const [extraArgs, setExtraArgs] = useState('')
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -170,8 +171,13 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
     if (maxPromptLen) config.max_prompt_length = Number(maxPromptLen)
     if (minPromptLen) config.min_prompt_length = Number(minPromptLen)
     if (prefixLength) config.prefix_length = Number(prefixLength)
+    // Thinking mode
+    if (thinkingMode !== 'auto') {
+      const enableThinking = thinkingMode === 'on'
+      config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), enable_thinking: enableThinking }
+    }
     if (extraArgs.trim()) {
-      try { config.extra_args = JSON.parse(extraArgs) }
+      try { config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), ...JSON.parse(extraArgs) } }
       catch { newErrors.extra_args = t('perf.invalidJson') }
     }
     if (Object.keys(newErrors).length > 0) {
@@ -342,6 +348,14 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
       {/* ── 高级选项 ── */}
       <Collapsible header={<span className="text-sm text-[var(--accent)]">{t('perf.moreParams')}</span>} defaultOpen={false} chevronAfter chevronColor="var(--accent)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+          <FormField label={t('perf.thinkingMode')}>
+            <select value={thinkingMode} onChange={(e) => setThinkingMode(e.target.value)} className={FORM_INPUT_CLASS}>
+              <option value="auto">{t('perf.thinkingModeAuto')}</option>
+              <option value="on">{t('perf.thinkingModeOn')}</option>
+              <option value="off">{t('perf.thinkingModeOff')}</option>
+            </select>
+          </FormField>
+
           <FormField label={t('perf.prefixLength')} error={errors.prefixLength}>
             <input type="number" value={prefixLength}
               onChange={(e) => { setPrefixLength(e.target.value.replace(/[^0-9]/g, '')); if (errors.prefixLength) setErrors((p) => ({ ...p, prefixLength: '' })) }}
