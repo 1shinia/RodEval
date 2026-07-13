@@ -7,7 +7,7 @@ from tabulate import tabulate
 from typing import Any, Dict, List
 
 from evalscope.config import TaskConfig
-from evalscope.constants import EvalType
+from evalscope.constants import EvalBackend, EvalType
 from evalscope.report.combinator import get_data_frame, get_report_list
 from evalscope.utils.logger import get_logger
 from ..model_launcher import LaunchResult, LocalBackend, ModelSource, is_direct_eval_type, launch
@@ -327,6 +327,48 @@ def run_evaluation():
                     'error': 'Model launch failed',
                     'error_id': error_id
                 }), 500
+
+        # ── RAG Eval mode ────────────────────────────────────────────
+        if data.get('eval_backend') == EvalBackend.RAG_EVAL:
+            eval_config = data.get('eval_config', {})
+            if not eval_config:
+                return jsonify({'error': 'eval_config is required for RAG eval'}), 400
+
+            tool = eval_config.get('tool', 'mteb')
+            if tool == 'mteb':
+                try:
+                    import mteb  # noqa: F401
+                except ImportError:
+                    return jsonify({'error': 'MTEB is not installed. Please install: pip install "mteb>=2.7.0,<3.0.0"'}
+                                   ), 400
+            elif tool == 'ragas':
+                try:
+                    import ragas  # noqa: F401
+                except ImportError:
+                    return jsonify({
+                        'error': 'RAGAS is not installed. Please install: pip install "ragas>=0.4.0,<0.5.0"'
+                    }), 400
+            elif tool == 'clip_benchmark':
+                try:
+                    import webdataset  # noqa: F401
+                except ImportError:
+                    return jsonify({'error': 'webdataset is not installed. Please install: pip install webdataset'}
+                                   ), 400
+            task_config = TaskConfig(
+                eval_backend=EvalBackend.RAG_EVAL,
+                eval_config=eval_config,
+                work_dir=os.path.join(OUTPUT_DIR, task_id),
+                no_timestamp=True,
+                enable_progress_tracker=True,
+            )
+            task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+            os.makedirs(task_config.work_dir, exist_ok=True)
+            try:
+                task_config.dump_yaml(task_config.work_dir)
+            except Exception as e:
+                logger.warning(f'[{task_id}] Failed to save task config: {e}')
+            logger.info(f'[{task_id}] Running RAG eval: tool={eval_config.get("tool")}')
+            return _execute_task(task_id, task_config, label='RAG Eval')
 
         # ── Build TaskConfig ───────────────────────────────────────────
         try:
