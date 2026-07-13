@@ -186,7 +186,7 @@ export default function RAGEvalForm({ onSubmit, disabled, evalMode }: Props) {
     if (ragTopK) evalCfg.top_k = Number(ragTopK)
 
     onSubmit({
-      eval_backend: 'rag_eval',
+      eval_backend: 'RAGEval',
       eval_config: { tool: 'mteb', models, eval: evalCfg },
     })
   }

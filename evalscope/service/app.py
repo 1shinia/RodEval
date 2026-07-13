@@ -73,6 +73,9 @@ def create_app(outputs: str = None):
     app.register_blueprint(bp_perf)
     app.register_blueprint(bp_reports)
 
+    # Use HuggingFace mirror for MTEB dataset downloads (faster in CN)
+    os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
+
     # --- Initialise SQLite metadata store --------------------------------
     outputs_root = app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT
     try:

@@ -81,7 +81,9 @@ _BASE_FIELDS = ['model', 'datasets']
 
 
 def _get_required_fields(data: dict) -> list[str]:
-    """Return required fields based on model_source."""
+    """Return required fields based on model_source. RAG eval has its own config."""
+    if data.get('eval_backend') == EvalBackend.RAG_EVAL:
+        return []  # RAG eval validates via eval_config, not top-level fields
     fields = list(_BASE_FIELDS)
     if data.get('model_source') == ModelSource.LOCAL:
         fields.append('model_path')
@@ -202,7 +204,8 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                 run_eval_wrapper, task_config, task_id=task_id, task_type='eval', model=task_config.model
             )
         table_str = _build_result_table(task_config.work_dir)
-        if _all_results_empty(result):
+        # RAG eval saves results in 'results/' not 'reports/'
+        if task_config.eval_backend != EvalBackend.RAG_EVAL and _all_results_empty(result):
             error_msg = (
                 'Evaluation completed but no results were produced. '
                 'All samples may have failed. '
