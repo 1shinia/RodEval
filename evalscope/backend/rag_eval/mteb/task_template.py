@@ -7,6 +7,7 @@ Implements the MTEB 2.x evaluation flow with optional two-stage
 """
 import mteb
 import os
+from datasets import DatasetDict
 from pathlib import Path
 from tabulate import tabulate
 from typing import List
@@ -72,11 +73,16 @@ def resolve_tasks(eval_args: MTEBEvalConfig) -> list:
 
 def _build_evaluate_kwargs(eval_args: MTEBEvalConfig, output_folder: str, prediction_folder=None) -> dict:
     """Build kwargs dict for mteb.evaluate() from eval args (MTEB 2.18+)."""
+    from mteb.cache import ResultCache
     eval_kwargs = {}
     if eval_args.encode_kwargs:
         eval_kwargs['encode_kwargs'] = eval_args.encode_kwargs
     if prediction_folder is not None:
         eval_kwargs['prediction_folder'] = prediction_folder
+    # Use task's work_dir as result cache to isolate per-eval results
+    os.makedirs(output_folder, exist_ok=True)
+    eval_kwargs['cache'] = ResultCache(cache_path=output_folder)
+    eval_kwargs['overwrite_strategy'] = 'always'
     return eval_kwargs
 
 
@@ -84,6 +90,25 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
     """Run single-model MTEB evaluation using native HuggingFace data loading."""
     model = load_model(model_args)
     tasks = resolve_tasks(eval_args)
+
+    # Apply per-task limits: subset the dataset after loading
+    if eval_args.limits is not None:
+        logger.info(f'Applying limits={eval_args.limits} to {len(tasks)} task(s)')
+        for task in tasks:
+            try:
+                task.data_loaded = False
+                task.load_data()
+                # Directly subset the loaded dataset
+                if hasattr(task, 'dataset') and task.dataset is not None:
+                    ds = task.dataset
+                    subset = DatasetDict({
+                        k: v.select(range(min(eval_args.limits, len(v))))
+                        for k, v in ds.items()
+                    }) if isinstance(ds, DatasetDict) else ds.select(range(min(eval_args.limits, len(ds))))
+                    task.dataset = subset
+            except Exception as e:
+                logger.warning(f'Failed to apply limits to {task.metadata.name}: {e}')
+
     task_names = [t.metadata.name for t in tasks]
     logger.info(f'Resolved {len(tasks)} task(s): {task_names}')
     logger.info(f'Starting evaluation (data will be downloaded from HF mirror on first run)...')
