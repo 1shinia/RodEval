@@ -562,12 +562,20 @@ def _read_service_pid(pid_file: str) -> int | None:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Return True if a process with *pid* exists."""
+    """Return True if a process with *pid* exists and is not a zombie."""
     try:
         os.kill(pid, 0)
-        return True
     except (OSError, ProcessLookupError):
         return False
+    # Exclude zombies (PID exists but process is terminated, unreaped)
+    try:
+        with open(f'/proc/{pid}/status', 'r') as f:
+            first_line = f.readline()
+            if 'zombie' in first_line.lower() or first_line.startswith('State:\tZ'):
+                return False
+    except (FileNotFoundError, PermissionError):
+        pass
+    return True
 
 
 # ---------------------------------------------------------------------------

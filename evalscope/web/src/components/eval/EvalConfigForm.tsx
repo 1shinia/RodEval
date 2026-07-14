@@ -368,8 +368,9 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
     if (datasetArgs) { try { const extra = JSON.parse(datasetArgs); config.dataset_args = { ...(config.dataset_args as Record<string, unknown> || {}), ...extra } } catch { /* ignore */ } }
     if (systemPrompt.trim()) {
       const da = (config.dataset_args || {}) as Record<string, unknown>
-      for (const key of Object.keys(da)) {
-        const entry = da[key] as Record<string, unknown>
+      const keys = Object.keys(da).length > 0 ? Object.keys(da) : (config.datasets as string[])
+      for (const key of keys) {
+        const entry = (da[key] || {}) as Record<string, unknown>
         da[key] = { system_prompt: systemPrompt.trim(), ...entry }
       }
       config.dataset_args = da
