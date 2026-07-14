@@ -37,7 +37,7 @@ export default function RunningTasksIndicator() {
 
     const fetchTasks = async () => {
       try {
-        const data = await api<RunningTasksResponse>('/api/v1/tasks/running')
+        const data = await api<RunningTasksResponse>(`/api/v1/tasks/running?_t=${Date.now()}`)
         if (!cancelled) setTasks(data.tasks)
       } catch {
         // Silently ignore errors

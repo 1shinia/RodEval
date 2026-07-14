@@ -29,13 +29,13 @@ export default function TaskMonitor({ running, progress, logText, result, report
         {running && (
           <>
             <Loader2 size={16} className="animate-spin text-[var(--accent)]" />
-            <Badge variant="warning">Running{progress > 0 ? ` ${Math.round(progress)}%` : '...'}</Badge>
+            <Badge variant="warning">{t('eval.statusRunning')}{progress > 0 ? ` ${Math.round(progress)}%` : '...'}</Badge>
           </>
         )}
         {!running && result?.status === 'stopped' && (
           <>
             <OctagonX size={16} className="text-[var(--yellow)]" />
-            <Badge variant="warning">Stopped</Badge>
+            <Badge variant="warning">{t('eval.statusStopped')}</Badge>
           </>
         )}
         {!running && result?.status === 'error' && (
@@ -47,7 +47,7 @@ export default function TaskMonitor({ running, progress, logText, result, report
         {!running && result && result.status !== 'error' && result.status !== 'stopped' && (
           <>
             <CheckCircle2 size={16} className="text-[var(--green)]" />
-            <Badge variant="success">Completed</Badge>
+            <Badge variant="success">{t('eval.statusCompleted')}</Badge>
           </>
         )}
         {!running && !result && (
