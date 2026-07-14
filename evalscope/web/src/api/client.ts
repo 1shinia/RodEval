@@ -29,7 +29,7 @@ export async function api<T = unknown>(
       if (v !== undefined && v !== '') url.searchParams.set(k, String(v))
     }
   }
-  const res = await fetch(url.toString(), { signal: createAbortSignal(timeoutMs) })
+  const res = await fetch(url.toString(), { signal: createAbortSignal(timeoutMs), cache: 'no-store' })
   return handleResponse<T>(res)
 }
 

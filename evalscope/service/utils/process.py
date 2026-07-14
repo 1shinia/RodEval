@@ -61,7 +61,7 @@ def get_running_tasks() -> list[dict]:
     with _active_lock:
         result = []
         for info in _active_processes.values():
-            if info.process and info.process.is_alive():
+            if info.process is None or info.process.is_alive():
                 result.append({
                     'task_id': info.task_id,
                     'task_type': info.task_type,
