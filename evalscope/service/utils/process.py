@@ -58,7 +58,7 @@ def register_process(
 
 def get_running_tasks() -> list[dict]:
     """Return metadata for all currently running tasks.
-    
+
     A task is considered running if it exists in _active_processes.
     We trust unregister_process to remove tasks when they complete,
     rather than checking is_alive() which has race conditions.
@@ -87,10 +87,7 @@ def count_running_tasks(task_type: str | None = None) -> int:
     reflects actual concurrency usage.
     """
     with _active_lock:
-        return sum(
-            1 for info in _active_processes.values()
-            if task_type is None or info.task_type == task_type
-        )
+        return sum(1 for info in _active_processes.values() if task_type is None or info.task_type == task_type)
 
 
 def try_reserve_slot(task_id: str, task_type: str, model: str = '') -> bool:
@@ -108,10 +105,7 @@ def try_reserve_slot(task_id: str, task_type: str, model: str = '') -> bool:
     max_key = f'MAX_CONCURRENT_{task_type.upper()}'
     max_slots = int(os.environ.get(max_key, '2' if task_type == 'eval' else '1'))
     with _active_lock:
-        running = sum(
-            1 for info in _active_processes.values()
-            if info.task_type == task_type
-        )
+        running = sum(1 for info in _active_processes.values() if info.task_type == task_type)
         if running >= max_slots:
             return False
         # Insert a placeholder so other threads see the slot as taken
