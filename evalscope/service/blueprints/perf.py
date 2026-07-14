@@ -597,6 +597,8 @@ def stream_performance_log():
     log_file = os.path.join(OUTPUT_DIR, task_id, 'perf', 'benchmark.log')
 
     def generate():
+        # Send initial heartbeat to confirm connection is alive
+        yield ': connected\n\n'
         last_pos = initial_pos
         idle_count = 0
         max_idle = 300  # Close after 5 minutes of no new log lines

@@ -162,28 +162,33 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     }
   }
 
-  // Build SSE URLs for real-time streaming
-  const progressStreamUrl = useMemo(() => {
-    if (!taskId) return null
-    return `/api/v1/${taskPrefix}/progress/stream?task_id=${taskId}`
-  }, [taskId, taskPrefix])
-
+  // Build SSE URL for log streaming (only persistent SSE per task)
   const logStreamUrl = useMemo(() => {
     if (!taskId) return null
     return `/api/v1/${taskPrefix}/log/stream?task_id=${taskId}`
   }, [taskId, taskPrefix])
 
-  const progressSSE = useSSE<ProgressResponse>({
-    url: progressStreamUrl,
-    enabled: running && !!taskId,
-    onData: (d) => {
-      setProgress(d.percent ?? 0)
-      if ((d.percent ?? 0) >= 100 && d.status === 'completed') {
-        setRunning(false)
-        setResult((prev) => prev ?? { status: 'ok', task_id: taskId! })
-      }
-    },
-  })
+  // Progress via HTTP polling (3s) instead of SSE to save browser connections.
+  // Browser limits 6 concurrent connections per domain; with 2 tasks running
+  // we'd have 2 POST + 4 SSE = 6, blocking the /tasks/running poll.
+  useEffect(() => {
+    if (!running || !taskId) return
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const d = await api.getProgress(taskId)
+        if (cancelled) return
+        setProgress(d.percent ?? 0)
+        if ((d.percent ?? 0) >= 100 && d.status === 'completed') {
+          setRunning(false)
+          setResult((prev) => prev ?? { status: 'ok', task_id: taskId! })
+        }
+      } catch { /* ignore */ }
+    }
+    poll()
+    const interval = setInterval(poll, 3000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [running, taskId, api])
 
   const logSSE = useSSE<LogResponse>({
     url: logStreamUrl,
@@ -207,6 +212,6 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   return {
     running, progress, result, logText, reportUrl, copied, taskId,
     handleSubmit, handleStop, handleResume, copyLog,
-    sseState: logSSE.connectionState || progressSSE.connectionState,
+    sseState: logSSE.connectionState,
   }
 }

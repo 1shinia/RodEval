@@ -57,18 +57,22 @@ def register_process(
 
 
 def get_running_tasks() -> list[dict]:
-    """Return metadata for all currently running tasks."""
+    """Return metadata for all currently running tasks.
+    
+    A task is considered running if it exists in _active_processes.
+    We trust unregister_process to remove tasks when they complete,
+    rather than checking is_alive() which has race conditions.
+    """
     with _active_lock:
         result = []
         for info in _active_processes.values():
-            if info.process is None or info.process.is_alive():
-                result.append({
-                    'task_id': info.task_id,
-                    'task_type': info.task_type,
-                    'model': info.model,
-                    'start_time': info.start_time,
-                    'elapsed_seconds': round(time.time() - info.start_time, 1),
-                })
+            result.append({
+                'task_id': info.task_id,
+                'task_type': info.task_type,
+                'model': info.model,
+                'start_time': info.start_time,
+                'elapsed_seconds': round(time.time() - info.start_time, 1),
+            })
         return result
 
 
@@ -85,7 +89,7 @@ def count_running_tasks(task_type: str | None = None) -> int:
     with _active_lock:
         return sum(
             1 for info in _active_processes.values()
-            if (info.process is None or info.process.is_alive()) and (task_type is None or info.task_type == task_type)
+            if task_type is None or info.task_type == task_type
         )
 
 
@@ -106,7 +110,7 @@ def try_reserve_slot(task_id: str, task_type: str, model: str = '') -> bool:
     with _active_lock:
         running = sum(
             1 for info in _active_processes.values()
-            if info.task_type == task_type and (info.process is None or info.process.is_alive())
+            if info.task_type == task_type
         )
         if running >= max_slots:
             return False
@@ -173,8 +177,18 @@ def stop_process(task_id: str) -> bool:
     """
     with _active_lock:
         info = _active_processes.pop(task_id, None)
-    if info is None or info.process is None:
+    if info is None:
         return False
+    # Allow stopping placeholder tasks (process not yet attached):
+    # the subprocess will find no registry entry and exit cleanly.
+    if info.process is None:
+        logger.info(f'Task {task_id} (placeholder) stopped by user.')
+        try:
+            from .. import db as _db
+            _db.delete_task_state(task_id)
+        except Exception:
+            pass
+        return True
     proc = info.process
     if proc.is_alive() and proc.pid is not None:
         try:
