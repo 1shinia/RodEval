@@ -86,6 +86,52 @@ def _build_evaluate_kwargs(eval_args: MTEBEvalConfig, output_folder: str, predic
     return eval_kwargs
 
 
+def _is_retrieval_task(task) -> bool:
+    """Check if a task is a Retrieval or Reranking type."""
+    task_type = getattr(task.metadata, 'type', None)
+    return task_type in ('Retrieval', 'Reranking')
+
+
+def _apply_retrieval_limits(task, limits: int) -> None:
+    """Apply query limits to a Retrieval task's queries/relevant_docs.
+
+    MTEB 2.x stores retrieval data in task.dataset as a nested dict:
+        task.dataset[subset][split] = RetrievalSplitData({
+            "corpus": Dataset,
+            "queries": Dataset,
+            "relevant_docs": dict,
+        })
+    """
+    if not hasattr(task, 'dataset') or not task.dataset:
+        return
+
+    for subset_key, subset_data in task.dataset.items():
+        if not isinstance(subset_data, dict):
+            continue
+        for split_key, split_data in subset_data.items():
+            if not isinstance(split_data, dict):
+                continue
+            queries = split_data.get('queries')
+            if queries is None or len(queries) <= limits:
+                continue
+
+            # queries is a HuggingFace Dataset with 'id' column
+            limited_queries = queries.select(range(limits))
+            keep_qids = set(str(q) for q in limited_queries['id'])
+
+            split_data['queries'] = limited_queries
+
+            # Filter relevant_docs to keep only limited query IDs
+            relevant_docs = split_data.get('relevant_docs')
+            if relevant_docs is not None and isinstance(relevant_docs, dict):
+                split_data['relevant_docs'] = {k: v for k, v in relevant_docs.items() if k in keep_qids}
+
+            logger.info(
+                f'Applied limits={limits} to {task.metadata.name}/{subset_key}/{split_key}: '
+                f'{len(limited_queries)} queries kept (was {len(queries)})'
+            )
+
+
 def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
     """Run single-model MTEB evaluation using native HuggingFace data loading."""
     model = load_model(model_args)
@@ -98,8 +144,11 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
             try:
                 task.data_loaded = False
                 task.load_data()
-                # Directly subset the loaded dataset
-                if hasattr(task, 'dataset') and task.dataset is not None:
+                if _is_retrieval_task(task):
+                    # Retrieval tasks use corpus/queries/relevant_docs dicts
+                    _apply_retrieval_limits(task, eval_args.limits)
+                elif hasattr(task, 'dataset') and task.dataset is not None:
+                    # Non-retrieval tasks use HuggingFace DatasetDict
                     ds = task.dataset
                     subset = DatasetDict({
                         k: v.select(range(min(eval_args.limits, len(v))))

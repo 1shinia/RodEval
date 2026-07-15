@@ -331,8 +331,8 @@ export default function RAGEvalForm({ onSubmit, disabled, evalMode }: Props) {
 
         <FormField label={t('eval.ragLimit')}>
           <input type="number" value={ragLimit}
-            onChange={(e) => setRagLimit(e.target.value.replace(/[^0-9]/g, ''))}
-            className={FORM_INPUT_CLASS} placeholder="10" />
+            onChange={e => setRagLimit(e.target.value.replace(/[^0-9]/g, ''))}
+            className={FORM_INPUT_CLASS} placeholder="全量" />
         </FormField>
 
         {evalMode === 'reranker' && (

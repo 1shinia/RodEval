@@ -34,6 +34,68 @@ logger = get_logger()
 
 bp_eval = Blueprint('eval', __name__, url_prefix='/api/v1/eval')
 
+
+def _parse_mteb_results(work_dir: str) -> List:
+    """Parse MTEB JSON results from results/ directory.
+
+    MTEB format:
+    {
+      "task_name": "TaskName",
+      "scores": {
+        "test": [{"main_score": 0.5, ...}]
+      }
+    }
+
+    Returns a list of objects with model_name, dataset_name, score, num.
+    """
+    from types import SimpleNamespace
+    results_dir = os.path.join(work_dir, 'results')
+    reports = []
+
+    if not os.path.isdir(results_dir):
+        return reports
+
+    # Find all JSON files (excluding model_meta.json)
+    for root, dirs, files in os.walk(results_dir):
+        for fname in files:
+            if not fname.endswith('.json') or fname == 'model_meta.json':
+                continue
+
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                task_name = data.get('task_name', fname.replace('.json', ''))
+                scores = data.get('scores', {})
+
+                # Extract model name from path: results/eval__model_name/master/...
+                rel_path = os.path.relpath(fpath, results_dir)
+                parts = rel_path.split(os.sep)
+                model_name = parts[0].replace('eval__', '') if parts else 'unknown'
+
+                # Get main_score from first split (usually 'test')
+                main_score = None
+                for split_data in scores.values():
+                    if isinstance(split_data, list) and split_data:
+                        main_score = split_data[0].get('main_score')
+                        break
+
+                if main_score is not None:
+                    reports.append(
+                        SimpleNamespace(
+                            model_name=model_name,
+                            dataset_name=task_name,
+                            score=main_score,
+                            num=0,
+                        )
+                    )
+            except Exception as e:
+                logger.warning(f'Failed to parse MTEB result {fpath}: {e}')
+
+    return reports
+
+
 _COLUMN_ZH = {
     'Model': '模型',
     'Dataset': '数据集',
@@ -220,10 +282,15 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             import time as _time
             from datetime import datetime
 
-            from evalscope.report.combinator import get_report_list
             from .. import db as _db
-            reports_dir = os.path.join(task_config.work_dir, 'reports')
-            report_list = get_report_list([reports_dir])
+
+            if task_config.eval_backend == EvalBackend.RAG_EVAL:
+                # MTEB results are in results/ with MTEB JSON format
+                report_list = _parse_mteb_results(task_config.work_dir)
+            else:
+                from evalscope.report.combinator import get_report_list
+                reports_dir = os.path.join(task_config.work_dir, 'reports')
+                report_list = get_report_list([reports_dir])
             if report_list:
                 first = report_list[0]
                 total_num = sum(r.num or 0 for r in report_list)
