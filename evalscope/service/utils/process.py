@@ -378,7 +378,15 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
         from datetime import datetime
 
         from evalscope.report.combinator import get_report_list
+        from evalscope.service import db as _db
         from evalscope.service.db import upsert_eval_report
+
+        # In a spawned subprocess, _db_path is None because init_db() was
+        # only called in the parent.  Initialise it here using the outputs
+        # root (parent of the task's work_dir).
+        if _db._db_path is None:
+            outputs_root = os.path.dirname(task_config.work_dir.rstrip('/'))
+            _db.init_db(outputs_root)
 
         reports_dir = os.path.join(task_config.work_dir, 'reports')
         if not os.path.isdir(reports_dir):
@@ -441,8 +449,8 @@ def serialize_result(result):
     if isinstance(result, BaseModel):
         # Report has a custom to_dict() that delegates to model_dump()
         if hasattr(result, 'to_dict'):
-            return result.to_dict()
-        return result.model_dump()
+            return serialize_result(result.to_dict())
+        return serialize_result(result.model_dump())
     if isinstance(result, dict):
         return {k: serialize_result(v) for k, v in result.items()}
     if isinstance(result, list):
