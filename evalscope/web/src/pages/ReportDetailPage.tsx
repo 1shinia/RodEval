@@ -96,11 +96,18 @@ export default function ReportDetailPage() {
     setActiveTab('predictions')
   }
 
-  const tabs = [
-    { key: 'overview', label: t('reportDetail.overview') },
-    { key: 'details', label: t('reportDetail.details') },
-    { key: 'predictions', label: t('reportDetail.predictions') },
-  ]
+  const isMteb = data?.eval_type === 'mteb'
+
+  const tabs = useMemo(() => {
+    if (isMteb) {
+      return [{ key: 'overview', label: t('reportDetail.overview') }]
+    }
+    return [
+      { key: 'overview', label: t('reportDetail.overview') },
+      { key: 'details', label: t('reportDetail.details') },
+      { key: 'predictions', label: t('reportDetail.predictions') },
+    ]
+  }, [isMteb, t])
 
   if (loading) {
     return (

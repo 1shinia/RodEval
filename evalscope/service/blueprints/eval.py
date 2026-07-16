@@ -55,6 +55,9 @@ def _parse_mteb_results(work_dir: str) -> List:
     if not os.path.isdir(results_dir):
         return reports
 
+    # Try to get sample count from task config or MTEB JSON files
+    num_samples = _read_mteb_sample_count(work_dir)
+
     # Find all JSON files (excluding model_meta.json)
     for root, dirs, files in os.walk(results_dir):
         for fname in files:
@@ -87,13 +90,29 @@ def _parse_mteb_results(work_dir: str) -> List:
                             model_name=model_name,
                             dataset_name=task_name,
                             score=main_score,
-                            num=0,
+                            num=num_samples,
                         )
                     )
             except Exception as e:
                 logger.warning(f'Failed to parse MTEB result {fpath}: {e}')
 
     return reports
+
+
+def _read_mteb_sample_count(work_dir: str) -> int:
+    """Read sample count from MTEB task config."""
+    import yaml as _yaml
+    config_path = os.path.join(work_dir, 'configs', 'task_config.yaml')
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as cf:
+                cfg = _yaml.safe_load(cf) or {}
+            limits = cfg.get('eval_config', {}).get('eval', {}).get('limits')
+            if limits is not None:
+                return int(limits)
+        except Exception:
+            pass
+    return 0
 
 
 _COLUMN_ZH = {

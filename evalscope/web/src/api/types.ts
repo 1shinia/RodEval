@@ -71,6 +71,7 @@ export interface LoadReportResponse {
   report_list: ReportData[]
   datasets: string[]
   task_config: Record<string, unknown>
+  eval_type?: string
 }
 
 export interface ScanResponse {
