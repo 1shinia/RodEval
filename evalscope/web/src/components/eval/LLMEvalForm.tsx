@@ -137,7 +137,7 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
   const isLocalDataset = datasetHub === 'local'
 
   // Common
-  const [limit, setLimit] = useState('5')
+  const [limit, setLimit] = useState('')
   const [evalBatchSize, setEvalBatchSize] = useState('1')
   const [showMore, setShowMore] = useState(false)
   const [repeats, setRepeats] = useState('1')
@@ -571,7 +571,7 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
         </FormField>
 
         <FormField label={t('eval.limit')} error={errors.limit}>
-          <input type="number" value={limit} onChange={(e) => { setLimit(e.target.value.replace(/[^0-9]/g, '')); if (errors.limit) setErrors((p) => ({ ...p, limit: '' })) }} className={inputClass(errors.limit)} />
+          <input type="number" value={limit} onChange={(e) => { setLimit(e.target.value.replace(/[^0-9]/g, '')); if (errors.limit) setErrors((p) => ({ ...p, limit: '' })) }} className={inputClass(errors.limit)} placeholder={t('common.placeholderAllData')} />
         </FormField>
 
         <FormField label={t('eval.batchSize')} error={errors.evalBatchSize}>
