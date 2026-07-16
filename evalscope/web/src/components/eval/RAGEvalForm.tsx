@@ -220,7 +220,7 @@ export default function RAGEvalForm({ onSubmit, disabled, evalMode }: Props) {
           <FormField label={t('eval.apiUrl')} required error={errors.ragApiBase}>
             <input value={ragApiBase}
               onChange={(e) => { setRagApiBase(e.target.value); if (errors.ragApiBase) setErrors(p => ({ ...p, ragApiBase: '' })) }}
-              className={inputClass(errors.ragApiBase)} placeholder="https://api.openai.com/v1" />
+              className={inputClass(errors.ragApiBase)} placeholder="https://api.openai.com/v1（自动追加 /embeddings，无需手动填写）" />
           </FormField>
           <FormField label={t('eval.apiKey')} required error={errors.ragApiKey}>
             <input type="password" value={ragApiKey}
@@ -242,7 +242,7 @@ export default function RAGEvalForm({ onSubmit, disabled, evalMode }: Props) {
             <input value={ragModelPath}
               onChange={(e) => { setRagModelPath(e.target.value); if (errors.ragModelPath) setErrors(p => ({ ...p, ragModelPath: '' })) }}
               className={inputClass(errors.ragModelPath)}
-              placeholder="BAAI/bge-large-zh-v1.5" />
+              placeholder="BAAI/bge-small-zh-v1.5" />
           </FormField>
 
           <FormField label={t('eval.ragMaxSeqLen')}>
@@ -356,7 +356,7 @@ export default function RAGEvalForm({ onSubmit, disabled, evalMode }: Props) {
               <FormField label={t('eval.ragEncoderModel')}>
                 <input value={ragEncoderModel}
                   onChange={(e) => setRagEncoderModel(e.target.value)}
-                  className={FORM_INPUT_CLASS} placeholder="BAAI/bge-large-zh-v1.5" />
+                  className={FORM_INPUT_CLASS} placeholder="BAAI/bge-small-zh-v1.5" />
               </FormField>
             </div>
           )}
