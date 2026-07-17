@@ -21,11 +21,14 @@ export default function OverviewTab({ reports, reportName, rootPath, taskConfig,
   const { t } = useLocale()
 
   const tableData = useMemo(() => {
-    return reports.map((r) => ({
-      Dataset: r.dataset_name,
-      Score: r.score,
-      Samples: r.metrics[0]?.categories?.reduce((s, c) => s + c.num, 0) ?? 0,
-    }))
+    return reports.map((r) => {
+      const catNum = r.metrics[0]?.categories?.reduce((s, c) => s + c.num, 0) ?? 0
+      return {
+        Dataset: r.dataset_name,
+        Score: r.score,
+        Samples: catNum,
+      }
+    })
   }, [reports])
 
   const columns = [
@@ -78,7 +81,9 @@ export default function OverviewTab({ reports, reportName, rootPath, taskConfig,
       label: t('reportDetail.samples'),
       sortable: true,
       render: (row: Record<string, unknown>) => (
-        <span className="text-[var(--text-muted)]">{Number(row.Samples).toLocaleString()}</span>
+        <span className="text-[var(--text-muted)]">
+          {Number(row.Samples) > 0 ? Number(row.Samples).toLocaleString() : t('common.allData')}
+        </span>
       ),
     },
   ]

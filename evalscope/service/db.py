@@ -618,14 +618,21 @@ def backfill(output_dir: str) -> None:
                 dataset_names: list[str] = []
                 score_sum = 0.0
                 dataset_scores: dict[str, float | None] = {}
+                full_dataset = False
                 for r in report_list:
                     dataset_names.append(r.dataset_name)
-                    total_num += r.num or 0
+                    n = r.num or 0
+                    if n <= 0:
+                        full_dataset = True
+                    else:
+                        total_num += n
                     score_sum += r.score
                     score = r.score
                     if score is not None and score > 1:
                         score = score / 100
                     dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
+                if full_dataset:
+                    total_num = -1
                 avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
 
                 # Extract timestamp from directory name

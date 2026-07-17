@@ -71,7 +71,7 @@ export default function ReportHeader({
               <span style={{ color: scoreColor(normalizedScore) }}>{formatScore(score)}</span>
             </Badge>
             <span className="text-sm text-[var(--text-muted)]">
-              {totalSamples.toLocaleString()} {t('single.samples')}
+              {totalSamples > 0 ? `${totalSamples.toLocaleString()} ${t('single.samples')}` : t('common.allData')}
             </span>
           </div>
         </div>

@@ -453,6 +453,7 @@ def _persist_rag_results(task_config: TaskConfig) -> None:
     scores: dict = {}
     task_names: set = set()
     total_samples = 0
+    limits_from_config = False
     # Extract model name from directory: results/<eval__model_name>/...
     import re
     for rf in dataset_files:
@@ -469,7 +470,10 @@ def _persist_rag_results(task_config: TaskConfig) -> None:
                 cfg = yaml.safe_load(cf) or {}
             eval_cfg = cfg.get('eval_config', {})
             if isinstance(eval_cfg, dict):
-                total_samples = eval_cfg.get('eval', {}).get('limits', 0)
+                limits_val = eval_cfg.get('eval', {}).get('limits')
+                if limits_val is not None:
+                    total_samples = int(limits_val)
+                limits_from_config = True
     except Exception:
         total_samples = 0
     for rf in dataset_files:
@@ -483,7 +487,7 @@ def _persist_rag_results(task_config: TaskConfig) -> None:
                 if isinstance(split_data, list):
                     for exp in split_data:
                         sc = exp.get('scores_per_experiment', [])
-                        if sc and not total_samples:
+                        if sc and not limits_from_config:
                             total_samples = max(total_samples, len(sc))
             task_score = data.get('scores', {}).get('test', [{}])[0].get('main_score')
             if task_score is None:
@@ -513,7 +517,7 @@ def _persist_rag_results(task_config: TaskConfig) -> None:
             model_name=model_name or 'unknown',
             dataset_name=dataset_str,
             score=avg,
-            num_samples=total_samples or len(task_names) or 10,
+            num_samples=total_samples,
             timestamp=datetime.now().isoformat(),
             dataset_scores=scores,
         )

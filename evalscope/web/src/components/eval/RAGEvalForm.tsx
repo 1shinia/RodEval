@@ -283,9 +283,9 @@ export default function RAGEvalForm({ onSubmit, disabled, evalMode }: Props) {
         <div className="md:col-span-2 border-t border-[var(--border-md)] pt-3"></div>
 
         <div className="md:col-span-2">
-          <label className={FORM_LABEL_CLASS}>{t('eval.ragTaskTypesTitle')}</label>
-          <p className="text-xs text-[var(--text-muted)] mb-2">{t('eval.ragTaskTypesHint')}</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
+          <FormField label={t('eval.ragTaskTypesTitle')} required error={errors.ragTaskTypes}>
+            <p className="text-xs text-[var(--text-muted)] mb-2">{t('eval.ragTaskTypesHint')}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
             {(evalMode === 'reranker' ? RERANKER_TASK_TYPES : EMBEDDING_TASK_TYPES).map((tt) => {
               const selected = ragTaskTypes.split(/[,，]/).map(s => s.trim()).filter(Boolean)
               return (
@@ -301,10 +301,11 @@ export default function RAGEvalForm({ onSubmit, disabled, evalMode }: Props) {
               )
             })}
           </div>
+          </FormField>
         </div>
 
         {/* Task Names with auto-complete */}
-        <FormField label={t('eval.ragTaskNames')}>
+        <FormField label={t('eval.ragTaskNames')} required>
           <div ref={nameInputRef} className="relative">
             <input value={ragTaskNames}
               onChange={(e) => handleTaskNameChange(e.target.value)}

@@ -100,7 +100,11 @@ def _parse_mteb_results(work_dir: str) -> List:
 
 
 def _read_mteb_sample_count(work_dir: str) -> int:
-    """Read sample count from MTEB task config."""
+    """Read sample count from MTEB task config.
+
+    Returns:
+        The limit value if set in config, otherwise -1 (meaning "全量" / full dataset).
+    """
     import yaml as _yaml
     config_path = os.path.join(work_dir, 'configs', 'task_config.yaml')
     if os.path.exists(config_path):
@@ -112,7 +116,7 @@ def _read_mteb_sample_count(work_dir: str) -> int:
                 return int(limits)
         except Exception:
             pass
-    return 0
+    return -1
 
 
 _COLUMN_ZH = {
@@ -312,7 +316,17 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                 report_list = get_report_list([reports_dir])
             if report_list:
                 first = report_list[0]
-                total_num = sum(r.num or 0 for r in report_list)
+                # Compute total_num: -1 sentinel = 全量 (limits was null)
+                full_dataset = False
+                total_num = 0
+                for r in report_list:
+                    n = r.num or 0
+                    if n <= 0:
+                        full_dataset = True
+                    else:
+                        total_num += n
+                if full_dataset:
+                    total_num = -1
                 dataset_names = [r.dataset_name for r in report_list]
                 score_sum = sum(r.score for r in report_list if r.score is not None)
                 avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0

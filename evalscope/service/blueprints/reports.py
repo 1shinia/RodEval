@@ -188,7 +188,7 @@ def _load_mteb_report_data(root: str, report_name: str, task_cfg: dict):
                 model_name = parts[0].replace('eval__', '') if parts else 'unknown'
 
                 if main_score is not None:
-                    samples = limits if limits is not None else 0
+                    samples = limits if limits is not None else -1  # -1 = 全量
                     datasets.append(task_name)
                     reports.append({
                         'name': task_name,
@@ -254,10 +254,17 @@ def _build_report_meta(report_name: str, root: str) -> dict:
     total_num = 0
     dataset_names = []
     score_sum = 0.0
+    full_dataset = False  # track whether any dataset had "全量" (limits=null)
     for r in report_list:
         dataset_names.append(r.dataset_name)
-        total_num += r.num or 0
+        n = r.num or 0
+        if n <= 0:
+            full_dataset = True
+        else:
+            total_num += n
         score_sum += r.score
+    if full_dataset:
+        total_num = -1  # -1 = 全量 (at least one dataset ran without limit)
 
     avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
     timestamp = _extract_timestamp(report_name, root)
