@@ -7,7 +7,7 @@ import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask } from '@/api/eval'
 
-type EvalMode = 'llm' | 'embedding' | 'reranker'
+type EvalMode = 'llm' | 'rag'
 
 const evalApi = {
   submit: submitEvalTask,
@@ -56,8 +56,7 @@ export default function EvalTaskPage() {
         <div className="flex gap-1 rounded-lg bg-[var(--bg-card2)] p-1">
           {([
             ['llm', 'eval.evalModeLLM'],
-            ['embedding', 'eval.evalModeEmbedding'],
-            ['reranker', 'eval.evalModeReranker'],
+            ['rag', 'eval.evalModeRAG'],
           ] as const).map(([mode, label]) => (
             <button key={mode} type="button"
               onClick={() => setEvalMode(mode)}
@@ -75,11 +74,8 @@ export default function EvalTaskPage() {
       {evalMode === 'llm' && (
         <EvalConfigForm onSubmit={handleSubmit} disabled={running} initialDataset={initialDataset} onApiKeyChange={onApiKeyChange} />
       )}
-      {evalMode === 'embedding' && (
-        <RAGEvalForm onSubmit={handleSubmit} disabled={running} evalMode="embedding" />
-      )}
-      {evalMode === 'reranker' && (
-        <RAGEvalForm onSubmit={handleSubmit} disabled={running} evalMode="reranker" />
+      {evalMode === 'rag' && (
+        <RAGEvalForm onSubmit={handleSubmit} disabled={running} />
       )}
     </TaskPageLayout>
   )
