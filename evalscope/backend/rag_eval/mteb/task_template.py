@@ -134,21 +134,40 @@ def _apply_retrieval_limits(task, limits: int) -> None:
 
 def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
     """Run single-model MTEB evaluation using native HuggingFace data loading."""
+    import json as _json
+    from datetime import datetime as _datetime
+
     model = load_model(model_args)
     tasks = resolve_tasks(eval_args)
 
+    work_dir = eval_args.output_folder
+    task_names = [t.metadata.name for t in tasks]
+    total_tasks = len(tasks)
+
+    # ── Write initial progress ──────────────────────────────────────
+    _write_progress(
+        work_dir, {
+            'status': 'running',
+            'phase': 'loading',
+            'pipeline': 'eval',
+            'total_count': total_tasks,
+            'processed_count': 0,
+            'percent': 0.0,
+            'tasks': task_names,
+            'updated_at': _datetime.now().isoformat(),
+        }
+    )
+
     # Apply per-task limits: subset the dataset after loading
     if eval_args.limits is not None:
-        logger.info(f'Applying limits={eval_args.limits} to {len(tasks)} task(s)')
+        logger.info(f'Applying limits={eval_args.limits} to {total_tasks} task(s)')
         for task in tasks:
             try:
                 task.data_loaded = False
                 task.load_data()
                 if _is_retrieval_task(task):
-                    # Retrieval tasks use corpus/queries/relevant_docs dicts
                     _apply_retrieval_limits(task, eval_args.limits)
                 elif hasattr(task, 'dataset') and task.dataset is not None:
-                    # Non-retrieval tasks use HuggingFace DatasetDict
                     ds = task.dataset
                     subset = DatasetDict({
                         k: v.select(range(min(eval_args.limits, len(v))))
@@ -158,15 +177,70 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
             except Exception as e:
                 logger.warning(f'Failed to apply limits to {task.metadata.name}: {e}')
 
-    task_names = [t.metadata.name for t in tasks]
-    logger.info(f'Resolved {len(tasks)} task(s): {task_names}')
+    # ── Extract actual sample counts when limits is null ────────────
+    actual_limits = eval_args.limits
+    if actual_limits is None:
+        for task in tasks:
+            try:
+                task.data_loaded = False
+                task.load_data()
+                if _is_retrieval_task(task):
+                    queries = _get_queries_count(task)
+                    if queries:
+                        actual_limits = queries if actual_limits is None else max(actual_limits, queries)
+                elif hasattr(task, 'dataset') and task.dataset is not None:
+                    ds = task.dataset
+                    eval_splits = _get_eval_splits(task)
+                    if isinstance(ds, DatasetDict):
+                        for split_key in eval_splits:
+                            if split_key in ds:
+                                actual_limits = len(
+                                    ds[split_key]
+                                ) if actual_limits is None else max(actual_limits, len(ds[split_key]))
+                    else:
+                        actual_limits = len(ds) if actual_limits is None else max(actual_limits, len(ds))
+            except Exception as e:
+                logger.debug(f'Could not count samples for {task.metadata.name}: {e}')
+        # Write actual count back to config so reports show real number
+        if actual_limits is not None:
+            _update_config_limits(work_dir, actual_limits)
+
+    logger.info(f'Resolved {total_tasks} task(s): {task_names}')
     logger.info(f'Starting evaluation (data will be downloaded from HF mirror on first run)...')
     eval_kwargs = _build_evaluate_kwargs(eval_args, eval_args.output_folder)
+
+    # ── Update progress: evaluating ─────────────────────────────────
+    _write_progress(
+        work_dir, {
+            'status': 'running',
+            'phase': 'evaluating',
+            'pipeline': 'eval',
+            'total_count': total_tasks,
+            'processed_count': 0,
+            'percent': 0.0,
+            'tasks': task_names,
+            'updated_at': _datetime.now().isoformat(),
+        }
+    )
 
     results = mteb.evaluate(
         model=model,
         tasks=tasks,
         **eval_kwargs,
+    )
+
+    # ── Write completion progress ───────────────────────────────────
+    _write_progress(
+        work_dir, {
+            'status': 'completed',
+            'phase': 'completed',
+            'pipeline': 'eval',
+            'total_count': total_tasks,
+            'processed_count': total_tasks,
+            'percent': 100.0,
+            'tasks': task_names,
+            'updated_at': _datetime.now().isoformat(),
+        }
     )
 
     show_results(eval_args.output_folder, model, results.task_results)
@@ -238,3 +312,57 @@ def show_results(output_folder: str, model, task_results) -> None:
         _logger = get_logger()
         _logger.info('Evaluation results:\n' + tabulate(rows, headers=headers, tablefmt='grid'))
         _logger.info(f'Results saved in: {output_folder}')
+
+
+def _write_progress(work_dir: str, data: dict) -> None:
+    """Write progress.json for SSE streaming."""
+    import json
+    import os
+    try:
+        os.makedirs(work_dir, exist_ok=True)
+        with open(os.path.join(work_dir, 'progress.json'), 'w') as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+
+def _get_eval_splits(task) -> list:
+    """Get the splits that will be evaluated (default: ['test'])."""
+    return getattr(task, 'eval_splits', None) or ['test']
+
+
+def _get_queries_count(task) -> int | None:
+    """Extract query count from a Retrieval task's evaluated splits."""
+    if not hasattr(task, 'dataset') or not task.dataset:
+        return None
+    eval_splits = _get_eval_splits(task)
+    for subset_data in task.dataset.values():
+        if not isinstance(subset_data, dict):
+            continue
+        for split_key, split_data in subset_data.items():
+            if split_key not in eval_splits:
+                continue
+            if not isinstance(split_data, dict):
+                continue
+            queries = split_data.get('queries')
+            if queries is not None and hasattr(queries, '__len__'):
+                return len(queries)
+    return None
+
+
+def _update_config_limits(work_dir: str, count: int) -> None:
+    """Update task_config.yaml with actual sample count."""
+    import yaml
+    config_path = os.path.join(work_dir, 'configs', 'task_config.yaml')
+    if not os.path.exists(config_path):
+        return
+    try:
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f) or {}
+        eval_cfg = cfg.setdefault('eval_config', {}).setdefault('eval', {})
+        eval_cfg['limits'] = count
+        with open(config_path, 'w') as f:
+            yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
+        logger.info(f'Updated config limits to actual sample count: {count}')
+    except Exception as e:
+        logger.debug(f'Could not update config limits: {e}')
