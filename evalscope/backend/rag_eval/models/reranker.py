@@ -81,8 +81,9 @@ class CrossEncoderReranker(BaseReranker):
         self.tokenizer = self.model.tokenizer
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        if ('pad_token_id' not in self.model.config) or (self.model.config.pad_token_id is None):
-            self.model.config.update({'pad_token_id': self.tokenizer.eos_token_id})
+        cfg = self.model.config
+        if not hasattr(cfg, 'pad_token_id') or cfg.pad_token_id is None:
+            cfg.pad_token_id = self.tokenizer.eos_token_id
 
         self._supported_predict_params = get_supported_params(self.model.predict)
 

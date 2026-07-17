@@ -95,6 +95,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
   const [ragEncoderModel, setRagEncoderModel] = useState('')
   const [ragPrompt, setRagPrompt] = useState('')
   const [ragHub, setRagHub] = useState('modelscope')
+  const [ragDataHub, setRagDataHub] = useState('modelscope')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // ── RAGAS fields ──
@@ -216,8 +217,8 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
     const isApi = ragModelSource === 'api'
     const modelConfig: Record<string, unknown> = {
       is_cross_encoder: ragTool === 'reranker',
-      hub: ragHub,
     }
+    if (!isApi) modelConfig.hub = ragHub
     if (ragPrompt.trim()) modelConfig.prompt = ragPrompt.trim()
     if (isApi) {
       modelConfig.model_name = ragModelPath.trim()
@@ -241,7 +242,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
     }
 
     const evalCfg: Record<string, unknown> = {
-      hub: ragHub,
+      hub: ragDataHub,
     }
     if (ragTaskTypes) evalCfg.task_types = ragTaskTypes.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
     if (ragTaskNames) evalCfg.task_names = ragTaskNames.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
@@ -345,7 +346,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
             )}
 
             <FormField label="数据集来源">
-              <select value={ragHub} onChange={e => setRagHub(e.target.value)} className={FORM_INPUT_CLASS}>
+              <select value={ragDataHub} onChange={e => setRagDataHub(e.target.value)} className={FORM_INPUT_CLASS}>
                 <option value="modelscope">ModelScope</option>
                 <option value="huggingface">HuggingFace</option>
               </select>
