@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "pretty_name": "Bitext Mining",
+    "pretty_name_zh": "双语对齐挖掘",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Embedding", "Multilingual"],
+    "metrics": [{"f1": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": ["BUCC", "Tatoeba"],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 29, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Bitext Mining\n\n## Overview\n\nBitext Mining evaluates the ability to find translations or parallel sentences across languages by matching embeddings in a shared vector space.\n\n## Task Description\n\n- **Task Type**: Cross-lingual sentence matching\n- **Input**: Sentences in two languages\n- **Output**: Best-matching translation pairs\n- **Evaluation**: F1 score\n\n## Key Features\n\n- 29 datasets across many language pairs\n- Evaluates cross-lingual embedding alignment quality\n- Essential for multilingual embedding models\n\n## Evaluation Notes\n\n- Metric: F1 score\n- Uses cosine similarity for matching\n- BUCC and Tatoeba are the most widely used benchmarks\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Bitext Mining |\n| **Datasets** | 29 |\n| **Metrics** | f1 |\n| **MTEB Category** | Embedding (Multilingual) |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 29 |\n| Notable Datasets | BUCC, Tatoeba |\n",
+    "zh": "# 双语对齐挖掘\n\n## 概述\n\n双语对齐挖掘评估模型在共享向量空间中匹配跨语言平行句子的能力，找到翻译对应句。\n\n## 任务描述\n\n- **任务类型**: 跨语言句子匹配\n- **输入**: 两种语言的句子\n- **输出**: 最佳匹配的翻译对\n- **评测方式**: F1 分数\n\n## 主要特点\n\n- 29 个数据集覆盖大量语言对\n- 评估跨语言 Embedding 对齐质量\n- 多语言 Embedding 模型的关键评估任务\n\n## 评估说明\n\n- 指标: F1 分数\n- 使用余弦相似度进行匹配\n- BUCC 和 Tatoeba 是最广泛使用的基准\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 双语对齐挖掘 |\n| **数据集数量** | 29 |\n| **评估指标** | f1 |\n| **MTEB 类别** | Embedding (多语言) |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 29 |\n| 代表性数据集 | BUCC, Tatoeba |\n"
+  }
+}

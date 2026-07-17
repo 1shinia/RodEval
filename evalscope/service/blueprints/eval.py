@@ -14,6 +14,7 @@ from ..model_launcher import LaunchResult, LocalBackend, ModelSource, is_direct_
 from ..model_launcher import stop as launcher_stop
 from ..utils import (
     DEFAULT_MULTIMODAL_BENCHMARKS,
+    DEFAULT_RAG_BENCHMARKS,
     DEFAULT_TEXT_BENCHMARKS,
     OUTPUT_DIR,
     build_benchmark_entry,
@@ -854,17 +855,18 @@ def stream_evaluation_log():
 def list_benchmarks():
     """Return the catalogue of supported benchmarks with descriptions.
 
-    The list is split into two categories: ``text`` (LLM-only) and
-    ``multimodal`` (VLM).  Descriptions are loaded from the ``_meta`` JSON
-    files and post-processed: the H1 title and the last H2 section are
-    stripped, then the remainder is split into per-section blocks.
+    The list is split into three categories: ``text`` (LLM-only),
+    ``multimodal`` (VLM), and ``rag`` (RAG/MTEB).  Descriptions are loaded
+    from the ``_meta`` JSON files and post-processed: the H1 title and the
+    last H2 section are stripped, then the remainder is split into
+    per-section blocks.
 
     The default catalogue can be overridden at application startup by setting
-    ``app.config['SUPPORTED_BENCHMARKS']`` to a dict with keys ``'text'`` and
-    ``'multimodal'``, each containing a list of benchmark names.
+    ``app.config['SUPPORTED_BENCHMARKS']`` to a dict with keys ``'text'``,
+    ``'multimodal'``, and ``'rag'``, each containing a list of benchmark names.
 
     Query params:
-        type (str, optional): Filter to ``'text'`` or ``'multimodal'`` only.
+        type (str, optional): Filter to ``'text'``, ``'multimodal'``, or ``'rag'`` only.
         all (str, optional): When ``'true'``, return *all* benchmarks discovered
             from the ``_meta`` directory instead of the curated default lists.
     """
@@ -881,25 +883,31 @@ def list_benchmarks():
                 result = {'text': [e for e in all_entries if e.get('category') == 'llm']}
             elif filter_type == 'multimodal':
                 result = {'multimodal': [e for e in all_entries if e.get('category') == 'vlm']}
+            elif filter_type == 'rag':
+                result = {'rag': [e for e in all_entries if e.get('category') == 'rag']}
             else:
                 result = {
                     'text': [e for e in all_entries if e.get('category') == 'llm'],
                     'multimodal': [e for e in all_entries if e.get('category') == 'vlm'],
+                    'rag': [e for e in all_entries if e.get('category') == 'rag'],
                 }
         else:
             # Use the curated default lists (backward-compatible)
             cfg = current_app.config.get('SUPPORTED_BENCHMARKS', {})
             text_names: List[str] = cfg.get('text', DEFAULT_TEXT_BENCHMARKS)
             multimodal_names: List[str] = cfg.get('multimodal', DEFAULT_MULTIMODAL_BENCHMARKS)
+            rag_names: List[str] = cfg.get('rag', DEFAULT_RAG_BENCHMARKS)
 
             result: Dict[str, Any] = {}
             if filter_type in ('', 'text'):
                 result['text'] = [build_benchmark_entry(name) for name in text_names]
             if filter_type in ('', 'multimodal'):
                 result['multimodal'] = [build_benchmark_entry(name) for name in multimodal_names]
+            if filter_type in ('', 'rag'):
+                result['rag'] = [build_benchmark_entry(name) for name in rag_names]
 
-        if filter_type and filter_type not in ('text', 'multimodal'):
-            return jsonify({'error': f"Unknown type '{filter_type}'. Use 'text' or 'multimodal'."}), 400
+        if filter_type and filter_type not in ('text', 'multimodal', 'rag'):
+            return jsonify({'error': f"Unknown type '{filter_type}'. Use 'text', 'multimodal', or 'rag'."}), 400
 
         return jsonify(result), 200
     except Exception as e:

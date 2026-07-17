@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "pretty_name": "Pair Classification",
+    "pretty_name_zh": "文本对分类",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Embedding", "PairClassification"],
+    "metrics": [{"ap": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": [
+      "SprintDuplicateQuestions", "TwitterSemEval2015", "TwitterURLCorpus"
+    ],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 49, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Pair Classification\n\n## Overview\n\nPair Classification evaluates whether embedding models can determine if two texts are semantically related (e.g., duplicate questions, paraphrase detection). The cosine similarity of embeddings is compared against binary labels.\n\n## Task Description\n\n- **Task Type**: Binary classification of text pairs via embedding similarity\n- **Input**: Pairs of texts\n- **Output**: Binary decision (related / not related)\n- **Evaluation**: Average Precision (AP)\n\n## Key Features\n\n- 49 datasets covering duplicate detection and paraphrase identification\n- Evaluates fine-grained semantic relationship detection\n- Average Precision metric is robust to class imbalance\n\n## Evaluation Notes\n\n- Metric: Average Precision (AP)\n- Threshold optimized per dataset for best F1\n- Useful for deduplication and semantic matching applications\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Pair Classification |\n| **Datasets** | 49 |\n| **Metrics** | ap |\n| **MTEB Category** | Embedding |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 49 |\n| Notable Datasets | SprintDuplicateQuestions, TwitterSemEval2015, TwitterURLCorpus |\n",
+    "zh": "# 文本对分类\n\n## 概述\n\n文本对分类评估 Embedding 模型判断两段文本是否语义相关的能力 (如重复问题检测、释义识别)。通过比较 Embedding 余弦相似度与二分类标签进行评估。\n\n## 任务描述\n\n- **任务类型**: 基于 Embedding 相似度的文本对二分类\n- **输入**: 文本对\n- **输出**: 二分类判断 (相关/不相关)\n- **评测方式**: 平均精度 (AP)\n\n## 主要特点\n\n- 49 个数据集覆盖重复检测和释义识别\n- 评估细粒度语义关系检测能力\n- 平均精度指标对类别不平衡具有鲁棒性\n\n## 评估说明\n\n- 指标: 平均精度 (AP)\n- 阈值按数据集优化以获得最佳 F1\n- 适用于去重和语义匹配应用\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 文本对分类 |\n| **数据集数量** | 49 |\n| **评估指标** | ap |\n| **MTEB 类别** | Embedding |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 49 |\n| 代表性数据集 | SprintDuplicateQuestions, TwitterSemEval2015, TwitterURLCorpus |\n"
+  }
+}

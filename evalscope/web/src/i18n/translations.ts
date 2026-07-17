@@ -238,6 +238,7 @@ const en: Dict = {
     all: 'All',
     text: 'Text (LLM)',
     multimodal: 'Multimodal (VLM)',
+    rag: 'RAG',
     noDescription: 'No description available',
     search: 'Search benchmarks...',
     use: 'Use',
@@ -250,6 +251,8 @@ const en: Dict = {
     noResults: 'No matching benchmarks found',
     clearFilters: 'Clear filters',
     showing: 'Showing ${n} of ${total}',
+    includes: 'Datasets:',
+    datasets: 'datasets',
   },
   prediction: {
     chatView: 'Chat',
@@ -730,6 +733,7 @@ const zh: Dict = {
     all: '全部',
     text: '文本 (LLM)',
     multimodal: '多模态 (VLM)',
+    rag: 'RAG',
     noDescription: '暂无描述',
     search: '搜索基准测试...',
     use: '使用',
@@ -742,6 +746,8 @@ const zh: Dict = {
     noResults: '未找到匹配的基准测试',
     clearFilters: '清除筛选',
     showing: '显示 ${n} / ${total}',
+    includes: '包含数据集:',
+    datasets: '个数据集',
   },
   prediction: {
     chatView: '对话',

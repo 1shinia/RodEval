@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "pretty_name": "CLIP Benchmark",
+    "pretty_name_zh": "CLIP Benchmark",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2103.00020",
+    "tags": ["CLIP", "Vision", "ZeroShot", "Retrieval"],
+    "metrics": [
+      {"accuracy": {"numeric": true}},
+      {"recall_at_1": {"numeric": true}},
+      {"recall_at_5": {"numeric": true}}
+    ],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": [
+      "ImageNet", "ImageNetV2", "CIFAR-10", "CIFAR-100",
+      "MNIST", "FashionMNIST", "STL10", "Caltech101",
+      "OxfordPets", "Food101", "DTD", "EuroSAT",
+      "Flickr8k", "Flickr30k", "MSCOCO"
+    ],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 40, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# CLIP Benchmark\n\n## Overview\n\nCLIP Benchmark evaluates vision-language models on zero-shot image classification and image-text retrieval tasks. It uses the pre-trained CLIP model architecture to match images with text descriptions without task-specific fine-tuning.\n\n## Task Description\n\n- **Task Type**: Zero-shot image classification + image-text retrieval\n- **Input**: Images + text label descriptions\n- **Output**: Predicted labels via embedding similarity matching\n- **Evaluation**: Accuracy (classification), Recall@k (retrieval)\n\n## Key Features\n\n- 40+ standard vision datasets spanning natural images, textures, satellite imagery\n- Zero-shot evaluation: no training on target datasets required\n- Supports both classification (accuracy) and retrieval (recall@1/5/10)\n- Works with any OpenAI CLIP-compatible model (ViT-B/32, ViT-L/14, etc.)\n\n## Evaluation Notes\n\n- Requires CLIP model checkpoint (HuggingFace or local path)\n- Batch size configurable for VRAM optimization\n- Limit parameter controls samples per dataset\n- Metrics: top-1 accuracy (classification), recall@k (retrieval)\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Tool** | CLIP Benchmark |\n| **Category** | Vision-Language Evaluation |\n| **Datasets** | 40+ |\n| **Metrics** | accuracy, recall_at_1, recall_at_5, recall_at_10 |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 40+ |\n| Notable Datasets | ImageNet, CIFAR-100, Flickr30k, MSCOCO, Caltech101 |\n| Task Types | Classification, Retrieval |\n",
+    "zh": "# CLIP Benchmark\n\n## 概述\n\nCLIP Benchmark 评估视觉语言模型在零样本图像分类和图像文本检索任务上的表现。它使用预训练的 CLIP 模型架构，无需任务特定微调即可匹配图像与文本描述。\n\n## 任务描述\n\n- **任务类型**: 零样本图像分类 + 图像文本检索\n- **输入**: 图像 + 文本标签描述\n- **输出**: 通过 Embedding 相似度匹配预测标签\n- **评测方式**: 准确率 (分类), Recall@k (检索)\n\n## 主要特点\n\n- 40+ 标准视觉数据集，涵盖自然图像、纹理、卫星图像\n- 零样本评估: 无需在目标数据集上训练\n- 支持分类 (准确率) 和检索 (recall@1/5/10)\n- 兼容任何 OpenAI CLIP 兼容模型 (ViT-B/32, ViT-L/14 等)\n\n## 评估说明\n\n- 需要 CLIP 模型权重 (HuggingFace 或本地路径)\n- 批次大小可配置以优化显存\n- Limit 参数控制每个数据集的样本数\n- 指标: top-1 准确率 (分类), recall@k (检索)\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **工具** | CLIP Benchmark |\n| **类别** | 视觉语言评估 |\n| **数据集数量** | 40+ |\n| **评估指标** | accuracy, recall_at_1, recall_at_5, recall_at_10 |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 40+ |\n| 代表性数据集 | ImageNet, CIFAR-100, Flickr30k, MSCOCO, Caltech101 |\n| 任务类型 | 分类, 检索 |\n"
+  }
+}

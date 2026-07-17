@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "pretty_name": "Text Clustering",
+    "pretty_name_zh": "文本聚类",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Embedding", "Clustering"],
+    "metrics": [{"v_measure": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": [
+      "ArxivClusteringP2P", "ArxivClusteringS2S", "BiorxivClusteringP2P",
+      "BiorxivClusteringS2S", "MedrxivClusteringP2P", "MedrxivClusteringS2S",
+      "RedditClustering", "RedditClusteringP2P", "StackExchangeClusteringP2P",
+      "TwentyNewsgroupsClustering"
+    ],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 76, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Text Clustering\n\n## Overview\n\nText Clustering evaluates how well embedding models group semantically similar texts together. MTEB includes 76 clustering datasets across scientific papers, forum posts, and news articles.\n\n## Task Description\n\n- **Task Type**: K-means clustering on embeddings\n- **Input**: Collection of unlabeled texts\n- **Output**: Cluster assignments\n- **Evaluation**: V-measure score\n\n## Key Features\n\n- 76 datasets spanning academic papers, social media, and news\n- Evaluates embedding quality for unsupervised grouping tasks\n- V-measure balances homogeneity and completeness of clusters\n\n## Evaluation Notes\n\n- Metric: V-measure (harmonic mean of homogeneity and completeness)\n- Number of clusters equals number of true labels\n- Popular for evaluating domain-specific embeddings\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Text Clustering |\n| **Datasets** | 76 |\n| **Metrics** | v_measure |\n| **MTEB Category** | Embedding |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 76 |\n| Notable Datasets | ArxivClustering, RedditClustering, TwentyNewsgroups |\n",
+    "zh": "# 文本聚类\n\n## 概述\n\n文本聚类评估 Embedding 模型将语义相似的文本分组的能力。MTEB 收录了 76 个聚类数据集，涵盖学术论文、论坛帖子和新闻文章。\n\n## 任务描述\n\n- **任务类型**: 基于 Embedding 的 K-means 聚类\n- **输入**: 无标签文本集合\n- **输出**: 聚类分配\n- **评测方式**: V-measure 分数\n\n## 主要特点\n\n- 76 个数据集覆盖学术论文、社交媒体和新闻\n- 评估无监督分组任务中的 Embedding 质量\n- V-measure 平衡聚类的同质性和完整性\n\n## 评估说明\n\n- 指标: V-measure (同质性和完整性的调和平均)\n- 聚类数等于真实标签数\n- 常用于评估特定领域的 Embedding\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 文本聚类 |\n| **数据集数量** | 76 |\n| **评估指标** | v_measure |\n| **MTEB 类别** | Embedding |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 76 |\n| 代表性数据集 | ArxivClustering, RedditClustering, TwentyNewsgroups |\n"
+  }
+}

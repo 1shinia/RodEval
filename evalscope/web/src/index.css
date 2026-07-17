@@ -104,6 +104,8 @@
   --warning-border: rgba(245, 158, 11, 0.20);
   --warning-text: #b45309;
   --info: #60a5fa;
+  --info-bg: rgba(96, 165, 250, 0.08);
+  --info-border: rgba(96, 165, 250, 0.20);
   --success: #10b981;
   --success-bg: rgba(16, 185, 129, 0.08);
   --success-border: rgba(16, 185, 129, 0.20);
@@ -249,6 +251,8 @@
   --warning-border: rgba(217, 119, 6, 0.22);
   --warning-text: #92400e;
   --info: #3b82f6;
+  --info-bg: rgba(59, 130, 246, 0.08);
+  --info-border: rgba(59, 130, 246, 0.22);
   --success: #059669;
   --success-bg: rgba(5, 150, 105, 0.08);
   --success-border: rgba(5, 150, 105, 0.22);

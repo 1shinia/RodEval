@@ -3,6 +3,7 @@
 
 from .benchmarks import (
     DEFAULT_MULTIMODAL_BENCHMARKS,
+    DEFAULT_RAG_BENCHMARKS,
     DEFAULT_TEXT_BENCHMARKS,
     build_benchmark_entry,
     discover_all_benchmarks,
@@ -49,6 +50,7 @@ __all__ = [
     'run_in_subprocess',
     'DEFAULT_TEXT_BENCHMARKS',
     'DEFAULT_MULTIMODAL_BENCHMARKS',
+    'DEFAULT_RAG_BENCHMARKS',
     'build_benchmark_entry',
     'discover_all_benchmarks',
     'parse_benchmark_description',

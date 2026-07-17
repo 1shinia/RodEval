@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "pretty_name": "Text Retrieval",
+    "pretty_name_zh": "文本检索",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Embedding", "Retrieval"],
+    "metrics": [{"ndcg_at_10": {"numeric": true}}, {"map_at_10": {"numeric": true}}, {"recall_at_10": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": [
+      "MSMARCO", "NFCorpus", "SCIDOCS", "NQ", "ArguAna",
+      "ClimateFEVER", "CQADupstackRetrieval", "DBPedia",
+      "FEVER", "FiQA2018", "HotpotQA", "QuoraRetrieval",
+      "SciFact", "TRECCOVID", "Touche2020"
+    ],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 433, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Text Retrieval\n\n## Overview\n\nText Retrieval evaluates how well embedding models retrieve relevant documents from a large corpus given a query. This is the core task for RAG (Retrieval-Augmented Generation) systems. MTEB includes 433 retrieval datasets.\n\n## Task Description\n\n- **Task Type**: Dense Passage Retrieval\n- **Input**: Query + large corpus of documents\n- **Output**: Ranked list of most relevant documents\n- **Evaluation**: NDCG@10, MAP@10, Recall@10\n\n## Key Features\n\n- 433 datasets covering general web search, scientific retrieval, QA retrieval\n- The most important task type for evaluating embedding models in RAG pipelines\n- Evaluates both precision (MAP) and ranking quality (NDCG)\n\n## Evaluation Notes\n\n- Default: retrieve top-10 documents per query\n- Corpus sizes range from thousands to millions of documents\n- NDCG@10 is the main metric for ranking quality\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Text Retrieval |\n| **Datasets** | 433 |\n| **Metrics** | ndcg_at_10, map_at_10, recall_at_10 |\n| **MTEB Category** | Embedding |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 433 |\n| Notable Datasets | MSMARCO, NFCorpus, SCIDOCS, NQ, HotpotQA |\n",
+    "zh": "# 文本检索\n\n## 概述\n\n文本检索评估 Embedding 模型根据查询从大规模文档库中检索相关文档的能力，这是 RAG 系统的核心任务。MTEB 收录了 433 个检索数据集。\n\n## 任务描述\n\n- **任务类型**: 稠密段落检索 (Dense Passage Retrieval)\n- **输入**: 查询 + 大规模文档库\n- **输出**: 最相关文档的排名列表\n- **评测方式**: NDCG@10, MAP@10, Recall@10\n\n## 主要特点\n\n- 433 个数据集覆盖网页搜索、科学检索、问答检索等场景\n- 评估 RAG 流程中 Embedding 模型最重要的任务类型\n- 同时评估精确度 (MAP) 和排名质量 (NDCG)\n\n## 评估说明\n\n- 默认: 每个查询检索前 10 篇文档\n- 文档库规模从数千到数百万篇不等\n- NDCG@10 是排名质量的主指标\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 文本检索 |\n| **数据集数量** | 433 |\n| **评估指标** | ndcg_at_10, map_at_10, recall_at_10 |\n| **MTEB 类别** | Embedding |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 433 |\n| 代表性数据集 | MSMARCO, NFCorpus, SCIDOCS, NQ, HotpotQA |\n"
+  }
+}

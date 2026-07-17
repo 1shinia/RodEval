@@ -49,6 +49,24 @@ DEFAULT_MULTIMODAL_BENCHMARKS: List[str] = [
     'seed_bench_2_plus',
 ]
 
+#: Default RAG benchmarks (MTEB task types) exposed by the /api/v1/eval/benchmarks endpoint.
+DEFAULT_RAG_BENCHMARKS: List[str] = [
+    'mteb_classification',
+    'mteb_retrieval',
+    'mteb_sts',
+    'mteb_clustering',
+    'mteb_pairclassification',
+    'mteb_reranking',
+    'mteb_bittextmining',
+    'mteb_summarization',
+    'mteb_multilabel',
+    'mteb_instructionretrieval',
+    'mteb_zeroshot',
+    'mteb_instructionreranking',
+    'ragas',
+    'clip_benchmark',
+]
+
 # ---------------------------------------------------------------------------
 # Description parsing
 # ---------------------------------------------------------------------------

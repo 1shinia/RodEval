@@ -11,7 +11,7 @@ import Tabs from '@/components/ui/Tabs'
 import Badge from '@/components/ui/Badge'
 import { BookOpen, X, Database, Layers, FlaskConical, Tag, ExternalLink } from 'lucide-react'
 
-type TabKey = 'all' | 'text' | 'multimodal'
+type TabKey = 'all' | 'text' | 'multimodal' | 'rag'
 
 /** Strip markdown formatting for a plain-text preview */
 function stripMarkdown(md: string): string {
@@ -58,7 +58,14 @@ export default function BenchmarksPage() {
       .then((res) => {
         const textList = (res.text ?? []).map((e) => normalize(e, 'llm'))
         const mmList = (res.multimodal ?? []).map((e) => normalize(e, 'vlm'))
-        setAllBenchmarks([...textList, ...mmList])
+        const ragList = (res.rag ?? []).map((e) => normalize(e, 'rag'))
+          .sort((a, b) => {
+            // mteb_ entries first, then ragas, then clip_benchmark
+            const aMteb = a.name.startsWith('mteb_') ? 0 : a.name === 'ragas' ? 1 : 2
+            const bMteb = b.name.startsWith('mteb_') ? 0 : b.name === 'ragas' ? 1 : 2
+            return aMteb - bMteb || a.name.localeCompare(b.name)
+          })
+        setAllBenchmarks([...textList, ...mmList, ...ragList])
       })
       .catch((e) => { toast.error(e instanceof Error ? e.message : 'Failed to load benchmarks') })
       .finally(() => setLoading(false))
@@ -84,11 +91,13 @@ export default function BenchmarksPage() {
   // Count by category
   const textCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'llm').length, [allBenchmarks])
   const mmCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'vlm').length, [allBenchmarks])
+  const ragCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'rag').length, [allBenchmarks])
 
   // Filter by tab
   const tabFiltered = useMemo(() => {
     if (tab === 'text') return allBenchmarks.filter((b) => b.category === 'llm')
     if (tab === 'multimodal') return allBenchmarks.filter((b) => b.category === 'vlm')
+    if (tab === 'rag') return allBenchmarks.filter((b) => b.category === 'rag')
     return allBenchmarks
   }, [allBenchmarks, tab])
 
@@ -144,6 +153,7 @@ export default function BenchmarksPage() {
     { key: 'all', label: `${t('benchmarks.all')} (${allBenchmarks.length})` },
     { key: 'text', label: `${t('benchmarks.text')} (${textCount})` },
     { key: 'multimodal', label: `${t('benchmarks.multimodal')} (${mmCount})` },
+    { key: 'rag', label: `${t('benchmarks.rag')} (${ragCount})` },
   ]
 
   if (loading) return <LoadingSpinner />
@@ -251,6 +261,9 @@ export default function BenchmarksPage() {
                   {entry.category === 'vlm' && (
                     <Badge variant="warning" className="text-[9px] shrink-0">VLM</Badge>
                   )}
+                  {entry.category === 'rag' && (
+                    <Badge variant="info" className="text-[9px] shrink-0">RAG</Badge>
+                  )}
                 </div>
                 <p className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">{entry.name}</p>
               </div>
@@ -266,7 +279,9 @@ export default function BenchmarksPage() {
               {entry.total_samples > 0 && (
                 <span className="inline-flex items-center gap-1">
                   <Database size={10} />
-                  {entry.total_samples.toLocaleString()}
+                  {tab === 'rag'
+                    ? `${entry.total_samples.toLocaleString()} ${t('benchmarks.datasets')}`
+                    : entry.total_samples.toLocaleString()}
                 </span>
               )}
               {(entry.subset_list ?? []).length > 0 && (
@@ -275,11 +290,32 @@ export default function BenchmarksPage() {
                   {(entry.subset_list ?? []).length} {t('benchmarks.subsets')}
                 </span>
               )}
-              <span className="inline-flex items-center gap-1">
-                <FlaskConical size={10} />
-                {t('benchmarks.shots').replace('${n}', String(entry.few_shot_num))}
-              </span>
+              {entry.category !== 'rag' && (
+                <span className="inline-flex items-center gap-1">
+                  <FlaskConical size={10} />
+                  {t('benchmarks.shots').replace('${n}', String(entry.few_shot_num))}
+                </span>
+              )}
             </div>
+
+            {/* RAG: show dataset chips */}
+            {entry.category === 'rag' && (entry.subset_list ?? []).length > 0 && (
+              <div className="mt-2.5">
+                <p className="text-[10px] text-[var(--text-muted)] mb-1.5 font-medium">
+                  {t('benchmarks.includes')}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {(entry.subset_list ?? []).map((ds) => (
+                    <span
+                      key={ds}
+                      className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--bg-deep)] text-[var(--text-muted)] border border-[var(--border-sm)]"
+                    >
+                      {ds}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Tags + Metrics */}
             <div className="flex flex-wrap gap-1 mt-2.5">
@@ -319,6 +355,9 @@ export default function BenchmarksPage() {
                   <h2 className="text-lg font-semibold text-[var(--text)]">{selectedEntry.pretty_name}</h2>
                   {selectedEntry.category === 'vlm' && (
                     <Badge variant="warning" className="text-[10px] shrink-0">VLM</Badge>
+                  )}
+                  {selectedEntry.category === 'rag' && (
+                    <Badge variant="info" className="text-[10px] shrink-0">RAG</Badge>
                   )}
                 </div>
                 <p className="text-xs text-[var(--text-muted)] font-mono mt-0.5">{selectedEntry.name}</p>
