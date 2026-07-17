@@ -66,6 +66,13 @@ const RAGAS_METRICS = [
   'context_recall', 'context_relevancy', 'answer_correctness',
 ]
 
+const LANG_OPTIONS: [string, string][] = [
+  ['eng', '英语'], ['zho', '中文'], ['deu', '德语'],
+  ['fra', '法语'], ['spa', '西班牙语'], ['ita', '意大利语'],
+  ['jpn', '日语'], ['kor', '韩语'], ['ara', '阿拉伯语'],
+  ['rus', '俄语'], ['por', '葡萄牙语'],
+]
+
 export default function RAGEvalForm({ onSubmit, disabled }: Props) {
   const { t } = useLocale()
 
@@ -87,6 +94,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
   const [ragTwoStage, setRagTwoStage] = useState(false)
   const [ragEncoderModel, setRagEncoderModel] = useState('')
   const [ragPrompt, setRagPrompt] = useState('')
+  const [ragHub, setRagHub] = useState('modelscope')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // ── RAGAS fields ──
@@ -208,6 +216,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
     const isApi = ragModelSource === 'api'
     const modelConfig: Record<string, unknown> = {
       is_cross_encoder: ragTool === 'reranker',
+      hub: ragHub,
     }
     if (ragPrompt.trim()) modelConfig.prompt = ragPrompt.trim()
     if (isApi) {
@@ -231,7 +240,9 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
       })
     }
 
-    const evalCfg: Record<string, unknown> = {}
+    const evalCfg: Record<string, unknown> = {
+      hub: ragHub,
+    }
     if (ragTaskTypes) evalCfg.task_types = ragTaskTypes.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
     if (ragTaskNames) evalCfg.task_names = ragTaskNames.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
     if (ragLanguages) evalCfg.languages = ragLanguages.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
@@ -333,6 +344,13 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
               </>
             )}
 
+            <FormField label="数据集来源">
+              <select value={ragHub} onChange={e => setRagHub(e.target.value)} className={FORM_INPUT_CLASS}>
+                <option value="modelscope">ModelScope</option>
+                <option value="huggingface">HuggingFace</option>
+              </select>
+            </FormField>
+
             <div className="md:col-span-2 border-t border-[var(--border-md)] pt-3"></div>
             <div className="md:col-span-2">
               <label className={FORM_LABEL_CLASS}>{t('eval.ragPrompt')}</label>
@@ -384,9 +402,25 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
             </FormField>
 
             <FormField label={t('eval.ragLanguages')}>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {LANG_OPTIONS.map(([code, label]) => {
+                  const langs = ragLanguages.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+                  const selected = langs.includes(code)
+                  return (
+                    <button key={code} type="button"
+                      onClick={() => {
+                        const next = selected ? langs.filter(s => s !== code) : [...langs, code]
+                        setRagLanguages(next.join(', '))
+                      }}
+                      className={`px-2 py-1 text-xs rounded-full border transition-colors cursor-pointer ${selected ? 'bg-[var(--accent)] text-white border-[var(--accent)]' : 'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--accent-dim)]'}`}>
+                      {label} ({code})
+                    </button>
+                  )
+                })}
+              </div>
               <input value={ragLanguages}
                 onChange={e => setRagLanguages(e.target.value)}
-                className={FORM_INPUT_CLASS} placeholder={t('eval.ragLanguagesHint')} />
+                className={`${FORM_INPUT_CLASS} text-xs`} placeholder="或手动输入其他语言代码（逗号分隔）" />
             </FormField>
 
             <FormField label={t('eval.ragLimit')}>
