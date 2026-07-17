@@ -471,11 +471,22 @@ def load_report():
         is_mteb = _is_mteb_report(root, report_name)
         if is_mteb:
             mteb_reports, mteb_datasets = _load_mteb_report_data(root, report_name, task_cfg)
+            # Load perf metrics if available
+            prefix, _, _ = process_report_name(report_name)
+            perf_path = os.path.join(root, prefix, 'perf_metrics.json')
+            perf_metrics = None
+            if os.path.exists(perf_path):
+                try:
+                    with open(perf_path) as f:
+                        perf_metrics = json.load(f)
+                except Exception:
+                    pass
             return jsonify({
                 'report_list': mteb_reports,
                 'datasets': mteb_datasets,
                 'task_config': task_cfg,
                 'eval_type': 'mteb',
+                'perf_metrics': perf_metrics,
             }), 200
         return jsonify({
             'report_list': [r.to_dict() for r in report_list],

@@ -405,18 +405,36 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
           </div>
 
           {ragTool === 'reranker' && (
-            <div className="border-t border-[var(--border-md)] pt-3">
-              <label className="flex items-center gap-2 text-sm text-[var(--text-muted)] cursor-pointer">
-                <input type="checkbox" checked={ragTwoStage} onChange={(e) => setRagTwoStage(e.target.checked)}
-                  className="accent-[var(--accent)]" />
-                {t('eval.ragTwoStage')}
-              </label>
+            <div className="md:col-span-2 border-t border-[var(--border-md)] pt-3"></div>
+          )}
+
+          {ragTool === 'reranker' && (
+            <div className="md:col-span-2">
+              <div className="flex items-center gap-3 p-4 rounded-[var(--radius)] border border-[var(--border-md)] bg-[var(--bg-card2)] cursor-pointer"
+                onClick={() => setRagTwoStage(!ragTwoStage)}>
+                <input type="checkbox" checked={ragTwoStage} readOnly className="accent-[var(--accent)]" />
+                <div>
+                  <span className="text-sm font-medium text-[var(--text)]">{t('eval.ragTwoStage')}</span>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">Encoder 先检索 → Reranker 再精排，提升召回精度</p>
+                </div>
+              </div>
               {ragTwoStage && (
-                <div className="mt-2">
-                  <FormField label={t('eval.ragEncoderModel')}>
+                <div className="mt-3 p-4 rounded-[var(--radius)] border border-[var(--accent-dim)] bg-[var(--bg-card)]">
+                  <FormField label="Encoder 模型（Stage 1）">
                     <input value={ragEncoderModel}
                       onChange={e => setRagEncoderModel(e.target.value)}
-                      className={FORM_INPUT_CLASS} placeholder="BAAI/bge-small-zh-v1.5" />
+                      className={FORM_INPUT_CLASS} placeholder="选择或输入 Embedding 模型"
+                      list="encoder-models" />
+                    <datalist id="encoder-models">
+                      <option value="BAAI/bge-large-zh-v1.5" />
+                      <option value="BAAI/bge-small-zh-v1.5" />
+                      <option value="BAAI/bge-large-en-v1.5" />
+                      <option value="BAAI/bge-small-en-v1.5" />
+                      <option value="intfloat/e5-large-v2" />
+                      <option value="intfloat/e5-base-v2" />
+                      <option value="sentence-transformers/all-MiniLM-L6-v2" />
+                      <option value="sentence-transformers/all-mpnet-base-v2" />
+                    </datalist>
                   </FormField>
                 </div>
               )}

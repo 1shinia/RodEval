@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
-import type { ReportData } from '@/api/types'
+import type { ReportData, MTEBPerfMetrics } from '@/api/types'
 import { getChartUrl } from '@/api/reports'
 import Card from '@/components/ui/Card'
 import Table from '@/components/ui/Table'
@@ -14,10 +14,11 @@ interface Props {
   reportName: string
   rootPath: string
   taskConfig?: Record<string, unknown>
+  perfMetrics?: MTEBPerfMetrics | null
   onDatasetClick?: (dataset: string) => void
 }
 
-export default function OverviewTab({ reports, reportName, rootPath, taskConfig, onDatasetClick }: Props) {
+export default function OverviewTab({ reports, reportName, rootPath, taskConfig, perfMetrics, onDatasetClick }: Props) {
   const { t } = useLocale()
 
   const tableData = useMemo(() => {
@@ -93,6 +94,25 @@ export default function OverviewTab({ reports, reportName, rootPath, taskConfig,
       {/* Summary Stats */}
       <ReportSummaryStats reports={reports} />
 
+      {/* Performance Metrics (MTEB only) */}
+      {perfMetrics && (
+        <Card title="性能指标">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard label="总耗时" value={`${perfMetrics.total_time.toFixed(1)}s`} />
+            <MetricCard label="编码耗时" value={`${perfMetrics.encoding_time.toFixed(1)}s`} />
+            <MetricCard label="总样本数" value={perfMetrics.total_samples.toLocaleString()} />
+            <MetricCard label="吞吐量" value={`${perfMetrics.throughput} samples/s`} />
+          </div>
+          {perfMetrics.tasks.length > 1 && (
+            <div className="mt-3 text-xs text-[var(--text-muted)]">
+              {perfMetrics.tasks.map(t => (
+                <span key={t.task_name} className="mr-4">{t.task_name}: {t.total_time}s ({t.samples} samples)</span>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Scores Table */}
       <Card title={t('single.datasetScoresTable')}>
         <Table
@@ -115,6 +135,15 @@ export default function OverviewTab({ reports, reportName, rootPath, taskConfig,
           <JsonViewer value={taskConfig} maxHeight={400} />
         </Card>
       )}
+    </div>
+  )
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1 p-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)]">
+      <span className="text-xs text-[var(--text-muted)]">{label}</span>
+      <span className="text-base font-bold font-mono tabular-nums text-[var(--accent)]">{value}</span>
     </div>
   )
 }

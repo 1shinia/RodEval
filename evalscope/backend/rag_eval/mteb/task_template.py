@@ -244,6 +244,7 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
     )
 
     show_results(eval_args.output_folder, model, results.task_results)
+    _collect_perf_metrics(work_dir)
     return results
 
 
@@ -312,6 +313,90 @@ def show_results(output_folder: str, model, task_results) -> None:
         _logger = get_logger()
         _logger.info('Evaluation results:\n' + tabulate(rows, headers=headers, tablefmt='grid'))
         _logger.info(f'Results saved in: {output_folder}')
+
+
+def _collect_perf_metrics(work_dir: str) -> None:
+    """Read MTEB result JSONs and write perf_metrics.json."""
+    import json
+    import os
+    results_dir = os.path.join(work_dir, 'results')
+    if not os.path.isdir(results_dir):
+        return
+
+    tasks_perf = []
+    total_samples = 0
+    total_encoding_time = 0.0
+
+    for root, _, files in os.walk(results_dir):
+        for fname in files:
+            if not fname.endswith('.json') or fname == 'model_meta.json':
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath) as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+
+            task_name = data.get('task_name', fname.replace('.json', ''))
+            evaluation_time = data.get('evaluation_time', 0)
+            phases = data.get('evaluation_phases', [])
+
+            encoding_time = sum(
+                p['end'] - p['start']
+                for p in phases
+                if 'encode' in p.get('name', '').lower() or 'Encoding' in p.get('name', '')
+            ) if phases else evaluation_time
+
+            # Count samples from scores_per_experiment, or fall back to config limits
+            samples = 0
+            for split_data in data.get('scores', {}).values():
+                if isinstance(split_data, list) and split_data:
+                    sc = split_data[0].get('scores_per_experiment')
+                    if sc:
+                        samples = max(samples, len(sc))
+            if samples == 0:
+                samples = _read_config_limits(work_dir)
+
+            total_samples += samples
+            total_encoding_time += encoding_time
+
+            tasks_perf.append({
+                'task_name': task_name,
+                'total_time': round(evaluation_time, 2),
+                'encoding_time': round(encoding_time, 2),
+                'samples': samples,
+            })
+
+    throughput = round(total_samples / total_encoding_time, 1) if total_encoding_time > 0 else 0
+    perf = {
+        'total_time': round(sum(t['total_time'] for t in tasks_perf), 2),
+        'encoding_time': round(total_encoding_time, 2),
+        'total_samples': total_samples,
+        'throughput': throughput,
+        'tasks': tasks_perf,
+    }
+    try:
+        with open(os.path.join(work_dir, 'perf_metrics.json'), 'w') as f:
+            json.dump(perf, f)
+        logger.info(f'Collected perf metrics: {total_samples} samples, {throughput} samples/sec')
+    except Exception as e:
+        logger.debug(f'Could not write perf_metrics: {e}')
+
+
+def _read_config_limits(work_dir: str) -> int:
+    """Read the limits value from task_config.yaml."""
+    import yaml
+    config_path = os.path.join(work_dir, 'configs', 'task_config.yaml')
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f) or {}
+            limits = cfg.get('eval_config', {}).get('eval', {}).get('limits')
+            return int(limits) if limits is not None else 0
+        except Exception:
+            pass
+    return 0
 
 
 def _write_progress(work_dir: str, data: dict) -> None:

@@ -72,6 +72,15 @@ export interface LoadReportResponse {
   datasets: string[]
   task_config: Record<string, unknown>
   eval_type?: string
+  perf_metrics?: MTEBPerfMetrics | null
+}
+
+export interface MTEBPerfMetrics {
+  total_time: number
+  encoding_time: number
+  total_samples: number
+  throughput: number
+  tasks: { task_name: string; total_time: number; encoding_time: number; samples: number }[]
 }
 
 export interface ScanResponse {

@@ -170,6 +170,7 @@ export default function ReportDetailPage() {
             reportName={reportName}
             rootPath={rootPath}
             taskConfig={data?.task_config}
+            perfMetrics={data?.perf_metrics}
             onDatasetClick={handleDatasetChange}
           />
         </div>
