@@ -110,15 +110,13 @@ def run_classification(model, classifier, dataloader, device, amp=True, limit=No
                 image_features = model.encode_image(images)
                 logits = 100.0 * image_features @ classifier
 
-            if limit is not None:
-                # Update sample counter
-                sample_count += len(images)
-
-                if sample_count >= limit:
-                    break
-
             true.append(target.cpu())
             pred.append(logits.float().cpu())
+
+            if limit is not None:
+                sample_count += len(images)
+                if sample_count >= limit:
+                    break
 
     pred = torch.cat(pred)
     true = torch.cat(true)

@@ -485,46 +485,46 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
       {/* ── RAGAS ── */}
       {ragTool === 'ragas' && (
         <>
-          <FormField label="Testset File" required>
+          <FormField label={t('eval.ragTestset')} required>
             <input value={ragasTestset} onChange={e => setRagasTestset(e.target.value)}
               className={FORM_INPUT_CLASS} placeholder="/data/testset.json" />
           </FormField>
 
           <div className="border-t border-[var(--border-md)] pt-3" />
-          <h4 className="text-sm font-medium text-[var(--text)]">Critic LLM</h4>
+          <h4 className="text-sm font-medium text-[var(--text)]">{t('eval.ragCriticLLM')}</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label="Model Name" required>
+            <FormField label={t('eval.ragModelName')} required>
               <input value={ragasLlmModel} onChange={e => setRagasLlmModel(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="gpt-4o-mini" />
             </FormField>
-            <FormField label="API Base URL" required>
+            <FormField label={t('eval.ragApiBase')} required>
               <input value={ragasLlmBase} onChange={e => setRagasLlmBase(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="https://api.openai.com/v1" />
             </FormField>
-            <FormField label="API Key">
+            <FormField label={t('eval.ragApiKey')}>
               <input type="password" value={ragasLlmKey} onChange={e => setRagasLlmKey(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="sk-..." />
             </FormField>
           </div>
 
           <div className="border-t border-[var(--border-md)] pt-3" />
-          <h4 className="text-sm font-medium text-[var(--text)]">Embedding Model</h4>
+          <h4 className="text-sm font-medium text-[var(--text)]">{t('eval.ragEmbeddingModel')}</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label="Model Path / Name" required>
+            <FormField label={t('eval.ragModelPath')} required>
               <input value={ragasEmbModel} onChange={e => setRagasEmbModel(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="BAAI/bge-small-en-v1.5" />
             </FormField>
-            <FormField label="Provider">
+            <FormField label={t('eval.ragProvider')}>
               <select value={ragasEmbProv} onChange={e => setRagasEmbProv(e.target.value)} className={FORM_INPUT_CLASS}>
                 <option value="huggingface">huggingface</option>
                 <option value="openai">openai</option>
               </select>
             </FormField>
-            <FormField label="API Base URL (optional)">
+            <FormField label={t('eval.ragApiBaseOptional')}>
               <input value={ragasEmbBase} onChange={e => setRagasEmbBase(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="https://api.openai.com/v1" />
             </FormField>
-            <FormField label="API Key (optional)">
+            <FormField label={t('eval.ragApiKeyOptional')}>
               <input type="password" value={ragasEmbKey} onChange={e => setRagasEmbKey(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="sk-..." />
             </FormField>
@@ -532,7 +532,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
 
           <div className="border-t border-[var(--border-md)] pt-3" />
           <div>
-            <label className="text-sm font-medium text-[var(--text)]">Metrics</label>
+            <label className="text-sm font-medium text-[var(--text)]">{t('eval.ragMetrics')}</label>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 mt-2">
               {RAGAS_METRICS.map(m => (
                 <label key={m} className="flex items-center gap-1.5 text-sm text-[var(--text)] cursor-pointer">
@@ -545,13 +545,13 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
             </div>
           </div>
 
-          <FormField label="Language">
+          <FormField label={t('eval.ragLanguage')}>
             <input value={ragasLang} onChange={e => setRagasLang(e.target.value)}
               className={FORM_INPUT_CLASS} placeholder="english" />
           </FormField>
 
           <Button type="submit" variant="primary" disabled={disabled} className="btn-glow !mt-6">
-            Start RAGAS Evaluation
+            {t('eval.ragStartEval')}
           </Button>
         </>
       )}
@@ -560,28 +560,28 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
       {ragTool === 'clip' && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label="Model Path / Name" required>
+            <FormField label={t('eval.clipModelPath')} required>
               <input value={clipModelPath} onChange={e => setClipModelPath(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="openai/clip-vit-base-patch32" />
             </FormField>
-            <FormField label="API Base URL (optional)">
+            <FormField label={t('eval.clipApiBase')}>
               <input value={clipApiBase} onChange={e => setClipApiBase(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="https://api.openai.com/v1" />
             </FormField>
-            <FormField label="API Key (optional)">
+            <FormField label={t('eval.clipApiKey')}>
               <input type="password" value={clipApiKey} onChange={e => setClipApiKey(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="sk-..." />
             </FormField>
-            <FormField label="Datasets" required>
+            <FormField label={t('eval.clipDatasets')} required>
               <input value={clipDatasets} onChange={e => setClipDatasets(e.target.value)}
                 className={FORM_INPUT_CLASS} placeholder="flickr30k, msr-vtt" />
             </FormField>
-            <FormField label="Batch Size">
+            <FormField label={t('eval.clipBatchSize')}>
               <input type="number" value={clipBatchSize}
                 onChange={e => setClipBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
                 className={FORM_INPUT_CLASS} placeholder="128" />
             </FormField>
-            <FormField label="Limit">
+            <FormField label={t('eval.clipLimit')}>
               <input type="number" value={clipLimit}
                 onChange={e => setClipLimit(e.target.value.replace(/[^0-9]/g, ''))}
                 className={FORM_INPUT_CLASS} placeholder="全量" />
@@ -589,7 +589,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
           </div>
 
           <Button type="submit" variant="primary" disabled={disabled} className="btn-glow !mt-6">
-            Start CLIP Evaluation
+            {t('eval.clipStartEval')}
           </Button>
         </>
       )}

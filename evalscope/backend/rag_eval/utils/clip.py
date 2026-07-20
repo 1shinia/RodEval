@@ -16,15 +16,19 @@ class VisionModel:
     def load(**kw):
         api_base = kw.get('api_base', None)
         if api_base:
-
             return VLMAPI(
-                model_name=kw.get('model_name', ''),
+                model_name=kw.get('model_name', kw.get('model_name_or_path', '')),
                 openai_api_base=api_base,
                 openai_api_key=kw.get('api_key', 'EMPTY'),
                 prompt=kw.get('prompt', None),
             )
         else:
-            return CLIPModel(**kw)
+            return CLIPModel(
+                model_name=kw.get('model_name', kw.get('model_name_or_path', '')),
+                revision=kw.get('revision', 'master'),
+                hub=kw.get('hub', 'modelscope'),
+                device=kw.get('device', 'cpu'),
+            )
 
 
 class VLMAPI:

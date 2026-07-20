@@ -392,6 +392,8 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
         if not os.path.isdir(reports_dir):
             # RAG eval (MTEB) saves results in 'results/' instead of 'reports/'
             _persist_rag_results(task_config)
+            # CLIP Benchmark saves results in <model>/<dataset>_<task>.json
+            _persist_clip_results(task_config)
             return
         report_list = get_report_list([reports_dir])
         if not report_list:
@@ -524,6 +526,58 @@ def _persist_rag_results(task_config: TaskConfig) -> None:
     except Exception as e:
         from evalscope.utils.logger import get_logger
         get_logger().warning(f'Failed to persist RAG results to SQLite (non-fatal): {e}')
+
+
+def _persist_clip_results(task_config: TaskConfig) -> None:
+    """Persist CLIP Benchmark results from <model>/<dataset>_<task>.json files."""
+    import glob
+    import json
+    from datetime import datetime
+
+    from evalscope.service.db import upsert_eval_report
+
+    # CLIP saves: <work_dir>/<model_name>/<dataset>_<task>.json
+    result_files = glob.glob(os.path.join(task_config.work_dir, '*', '*.json'), recursive=False)
+    if not result_files:
+        return
+
+    task_id = os.path.basename(task_config.work_dir.rstrip('/'))
+    scores: dict = {}
+    model_name = ''
+    total_samples = 0
+
+    for rf in result_files:
+        try:
+            with open(rf) as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+
+        model_name = data.get('model', model_name)
+        ds_name = data.get('dataset', os.path.basename(rf).replace('.json', ''))
+        metrics = data.get('metrics', {})
+        score = metrics.get('acc1', list(metrics.values())[0] if metrics else 0.0)
+        scores[ds_name] = round(float(score), 4) if score is not None else None
+        total_samples = data.get('num_samples', 0)
+
+    if not scores:
+        return
+
+    avg = round(sum(v for v in scores.values() if v is not None) / len(scores), 4)
+    dataset_str = ', '.join(scores.keys())
+    try:
+        upsert_eval_report(
+            task_id=task_id,
+            model_name=model_name or 'unknown',
+            dataset_name=dataset_str,
+            score=avg,
+            num_samples=total_samples,
+            timestamp=datetime.now().isoformat(),
+            dataset_scores=scores,
+        )
+    except Exception as e:
+        from evalscope.utils.logger import get_logger
+        get_logger().warning(f'Failed to persist CLIP results to SQLite (non-fatal): {e}')
 
 
 def run_perf_wrapper(perf_args: PerfArguments):

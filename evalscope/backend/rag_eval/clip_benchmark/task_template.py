@@ -16,6 +16,18 @@ from evalscope.utils.logger import get_logger
 logger = get_logger()
 
 
+def _write_progress(work_dir: str, data: dict) -> None:
+    """Write progress.json for SSE streaming by the frontend."""
+    import json as _json
+    import os as _os
+    try:
+        _os.makedirs(work_dir, exist_ok=True)
+        with open(_os.path.join(work_dir, 'progress.json'), 'w') as f:
+            _json.dump(data, f)
+    except Exception:
+        pass
+
+
 def evaluate(args: ClipBenchmarkEvalConfig):
     models = args.models
     dataset_names = args.dataset_name
@@ -30,10 +42,25 @@ def evaluate(args: ClipBenchmarkEvalConfig):
     skip_existing = args.skip_existing
     limit = args.limit
 
+    total = len(models) * len(dataset_names)
+    completed = 0
+
     # Iterate over model and dataset combinations
     for model_cfg, dataset_name in product(models, dataset_names):
         task = input_task or get_dataset_default_task(dataset_name)
-        model_name = os.path.basename(model_cfg['model_name'])
+        model_name = os.path.basename(model_cfg.get('model_name_or_path', model_cfg.get('model_name', '')))
+
+        _write_progress(
+            output_dir, {
+                'status': 'running',
+                'phase': 'loading',
+                'pipeline': 'clip_benchmark',
+                'total_count': total,
+                'processed_count': completed,
+                'percent': round(completed / total * 100, 1) if total else 0.0,
+                'tasks': [f'{model_name}/{dataset_name}/{task}'],
+            }
+        )
 
         output_path = os.path.join(output_dir, model_name)
         os.makedirs(output_path, exist_ok=True)
@@ -62,6 +89,18 @@ def evaluate(args: ClipBenchmarkEvalConfig):
 
         # Create the dataloader
         dataloader = get_dataloader(dataset_name, dataset, batch_size, num_workers)
+
+        _write_progress(
+            output_dir, {
+                'status': 'running',
+                'phase': 'evaluating',
+                'pipeline': 'clip_benchmark',
+                'total_count': total,
+                'processed_count': completed,
+                'percent': round(completed / total * 100, 1) if total else 0.0,
+                'tasks': [f'{model_name}/{dataset_name}/{task}'],
+            }
+        )
 
         # Evaluate based on the task
         if task == 'zeroshot_classification':
@@ -93,6 +132,7 @@ def evaluate(args: ClipBenchmarkEvalConfig):
             'model': model_name,
             'task': task,
             'metrics': metrics,
+            'num_samples': limit if limit is not None else len(dataset) if hasattr(dataset, '__len__') else 0,
         }
 
         if verbose:
@@ -103,6 +143,19 @@ def evaluate(args: ClipBenchmarkEvalConfig):
             logger.info(f'Dump results to: {output_file}')
         with open(output_file, 'w') as f:
             json.dump(dump, f)
+
+        completed += 1
+        _write_progress(
+            output_dir, {
+                'status': 'completed' if completed >= total else 'running',
+                'phase': 'completed' if completed >= total else 'evaluating',
+                'pipeline': 'clip_benchmark',
+                'total_count': total,
+                'processed_count': completed,
+                'percent': round(completed / total * 100, 1) if total else 100.0,
+                'tasks': [f'{model_name}/{dataset_name}/{task}'],
+            }
+        )
 
 
 if __name__ == '__main__':
