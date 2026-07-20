@@ -126,6 +126,11 @@ def _apply_retrieval_limits(task, limits: int) -> None:
             if relevant_docs is not None and isinstance(relevant_docs, dict):
                 split_data['relevant_docs'] = {k: v for k, v in relevant_docs.items() if k in keep_qids}
 
+            # Filter top_ranked to keep only limited query IDs (Reranking tasks)
+            top_ranked = split_data.get('top_ranked')
+            if top_ranked is not None and isinstance(top_ranked, dict):
+                split_data['top_ranked'] = {k: v for k, v in top_ranked.items() if k in keep_qids}
+
             logger.info(
                 f'Applied limits={limits} to {task.metadata.name}/{subset_key}/{split_key}: '
                 f'{len(limited_queries)} queries kept (was {len(queries)})'
