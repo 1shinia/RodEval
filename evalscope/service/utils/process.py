@@ -390,10 +390,6 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
 
         reports_dir = os.path.join(task_config.work_dir, 'reports')
         if not os.path.isdir(reports_dir):
-            # RAG eval (MTEB) saves results in 'results/' instead of 'reports/'
-            _persist_rag_results(task_config)
-            # CLIP Benchmark saves results in <model>/<dataset>_<task>.json
-            _persist_clip_results(task_config)
             return
         report_list = get_report_list([reports_dir])
         if not report_list:
@@ -410,7 +406,7 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
             if score is not None and score > 1:
                 score = score / 100
             dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 upsert_eval_report(
                     task_id=task_id,
@@ -424,160 +420,15 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
                 )
                 return
             except Exception as e:
-                if 'locked' not in str(e).lower() or attempt == 2:
+                if 'locked' not in str(e).lower() or attempt == 4:
                     raise
                 _time.sleep(1 + attempt * 2)
     except Exception as e:
         from evalscope.utils.logger import get_logger
-        get_logger().warning(f'Failed to persist eval report to SQLite (non-fatal): {e}')
-
-
-def _persist_rag_results(task_config: TaskConfig) -> None:
-    """Persist MTEB/RAG evaluation results from the ``results/`` directory."""
-    import glob
-    import json
-    from datetime import datetime
-
-    from evalscope.service.db import upsert_eval_report
-
-    results_dir = os.path.join(task_config.work_dir, 'results')
-    if not os.path.isdir(results_dir):
-        return
-
-    task_id = os.path.basename(task_config.work_dir.rstrip('/'))
-    result_files = glob.glob(os.path.join(results_dir, '**', '*.json'), recursive=True)
-    dataset_files = [f for f in result_files if not f.endswith('model_meta.json') and 'run_settings' not in f]
-
-    if not dataset_files:
-        return
-
-    model_name = ''
-    scores: dict = {}
-    task_names: set = set()
-    total_samples = 0
-    limits_from_config = False
-    # Extract model name from directory: results/<eval__model_name>/...
-    import re
-    for rf in dataset_files:
-        m = re.search(r'/results/(?:eval__)?([^/]+)/', rf)
-        if m:
-            model_name = m.group(1)
-            break
-    # Try to get sample count from task config limits, fall back to experiment count
-    try:
-        import yaml
-        config_path = os.path.join(task_config.work_dir, 'configs', 'task_config.yaml')
-        if os.path.exists(config_path):
-            with open(config_path) as cf:
-                cfg = yaml.safe_load(cf) or {}
-            eval_cfg = cfg.get('eval_config', {})
-            if isinstance(eval_cfg, dict):
-                limits_val = eval_cfg.get('eval', {}).get('limits')
-                if limits_val is not None:
-                    total_samples = int(limits_val)
-                limits_from_config = True
-    except Exception:
-        total_samples = 0
-    for rf in dataset_files:
-        try:
-            with open(rf) as fh:
-                data = json.load(fh)
-            task_name = data.get('task_name', os.path.basename(rf).replace('.json', ''))
-            task_names.add(task_name)
-            # Count experiments as fallback sample count
-            for split_data in data.get('scores', {}).values():
-                if isinstance(split_data, list):
-                    for exp in split_data:
-                        sc = exp.get('scores_per_experiment', [])
-                        if sc and not limits_from_config:
-                            total_samples = max(total_samples, len(sc))
-            task_score = data.get('scores', {}).get('test', [{}])[0].get('main_score')
-            if task_score is None:
-                # fallback: compute mean of all experiment scores
-                all_scores = []
-                for split_data in data.get('scores', {}).values():
-                    for exp in split_data:
-                        for metric_v in exp.get('scores_per_experiment', []):
-                            for k, v in metric_v.items():
-                                if k == data.get('mteb_version', '')[:0] or not isinstance(v, (int, float)):
-                                    continue
-                                all_scores.append(v)
-                task_score = round(sum(all_scores) / len(all_scores), 4) if all_scores else 0.0
-            task_name = data.get('task_name', os.path.basename(rf).replace('.json', ''))
-            scores[task_name] = round(float(task_score), 4) if task_score is not None else None
-        except Exception:
-            continue
-
-    if not scores:
-        return
-
-    avg = round(sum(v for v in scores.values() if v is not None) / len(scores), 4)
-    dataset_str = ', '.join(scores.keys())
-    try:
-        upsert_eval_report(
-            task_id=task_id,
-            model_name=model_name or 'unknown',
-            dataset_name=dataset_str,
-            score=avg,
-            num_samples=total_samples,
-            timestamp=datetime.now().isoformat(),
-            dataset_scores=scores,
-        )
-    except Exception as e:
-        from evalscope.utils.logger import get_logger
-        get_logger().warning(f'Failed to persist RAG results to SQLite (non-fatal): {e}')
-
-
-def _persist_clip_results(task_config: TaskConfig) -> None:
-    """Persist CLIP Benchmark results from <model>/<dataset>_<task>.json files."""
-    import glob
-    import json
-    from datetime import datetime
-
-    from evalscope.service.db import upsert_eval_report
-
-    # CLIP saves: <work_dir>/<model_name>/<dataset>_<task>.json
-    result_files = glob.glob(os.path.join(task_config.work_dir, '*', '*.json'), recursive=False)
-    if not result_files:
-        return
-
-    task_id = os.path.basename(task_config.work_dir.rstrip('/'))
-    scores: dict = {}
-    model_name = ''
-    total_samples = 0
-
-    for rf in result_files:
-        try:
-            with open(rf) as fh:
-                data = json.load(fh)
-        except Exception:
-            continue
-
-        model_name = data.get('model', model_name)
-        ds_name = data.get('dataset', os.path.basename(rf).replace('.json', ''))
-        metrics = data.get('metrics', {})
-        score = metrics.get('acc1', list(metrics.values())[0] if metrics else 0.0)
-        scores[ds_name] = round(float(score), 4) if score is not None else None
-        total_samples = data.get('num_samples', 0)
-
-    if not scores:
-        return
-
-    avg = round(sum(v for v in scores.values() if v is not None) / len(scores), 4)
-    dataset_str = ', '.join(scores.keys())
-    try:
-        upsert_eval_report(
-            task_id=task_id,
-            model_name=model_name or 'unknown',
-            dataset_name=dataset_str,
-            score=avg,
-            num_samples=total_samples,
-            timestamp=datetime.now().isoformat(),
-            dataset_scores=scores,
-        )
-    except Exception as e:
-        from evalscope.utils.logger import get_logger
-        get_logger().warning(f'Failed to persist CLIP results to SQLite (non-fatal): {e}')
+        if 'locked' in str(e).lower():
+            get_logger().warning(f'Failed to persist eval report to SQLite after 5 retries (database locked): {e}')
+        else:
+            get_logger().warning(f'Failed to persist eval report to SQLite (non-fatal): {e}')
 
 
 def run_perf_wrapper(perf_args: PerfArguments):

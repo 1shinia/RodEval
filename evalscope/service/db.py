@@ -153,7 +153,7 @@ def _get_conn() -> sqlite3.Connection:
         raise RuntimeError('init_db() has not been called')
     conn: sqlite3.Connection | None = getattr(_local, 'conn', None)
     if conn is None:
-        conn = sqlite3.connect(_db_path, timeout=10)
+        conn = sqlite3.connect(_db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA journal_mode=WAL')
         # Aggressive auto-checkpoint: flush WAL after ~800 KB instead of 4 MB default
@@ -618,21 +618,14 @@ def backfill(output_dir: str) -> None:
                 dataset_names: list[str] = []
                 score_sum = 0.0
                 dataset_scores: dict[str, float | None] = {}
-                full_dataset = False
                 for r in report_list:
                     dataset_names.append(r.dataset_name)
-                    n = r.num or 0
-                    if n <= 0:
-                        full_dataset = True
-                    else:
-                        total_num += n
+                    total_num += r.num or 0
                     score_sum += r.score
                     score = r.score
                     if score is not None and score > 1:
                         score = score / 100
                     dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
-                if full_dataset:
-                    total_num = -1
                 avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
 
                 # Extract timestamp from directory name
