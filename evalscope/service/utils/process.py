@@ -406,7 +406,7 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
             if score is not None and score > 1:
                 score = score / 100
             dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 upsert_eval_report(
                     task_id=task_id,
@@ -420,12 +420,15 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
                 )
                 return
             except Exception as e:
-                if 'locked' not in str(e).lower() or attempt == 2:
+                if 'locked' not in str(e).lower() or attempt == 4:
                     raise
                 _time.sleep(1 + attempt * 2)
     except Exception as e:
         from evalscope.utils.logger import get_logger
-        get_logger().warning(f'Failed to persist eval report to SQLite (non-fatal): {e}')
+        if 'locked' in str(e).lower():
+            get_logger().warning(f'Failed to persist eval report to SQLite after 5 retries (database locked): {e}')
+        else:
+            get_logger().warning(f'Failed to persist eval report to SQLite (non-fatal): {e}')
 
 
 def run_perf_wrapper(perf_args: PerfArguments):

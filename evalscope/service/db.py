@@ -153,7 +153,7 @@ def _get_conn() -> sqlite3.Connection:
         raise RuntimeError('init_db() has not been called')
     conn: sqlite3.Connection | None = getattr(_local, 'conn', None)
     if conn is None:
-        conn = sqlite3.connect(_db_path, timeout=10)
+        conn = sqlite3.connect(_db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA journal_mode=WAL')
         # Aggressive auto-checkpoint: flush WAL after ~800 KB instead of 4 MB default

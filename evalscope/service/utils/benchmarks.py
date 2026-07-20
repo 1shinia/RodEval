@@ -47,6 +47,7 @@ DEFAULT_MULTIMODAL_BENCHMARKS: List[str] = [
     'math_vista',
     'math_vision',
     'seed_bench_2_plus',
+    'hallusion_bench',
 ]
 
 # ---------------------------------------------------------------------------

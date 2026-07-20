@@ -217,18 +217,19 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
   }
 
   const selectSuggestion = (name: string) => {
-    // If user picks a custom/local-only template, switch to local dataset mode
+    // Auto-switch to local mode when selecting template types
     if (ALL_LOCAL_TYPES.includes(name)) {
-      setDatasetLocalType(name)
       setDatasetHub('local')
-      setDatasets(name)
-      setShowSuggestions(false)
-      return
     }
     const parts = datasets.split(/[,，]/).map((s) => s.trim())
     parts[parts.length - 1] = name
     setDatasets(parts.join(', '))
     setShowSuggestions(false)
+  }
+
+  const suggestionLabel = (name: string) => {
+    if (LOCAL_TYPE_LABEL[name]) return `${name}（${t(LOCAL_TYPE_LABEL[name])}）`
+    return name
   }
 
   const setParam = (key: string, value: string) => {
@@ -244,6 +245,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
     if (!isLocal && !apiKey.trim()) newErrors.apiKey = 'Required'
     if (isLocalDataset) {
       if (!datasetPath.trim()) newErrors.datasetPath = 'Required'
+      if (!datasets.trim()) newErrors.datasets = 'Required'
     } else {
       if (!datasets.trim()) newErrors.datasets = 'Required'
     }
@@ -332,10 +334,14 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
 
     // Datasets
     if (isLocalDataset) {
-      config.datasets = [datasetLocalType]
+      config.datasets = datasets.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
       config.dataset_hub = 'local'
       if (datasetDir) config.dataset_dir = datasetDir
-      config.dataset_args = { [datasetLocalType]: { local_path: datasetPath } }
+      const args: Record<string, unknown> = {}
+      for (const ds of config.datasets as string[]) {
+        args[ds] = { local_path: datasetPath }
+      }
+      config.dataset_args = args
     } else {
       config.datasets = datasets.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
       config.dataset_hub = datasetHub
@@ -533,16 +539,23 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
         </FormField>
 
         {isLocalDataset ? (<>
-          <FormField label={t('eval.datasetLocalType')} required>
-            <select value={datasetLocalType} onChange={(e) => setDatasetLocalType(e.target.value)} className={FORM_INPUT_CLASS}>
-              {ALL_LOCAL_TYPES.map((lt) => (
-                <option key={lt} value={lt}>{t(LOCAL_TYPE_LABEL[lt])}</option>
-              ))}
-              <option disabled>──</option>
-              {benchmarkNames.filter((n) => !ALL_LOCAL_TYPES.includes(n)).map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+          <FormField label={t('eval.datasets')} required error={errors.datasets} className="relative">
+            <div ref={datasetInputRef}>
+              <input value={datasets}
+                onChange={(e) => handleDatasetChange(e.target.value)}
+                onFocus={() => { if (filteredSuggestions.length) setShowSuggestions(true) }}
+                className={inputClass(errors.datasets)} placeholder="gsm8k, arc" />
+              {showSuggestions && (
+                <div className="absolute z-50 left-0 right-0 mt-1 rounded-[var(--radius-sm)] border border-[var(--border-md)] bg-[var(--bg-card)] shadow-[var(--shadow)] overflow-hidden max-h-48 overflow-y-auto">
+                  {filteredSuggestions.map((name) => (
+                    <button key={name} type="button" onClick={() => selectSuggestion(name)}
+                      className="w-full text-left px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--bg-card2)] transition-colors cursor-pointer">
+                      {suggestionLabel(name)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </FormField>
           <FormField label={t('eval.datasetPath')} required error={errors.datasetPath}>
             <input value={datasetPath}
@@ -561,7 +574,7 @@ export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onA
                   {filteredSuggestions.map((name) => (
                     <button key={name} type="button" onClick={() => selectSuggestion(name)}
                       className="w-full text-left px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--bg-card2)] transition-colors cursor-pointer">
-                      {name}
+                      {suggestionLabel(name)}
                     </button>
                   ))}
                 </div>
