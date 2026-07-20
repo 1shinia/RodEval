@@ -175,9 +175,10 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
                 elif hasattr(task, 'dataset') and task.dataset is not None:
                     ds = task.dataset
                     subset = DatasetDict({
-                        k: v.select(range(min(eval_args.limits, len(v))))
+                        k: v.shuffle(seed=42).select(range(min(eval_args.limits, len(v))))
                         for k, v in ds.items()
-                    }) if isinstance(ds, DatasetDict) else ds.select(range(min(eval_args.limits, len(ds))))
+                    }) if isinstance(ds, DatasetDict) else ds.shuffle(seed=42
+                                                                      ).select(range(min(eval_args.limits, len(ds))))
                     task.dataset = subset
             except Exception as e:
                 logger.warning(f'Failed to apply limits to {task.metadata.name}: {e}')
