@@ -274,7 +274,12 @@ def launch(model_path: str, backend: str = 'auto', backend_args: Optional[Dict[s
         proc = _SERVER_LAUNCHERS[resolved](model_path, port, backend_args)
         if not _health_check(api_url):
             proc.terminate()
-            proc.wait(timeout=10)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                logger.warning(f'{resolved} server (pid={proc.pid}) did not exit after SIGTERM, sending SIGKILL')
+                proc.kill()
+                proc.wait()
             raise RuntimeError(f'{resolved} server unhealthy after 180s (model={model_path})')
         return LaunchResult(
             backend=resolved, eval_type='openai_api', api_url=api_url, model_path=model_path, _server_process=proc

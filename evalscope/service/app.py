@@ -108,6 +108,26 @@ def create_app(outputs: str = None):
     except Exception as e:
         logger.debug(f'Startup log cleanup failed (non-fatal): {e}')
 
+    # --- API Key authentication (optional) --------------------------------
+    # Set EVALSCOPE_API_KEY env var to enable.  When set, all /api/* requests
+    # must include an ``X-API-Key`` header matching the configured key.
+    # Health check and static file serving are exempt.
+    _api_key = os.environ.get('EVALSCOPE_API_KEY', '').strip()
+    if _api_key:
+        logger.info('API Key authentication enabled')
+
+        @app.before_request
+        def _check_api_key():
+            # Skip auth for health check, static files, and SPA routes
+            if request.path in ('/health', '/') or not request.path.startswith('/api/'):
+                return None
+            provided = request.headers.get('X-API-Key', '').strip()
+            if provided != _api_key:
+                return jsonify({'error': 'Unauthorized: invalid or missing X-API-Key header'}), 401
+            return None
+    else:
+        logger.info('API Key authentication disabled (set EVALSCOPE_API_KEY to enable)')
+
     # --- Access logging --------------------------------------------------
     _setup_access_logging(app, outputs_root)
 
