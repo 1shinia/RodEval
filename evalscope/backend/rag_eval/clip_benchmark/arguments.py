@@ -25,7 +25,7 @@ class ClipBenchmarkEvalConfig(BaseArgument):
     split: str = 'test'
     task: Optional[str] = None
     batch_size: int = 128
-    num_workers: int = 1
+    num_workers: int = 0
     verbose: bool = True
     output_dir: str = 'outputs'
     cache_dir: str = 'cache'

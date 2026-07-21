@@ -7,13 +7,14 @@ from tabulate import tabulate
 from typing import Any, Dict, List
 
 from evalscope.config import TaskConfig
-from evalscope.constants import EvalType
+from evalscope.constants import EvalBackend, EvalType
 from evalscope.report.combinator import get_data_frame, get_report_list
 from evalscope.utils.logger import get_logger
 from ..model_launcher import LaunchResult, LocalBackend, ModelSource, is_direct_eval_type, launch
 from ..model_launcher import stop as launcher_stop
 from ..utils import (
     DEFAULT_MULTIMODAL_BENCHMARKS,
+    DEFAULT_RAG_BENCHMARKS,
     DEFAULT_TEXT_BENCHMARKS,
     OUTPUT_DIR,
     build_benchmark_entry,
@@ -33,6 +34,91 @@ from ..utils import (
 logger = get_logger()
 
 bp_eval = Blueprint('eval', __name__, url_prefix='/api/v1/eval')
+
+
+def _parse_mteb_results(work_dir: str) -> List:
+    """Parse MTEB JSON results from results/ directory.
+
+    MTEB format:
+    {
+      "task_name": "TaskName",
+      "scores": {
+        "test": [{"main_score": 0.5, ...}]
+      }
+    }
+
+    Returns a list of objects with model_name, dataset_name, score, num.
+    """
+    from types import SimpleNamespace
+    results_dir = os.path.join(work_dir, 'results')
+    reports = []
+
+    if not os.path.isdir(results_dir):
+        return reports
+
+    # Try to get sample count from task config or MTEB JSON files
+    num_samples = _read_mteb_sample_count(work_dir)
+
+    # Find all JSON files (excluding model_meta.json)
+    for root, dirs, files in os.walk(results_dir):
+        for fname in files:
+            if not fname.endswith('.json') or fname == 'model_meta.json':
+                continue
+
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                task_name = data.get('task_name', fname.replace('.json', ''))
+                scores = data.get('scores', {})
+
+                # Extract model name from path: results/eval__model_name/master/...
+                rel_path = os.path.relpath(fpath, results_dir)
+                parts = rel_path.split(os.sep)
+                model_name = parts[0].replace('eval__', '') if parts else 'unknown'
+
+                # Get main_score from first split (usually 'test')
+                main_score = None
+                for split_data in scores.values():
+                    if isinstance(split_data, list) and split_data:
+                        main_score = split_data[0].get('main_score')
+                        break
+
+                if main_score is not None:
+                    reports.append(
+                        SimpleNamespace(
+                            model_name=model_name,
+                            dataset_name=task_name,
+                            score=main_score,
+                            num=num_samples,
+                        )
+                    )
+            except Exception as e:
+                logger.warning(f'Failed to parse MTEB result {fpath}: {e}')
+
+    return reports
+
+
+def _read_mteb_sample_count(work_dir: str) -> int:
+    """Read sample count from MTEB task config.
+
+    Returns:
+        The limit value if set in config, otherwise -1 (meaning "全量" / full dataset).
+    """
+    import yaml as _yaml
+    config_path = os.path.join(work_dir, 'configs', 'task_config.yaml')
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as cf:
+                cfg = _yaml.safe_load(cf) or {}
+            limits = cfg.get('eval_config', {}).get('eval', {}).get('limits')
+            if limits is not None:
+                return int(limits)
+        except Exception:
+            pass
+    return -1
+
 
 _COLUMN_ZH = {
     'Model': '模型',
@@ -81,7 +167,9 @@ _BASE_FIELDS = ['model', 'datasets']
 
 
 def _get_required_fields(data: dict) -> list[str]:
-    """Return required fields based on model_source."""
+    """Return required fields based on model_source. RAG eval has its own config."""
+    if data.get('eval_backend') == EvalBackend.RAG_EVAL:
+        return []  # RAG eval validates via eval_config, not top-level fields
     fields = list(_BASE_FIELDS)
     if data.get('model_source') == ModelSource.LOCAL:
         fields.append('model_path')
@@ -202,7 +290,8 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                 run_eval_wrapper, task_config, task_id=task_id, task_type='eval', model=task_config.model
             )
         table_str = _build_result_table(task_config.work_dir)
-        if _all_results_empty(result):
+        # RAG eval saves results in 'results/' not 'reports/'
+        if task_config.eval_backend != EvalBackend.RAG_EVAL and _all_results_empty(result):
             error_msg = (
                 'Evaluation completed but no results were produced. '
                 'All samples may have failed. '
@@ -217,13 +306,28 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             import time as _time
             from datetime import datetime
 
-            from evalscope.report.combinator import get_report_list
             from .. import db as _db
-            reports_dir = os.path.join(task_config.work_dir, 'reports')
-            report_list = get_report_list([reports_dir])
+
+            if task_config.eval_backend == EvalBackend.RAG_EVAL:
+                # MTEB results are in results/ with MTEB JSON format
+                report_list = _parse_mteb_results(task_config.work_dir)
+            else:
+                from evalscope.report.combinator import get_report_list
+                reports_dir = os.path.join(task_config.work_dir, 'reports')
+                report_list = get_report_list([reports_dir])
             if report_list:
                 first = report_list[0]
-                total_num = sum(r.num or 0 for r in report_list)
+                # Compute total_num: -1 sentinel = 全量 (limits was null)
+                full_dataset = False
+                total_num = 0
+                for r in report_list:
+                    n = r.num or 0
+                    if n <= 0:
+                        full_dataset = True
+                    else:
+                        total_num += n
+                if full_dataset:
+                    total_num = -1
                 dataset_names = [r.dataset_name for r in report_list]
                 score_sum = sum(r.score for r in report_list if r.score is not None)
                 avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
@@ -327,6 +431,48 @@ def run_evaluation():
                     'error': 'Model launch failed',
                     'error_id': error_id
                 }), 500
+
+        # ── RAG Eval mode ────────────────────────────────────────────
+        if data.get('eval_backend') == EvalBackend.RAG_EVAL:
+            eval_config = data.get('eval_config', {})
+            if not eval_config:
+                return jsonify({'error': 'eval_config is required for RAG eval'}), 400
+
+            tool = eval_config.get('tool', 'mteb')
+            if tool == 'mteb':
+                try:
+                    import mteb  # noqa: F401
+                except ImportError:
+                    return jsonify({'error': 'MTEB is not installed. Please install: pip install "mteb>=2.7.0,<3.0.0"'}
+                                   ), 400
+            elif tool == 'ragas':
+                try:
+                    import ragas  # noqa: F401
+                except ImportError:
+                    return jsonify({
+                        'error': 'RAGAS is not installed. Please install: pip install "ragas>=0.4.0,<0.5.0"'
+                    }), 400
+            elif tool == 'clip_benchmark':
+                try:
+                    import webdataset  # noqa: F401
+                except ImportError:
+                    return jsonify({'error': 'webdataset is not installed. Please install: pip install webdataset'}
+                                   ), 400
+            task_config = TaskConfig(
+                eval_backend=EvalBackend.RAG_EVAL,
+                eval_config=eval_config,
+                work_dir=os.path.join(OUTPUT_DIR, task_id),
+                no_timestamp=True,
+                enable_progress_tracker=True,
+            )
+            task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+            os.makedirs(task_config.work_dir, exist_ok=True)
+            try:
+                task_config.dump_yaml(task_config.work_dir)
+            except Exception as e:
+                logger.warning(f'[{task_id}] Failed to save task config: {e}')
+            logger.info(f'[{task_id}] Running RAG eval: tool={eval_config.get("tool")}')
+            return _execute_task(task_id, task_config, label='RAG Eval')
 
         # ── Build TaskConfig ───────────────────────────────────────────
         try:
@@ -709,17 +855,18 @@ def stream_evaluation_log():
 def list_benchmarks():
     """Return the catalogue of supported benchmarks with descriptions.
 
-    The list is split into two categories: ``text`` (LLM-only) and
-    ``multimodal`` (VLM).  Descriptions are loaded from the ``_meta`` JSON
-    files and post-processed: the H1 title and the last H2 section are
-    stripped, then the remainder is split into per-section blocks.
+    The list is split into three categories: ``text`` (LLM-only),
+    ``multimodal`` (VLM), and ``rag`` (RAG/MTEB).  Descriptions are loaded
+    from the ``_meta`` JSON files and post-processed: the H1 title and the
+    last H2 section are stripped, then the remainder is split into
+    per-section blocks.
 
     The default catalogue can be overridden at application startup by setting
-    ``app.config['SUPPORTED_BENCHMARKS']`` to a dict with keys ``'text'`` and
-    ``'multimodal'``, each containing a list of benchmark names.
+    ``app.config['SUPPORTED_BENCHMARKS']`` to a dict with keys ``'text'``,
+    ``'multimodal'``, and ``'rag'``, each containing a list of benchmark names.
 
     Query params:
-        type (str, optional): Filter to ``'text'`` or ``'multimodal'`` only.
+        type (str, optional): Filter to ``'text'``, ``'multimodal'``, or ``'rag'`` only.
         all (str, optional): When ``'true'``, return *all* benchmarks discovered
             from the ``_meta`` directory instead of the curated default lists.
     """
@@ -736,25 +883,31 @@ def list_benchmarks():
                 result = {'text': [e for e in all_entries if e.get('category') == 'llm']}
             elif filter_type == 'multimodal':
                 result = {'multimodal': [e for e in all_entries if e.get('category') == 'vlm']}
+            elif filter_type == 'rag':
+                result = {'rag': [e for e in all_entries if e.get('category') == 'rag']}
             else:
                 result = {
                     'text': [e for e in all_entries if e.get('category') == 'llm'],
                     'multimodal': [e for e in all_entries if e.get('category') == 'vlm'],
+                    'rag': [e for e in all_entries if e.get('category') == 'rag'],
                 }
         else:
             # Use the curated default lists (backward-compatible)
             cfg = current_app.config.get('SUPPORTED_BENCHMARKS', {})
             text_names: List[str] = cfg.get('text', DEFAULT_TEXT_BENCHMARKS)
             multimodal_names: List[str] = cfg.get('multimodal', DEFAULT_MULTIMODAL_BENCHMARKS)
+            rag_names: List[str] = cfg.get('rag', DEFAULT_RAG_BENCHMARKS)
 
             result: Dict[str, Any] = {}
             if filter_type in ('', 'text'):
                 result['text'] = [build_benchmark_entry(name) for name in text_names]
             if filter_type in ('', 'multimodal'):
                 result['multimodal'] = [build_benchmark_entry(name) for name in multimodal_names]
+            if filter_type in ('', 'rag'):
+                result['rag'] = [build_benchmark_entry(name) for name in rag_names]
 
-        if filter_type and filter_type not in ('text', 'multimodal'):
-            return jsonify({'error': f"Unknown type '{filter_type}'. Use 'text' or 'multimodal'."}), 400
+        if filter_type and filter_type not in ('text', 'multimodal', 'rag'):
+            return jsonify({'error': f"Unknown type '{filter_type}'. Use 'text', 'multimodal', or 'rag'."}), 400
 
         return jsonify(result), 200
     except Exception as e:

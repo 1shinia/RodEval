@@ -302,6 +302,56 @@ qwen2.5-0.5b            4.7  (-2.5 / +4.4)
 
 EvalScope 允许您轻松添加和评测自己的数据集。详情请参考 [📖 自定义数据集评测指南](https://evalscope.readthedocs.io/zh-cn/latest/advanced_guides/custom_dataset/index.html)。
 
+### ⚙️ 并发控制
+
+Web 服务模式下，评估任务和压测任务使用独立的进程池，避免资源竞争：
+
+- **评估任务**（CPU/GPU 密集）：默认最多 2 个并发
+- **压测任务**（网络 IO 密集）：默认最多 1 个并发
+
+通过环境变量调整配额：
+
+```bash
+# 启动服务前设置
+export MAX_CONCURRENT_EVAL=4  # 允许同时运行 4 个评估任务
+export MAX_CONCURRENT_PERF=2  # 允许同时运行 2 个压测任务
+
+# 启动服务
+python -m evalscope.service.app
+```
+
+**推荐配置：**
+- 单机单 GPU：`MAX_CONCURRENT_EVAL=1, MAX_CONCURRENT_PERF=1`
+- 单机多 GPU：`MAX_CONCURRENT_EVAL=GPU数量, MAX_CONCURRENT_PERF=2`
+- 纯 API 评测（无本地模型）：可适当提高并发数
+
+### 🔐 API Key 认证
+
+默认情况下，Web 服务的所有 API 端点公开访问。如需启用认证，设置 `EVALSCOPE_API_KEY` 环境变量：
+
+```bash
+# 启动服务前设置 API Key
+export EVALSCOPE_API_KEY="your-secret-key-here"
+
+# 启动服务
+python -m evalscope.service.app
+```
+
+启用后，所有 `/api/*` 请求必须在 HTTP Header 中包含 `X-API-Key`：
+
+```bash
+# 示例：调用评估接口
+curl -X POST http://localhost:9000/api/v1/eval/invoke \
+  -H "X-API-Key: your-secret-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen3-0.6B", ...}'
+```
+
+**注意：**
+- `/health` 健康检查端点和静态文件服务不受认证限制
+- 前端 Web UI 需要在请求中自动附加 API Key（待实现）
+- 内网部署可不设置此环境变量，保持公开访问
+
 ## ⚡ 推理性能评测工具
 
 EvalScope 提供了一个强大的压力测试工具，用于评估大语言模型服务的性能。

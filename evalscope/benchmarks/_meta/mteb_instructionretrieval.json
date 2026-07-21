@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "pretty_name": "Instruction Retrieval",
+    "pretty_name_zh": "指令检索",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Embedding", "InstructionFollowing"],
+    "metrics": [{"ndcg_at_10": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": ["Core17InstructionRetrieval", "News21InstructionRetrieval"],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 8, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Instruction Retrieval\n\n## Overview\n\nInstruction Retrieval evaluates how well embedding models follow natural language instructions when retrieving documents, testing instruction-following capability beyond simple query-document matching.\n\n## Task Description\n\n- **Task Type**: Instruction-guided document retrieval\n- **Input**: Natural language instruction + query + corpus\n- **Output**: Ranked documents following the instruction\n- **Evaluation**: NDCG@10\n\n## Key Features\n\n- 8 datasets testing instruction-following in retrieval\n- Requires models to understand nuanced retrieval instructions\n- Important for instruction-tuned embedding models (e.g., E5, GTE, BGE with instructions)\n\n## Evaluation Notes\n\n- Metric: NDCG@10\n- Instructions may specify \"find documents about X, excluding Y\"\n- Tests whether the model can adapt retrieval behavior via instructions\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Instruction Retrieval |\n| **Datasets** | 8 |\n| **Metrics** | ndcg_at_10 |\n| **MTEB Category** | Embedding |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 8 |\n| Notable Datasets | Core17InstructionRetrieval, News21InstructionRetrieval |\n",
+    "zh": "# 指令检索\n\n## 概述\n\n指令检索评估 Embedding 模型在检索文档时遵循自然语言指令的能力，测试超越简单查询文档匹配的指令遵循能力。\n\n## 任务描述\n\n- **任务类型**: 指令引导的文档检索\n- **输入**: 自然语言指令 + 查询 + 文档库\n- **输出**: 遵循指令的排序文档\n- **评测方式**: NDCG@10\n\n## 主要特点\n\n- 8 个数据集测试检索中的指令遵循能力\n- 要求模型理解精细的检索指令\n- 对指令微调的 Embedding 模型 (如 E5, GTE, BGE with instructions) 很重要\n\n## 评估说明\n\n- 指标: NDCG@10\n- 指令可能指定\"查找关于 X 的文档, 排除 Y\"\n- 测试模型能否通过指令调整检索行为\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 指令检索 |\n| **数据集数量** | 8 |\n| **评估指标** | ndcg_at_10 |\n| **MTEB 类别** | Embedding |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 8 |\n| 代表性数据集 | Core17InstructionRetrieval, News21InstructionRetrieval |\n"
+  }
+}

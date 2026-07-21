@@ -75,7 +75,8 @@ export default function ReportDetailPage() {
     ? reportList.reduce((s, r) => s + r.score, 0) / reportList.length
     : 0
   const totalSamples = reportList.reduce((sum, r) => {
-    return sum + (r.metrics[0]?.categories?.reduce((s, c) => s + c.num, 0) ?? 0)
+    const catNum = r.metrics[0]?.categories?.reduce((s, c) => s + c.num, 0) ?? 0
+    return catNum <= 0 ? -1 : sum + catNum
   }, 0)
 
   const datasets = data?.datasets ?? []
@@ -96,11 +97,18 @@ export default function ReportDetailPage() {
     setActiveTab('predictions')
   }
 
-  const tabs = [
-    { key: 'overview', label: t('reportDetail.overview') },
-    { key: 'details', label: t('reportDetail.details') },
-    { key: 'predictions', label: t('reportDetail.predictions') },
-  ]
+  const isMteb = data?.eval_type === 'mteb'
+
+  const tabs = useMemo(() => {
+    if (isMteb) {
+      return [{ key: 'overview', label: t('reportDetail.overview') }]
+    }
+    return [
+      { key: 'overview', label: t('reportDetail.overview') },
+      { key: 'details', label: t('reportDetail.details') },
+      { key: 'predictions', label: t('reportDetail.predictions') },
+    ]
+  }, [isMteb, t])
 
   if (loading) {
     return (
@@ -162,6 +170,7 @@ export default function ReportDetailPage() {
             reportName={reportName}
             rootPath={rootPath}
             taskConfig={data?.task_config}
+            perfMetrics={data?.perf_metrics}
             onDatasetClick={handleDatasetChange}
           />
         </div>

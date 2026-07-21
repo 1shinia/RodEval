@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "pretty_name": "RAGAS",
+    "pretty_name_zh": "RAGAS",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2309.15217",
+    "tags": ["RAGAS", "RAG Pipeline", "Metric"],
+    "metrics": [
+      {"answer_relevancy": {"numeric": true}},
+      {"faithfulness": {"numeric": true}},
+      {"context_precision": {"numeric": true}},
+      {"context_recall": {"numeric": true}},
+      {"context_relevancy": {"numeric": true}},
+      {"answer_correctness": {"numeric": true}}
+    ],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": [
+      "answer_relevancy", "faithfulness", "context_precision",
+      "context_recall", "context_relevancy", "answer_correctness"
+    ],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 6, "note": "evaluation metrics, not datasets"},
+  "readme": {
+    "en": "# RAGAS\n\n## Overview\n\nRAGAS (Retrieval Augmented Generation Assessment) is a framework for evaluating RAG pipelines end-to-end. Rather than fixed datasets, it evaluates the quality of RAG outputs using reference-free and reference-based metrics.\n\n## Task Description\n\n- **Task Type**: RAG pipeline quality assessment\n- **Input**: User-uploaded test set with questions, contexts, and answers\n- **Output**: Per-metric scores across six evaluation dimensions\n- **Evaluation**: Component-level and end-to-end metrics\n\n## Key Features\n\n- 6 core metrics covering generation quality, retrieval quality, and overall pipeline performance\n- Reference-free metrics (answer_relevancy, faithfulness) for production use\n- Reference-based metrics (answer_correctness) for benchmark comparisons\n- Requires a Critic LLM for evaluation (any OpenAI-compatible model)\n\n## Evaluation Notes\n\n- Requires user-provided test set (questions + ground truth contexts/answers)\n- Critic LLM configuration: model name, API base, API key (OpenAI-compatible)\n- Embedding model required for context precision/recall metrics\n- Language selection affects prompt templates\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Tool** | RAGAS |\n| **Category** | RAG Pipeline Evaluation |\n| **Metrics** | 6 core metrics |\n| **Requires** | Test set + Critic LLM + Embedding model |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Core Metrics | 6 |\n| Generation Metrics | answer_relevancy, faithfulness |\n| Retrieval Metrics | context_precision, context_recall, context_relevancy |\n| End-to-end Metrics | answer_correctness |\n",
+    "zh": "# RAGAS\n\n## 概述\n\nRAGAS (Retrieval Augmented Generation Assessment) 是一个端到端 RAG 流水线评估框架。它不依赖固定数据集，而是通过无参考和有参考指标评估 RAG 输出的质量。\n\n## 任务描述\n\n- **任务类型**: RAG 流水线质量评估\n- **输入**: 用户上传的测试集 (问题 + 上下文 + 答案)\n- **输出**: 六个评估维度的指标分数\n- **评测方式**: 组件级和端到端指标\n\n## 主要特点\n\n- 6 个核心指标覆盖生成质量、检索质量和整体流水线性能\n- 无参考指标 (answer_relevancy, faithfulness) 适用于生产环境\n- 有参考指标 (answer_correctness) 适用于基准对比\n- 需要评判 LLM 进行评估 (任何 OpenAI 兼容模型)\n\n## 评估说明\n\n- 需要用户提供的测试集 (问题 + 真实上下文/答案)\n- 评判 LLM 配置: 模型名称、API 地址、API Key (OpenAI 兼容)\n- Embedding 模型用于 context_precision/recall 指标\n- 语言选择影响提示模板\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **工具** | RAGAS |\n| **类别** | RAG 流水线评估 |\n| **指标数量** | 6 个核心指标 |\n| **依赖** | 测试集 + 评判 LLM + Embedding 模型 |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 核心指标 | 6 |\n| 生成指标 | answer_relevancy, faithfulness |\n| 检索指标 | context_precision, context_recall, context_relevancy |\n| 端到端指标 | answer_correctness |\n"
+  }
+}

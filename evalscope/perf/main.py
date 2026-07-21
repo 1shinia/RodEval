@@ -164,7 +164,17 @@ def run_perf_benchmark(args):
         #  start local server (health check is handled inside start_app)
         server = threading.Thread(target=start_app, args=(copy.deepcopy(args), ), daemon=True)
         server.start()
-        server.join()  # wait for start_app to complete (model load + health check)
+        # Wait for start_app to complete (model load + health check) with a timeout.
+        # If the server thread hangs (e.g. model loading fails silently), we don't
+        # want to block the main thread indefinitely.
+        _server_start_timeout = 300  # 5 minutes should be enough for model loading
+        server.join(timeout=_server_start_timeout)
+        if server.is_alive():
+            logger.error(
+                f'Local server thread did not complete within {_server_start_timeout}s. '
+                'Model loading may have failed silently or health check is stuck. '
+                'Continuing anyway — benchmark requests will likely fail.'
+            )
 
     total_count = sum(args.number) if isinstance(args.number, list) else args.number
     tracker_ctx = make_tracker(

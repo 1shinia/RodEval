@@ -107,7 +107,7 @@ function ReportCard({ report, selected, onSelect, onClick, onDelete }: ReportCar
               {report.dataset_name}
             </span>
             <span className="text-xs text-[var(--text-muted)] shrink-0">
-              {t('reports.samples')}: {report.num_samples}
+              {t('reports.samples')}: {report.num_samples > 0 ? report.num_samples : t('common.allData')}
             </span>
           </div>
         </div>

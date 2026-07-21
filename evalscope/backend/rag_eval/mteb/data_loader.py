@@ -85,13 +85,60 @@ def _load_generic_from_modelscope(task, limits: Optional[int] = None) -> None:
 
     if limits is not None:
         try:
-            dataset = DatasetDict({split: ds.select(range(min(limits, len(ds)))) for split, ds in dataset.items()})
+            dataset = DatasetDict({
+                split: ds.shuffle(seed=42).select(range(min(limits, len(ds))))
+                for split, ds in dataset.items()
+            })
         except Exception as e:
             logger.warning(f"Failed to apply limits={limits} to dataset '{path}': {e}")
 
     task.dataset = dataset
+    # Remap generic split names to language keys when ModelScope mirrors
+    # don't preserve HuggingFace's language-keyed structure.
+    _align_dataset_to_languages(task, dataset)
     task.dataset_transform()
     task.data_loaded = True
+
+
+def _align_dataset_to_languages(task, dataset: DatasetDict) -> None:
+    """Map generic splits to the first language key and restrict eval to it.
+
+    ModelScope mirrors of multilingual MTEB datasets use generic split names
+    ('train', 'validation', 'test') instead of language keys ('en', 'de', ...).
+    Nests all three splits under the first language key since classification
+    tasks require 'train' for classifier fitting.
+    """
+    eval_langs = getattr(task.metadata, 'eval_langs', None) or {}
+    if not eval_langs:
+        return
+    existing = set(dataset.keys())
+    lang_keys = sorted(eval_langs.keys())
+    if existing & set(lang_keys):
+        return  # dataset already has language keys
+
+    if 'test' not in existing:
+        return
+
+    # Respect user's language preference from the eval config
+    hf_subsets = getattr(task, 'hf_subsets', None)
+    preferred = hf_subsets[0] if hf_subsets and hf_subsets[0] in lang_keys else None
+    if not preferred:
+        preferred = 'en' if 'en' in lang_keys else sorted(lang_keys)[0]
+    first_lang = preferred
+    # Nest all available splits under the preferred language key
+    # (classification needs 'train', others need at least 'test')
+    nested: dict = {}
+    for split in ['train', 'validation', 'test']:
+        if split in existing:
+            nested[split] = dataset[split]
+    task.dataset = DatasetDict({first_lang: DatasetDict(nested)})
+
+    # Restrict the task to only evaluate the first language
+    try:
+        if hasattr(task, 'hf_subsets'):
+            task.hf_subsets = [first_lang]
+    except Exception:
+        pass
 
 
 def _get_val(obj, key):

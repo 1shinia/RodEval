@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "pretty_name": "Text Reranking",
+    "pretty_name_zh": "文本重排序",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Reranker", "CrossEncoder"],
+    "metrics": [{"map": {"numeric": true}}, {"ndcg_at_10": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": [
+      "AskUbuntuDupQuestions", "MindSmallReranking", "SciDocsRR",
+      "StackOverflowDupQuestions", "MMarcoReranking", "T2Reranking",
+      "WikipediaRerankingMultilingual", "CMedQAv1-reranking", "CMedQAv2-reranking"
+    ],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 46, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Text Reranking\n\n## Overview\n\nReranking evaluates a Cross-Encoder model's ability to re-rank a set of retrieved documents, pushing the most relevant ones to the top. This is a critical component of two-stage RAG pipelines.\n\n## Task Description\n\n- **Task Type**: Cross-Encoder document reranking\n- **Input**: Query + candidate documents (from retrieval stage)\n- **Output**: Re-ranked document list\n- **Evaluation**: MAP, NDCG@10\n\n## Key Features\n\n- 46 datasets covering QA, code, medical, and multilingual domains\n- Uses Cross-Encoder architecture (not bi-encoder embeddings)\n- Essential for two-stage RAG: Embedding retrieval -> Reranker refinement\n\n## Evaluation Notes\n\n- Requires a Cross-Encoder model (e.g., bge-reranker-v2-m3)\n- MAP evaluates overall ranking quality\n- NDCG@10 evaluates top-10 ranking quality\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Text Reranking |\n| **Datasets** | 46 |\n| **Metrics** | map, ndcg_at_10 |\n| **MTEB Category** | Reranker (Cross-Encoder) |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 46 |\n| Notable Datasets | AskUbuntuDupQuestions, MindSmallReranking, SciDocsRR, MMarcoReranking |\n",
+    "zh": "# 文本重排序\n\n## 概述\n\n重排序评估 Cross-Encoder 模型对检索结果重新排序的能力，将最相关的文档排到最前面。这是两阶段 RAG 流程的关键组件。\n\n## 任务描述\n\n- **任务类型**: Cross-Encoder 文档重排序\n- **输入**: 查询 + 候选文档 (来自检索阶段)\n- **输出**: 重新排序后的文档列表\n- **评测方式**: MAP, NDCG@10\n\n## 主要特点\n\n- 46 个数据集覆盖问答、代码、医疗和多语言领域\n- 使用 Cross-Encoder 架构 (非双编码器 Embedding)\n- 两阶段 RAG 的关键: Embedding 检索 -> Reranker 精排\n\n## 评估说明\n\n- 需要 Cross-Encoder 模型 (如 bge-reranker-v2-m3)\n- MAP 评估整体排名质量\n- NDCG@10 评估前 10 名排名质量\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 文本重排序 |\n| **数据集数量** | 46 |\n| **评估指标** | map, ndcg_at_10 |\n| **MTEB 类别** | Reranker (Cross-Encoder) |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 46 |\n| 代表性数据集 | AskUbuntuDupQuestions, MindSmallReranking, SciDocsRR, MMarcoReranking |\n"
+  }
+}

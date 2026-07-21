@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "pretty_name": "Semantic Textual Similarity",
+    "pretty_name_zh": "语义文本相似度",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Embedding", "STS"],
+    "metrics": [{"spearman_cosine": {"numeric": true}}, {"pearson_cosine": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": [
+      "STSBenchmark", "STS12", "STS13", "STS14", "STS15",
+      "STS16", "STS17", "STS22", "BIOSSES", "SICK-R"
+    ],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 48, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Semantic Textual Similarity (STS)\n\n## Overview\n\nSTS evaluates how well embedding models capture semantic similarity between sentence pairs by comparing cosine similarity of embeddings against human-labeled similarity scores.\n\n## Task Description\n\n- **Task Type**: Sentence-pair similarity scoring\n- **Input**: Pairs of sentences\n- **Output**: Cosine similarity score\n- **Evaluation**: Spearman and Pearson correlation with human judgments\n\n## Key Features\n\n- 48 datasets including multilingual and domain-specific pairs\n- STSBenchmark is the most widely used standard benchmark\n- Directly measures embedding quality for semantic search and matching\n\n## Evaluation Notes\n\n- Metrics: Spearman rank correlation (main), Pearson correlation\n- Scores range from 0 (unrelated) to 5 (semantically equivalent)\n- STSBenchmark: 1,379 test pairs\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Semantic Textual Similarity |\n| **Datasets** | 48 |\n| **Metrics** | spearman_cosine, pearson_cosine |\n| **MTEB Category** | Embedding |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 48 |\n| Notable Datasets | STSBenchmark, STS12-STS22, BIOSSES, SICK-R |\n",
+    "zh": "# 语义文本相似度 (STS)\n\n## 概述\n\nSTS 通过比较 Embedding 的余弦相似度与人工标注的相似度分数，评估模型捕获句子对语义相似度的能力。\n\n## 任务描述\n\n- **任务类型**: 句子对相似度评分\n- **输入**: 句子对\n- **输出**: 余弦相似度分数\n- **评测方式**: 与人工判断的 Spearman 和 Pearson 相关性\n\n## 主要特点\n\n- 48 个数据集，包含多语言和特定领域句子对\n- STSBenchmark 是最广泛使用的标准基准\n- 直接衡量 Embedding 在语义搜索和匹配中的质量\n\n## 评估说明\n\n- 指标: Spearman 秩相关系数 (主指标), Pearson 相关系数\n- 分数范围: 0 (不相关) 到 5 (语义等同)\n- STSBenchmark: 1,379 个测试句子对\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 语义文本相似度 |\n| **数据集数量** | 48 |\n| **评估指标** | spearman_cosine, pearson_cosine |\n| **MTEB 类别** | Embedding |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 48 |\n| 代表性数据集 | STSBenchmark, STS12-STS22, BIOSSES, SICK-R |\n"
+  }
+}

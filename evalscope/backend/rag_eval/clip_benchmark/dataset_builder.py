@@ -63,6 +63,7 @@ class Dummy:
 
     def __init__(self):
         self.classes = ['blank image', 'noisy image']
+        self.templates = ['a photo of a {c}.']
 
     def __getitem__(self, i):
         return torch.zeros(3, 224, 224), 0
@@ -125,6 +126,8 @@ def get_dataloader(dataset_name, dataset, batch_size, num_workers):
             num_workers=num_workers,
             collate_fn=image_captions_collate_fn,
         )
+    elif dataset_name == 'dummy':
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     else:
         dataloader = DataLoader(
             dataset.batched(batch_size),

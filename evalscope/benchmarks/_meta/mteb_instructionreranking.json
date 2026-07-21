@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "pretty_name": "Instruction Reranking",
+    "pretty_name_zh": "指令重排序",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Reranker", "InstructionFollowing"],
+    "metrics": [{"map": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": [
+      "Core17InstructionRetrieval", "News21InstructionRetrieval",
+      "Robust04InstructionRetrieval", "mFollowIR", "mFollowIRCrossLingual"
+    ],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 5, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Instruction Reranking\n\n## Overview\n\nInstruction Reranking evaluates a Cross-Encoder model's ability to follow natural language instructions when reranking documents, combining reranking capability with instruction following.\n\n## Task Description\n\n- **Task Type**: Instruction-guided Cross-Encoder reranking\n- **Input**: Instruction + query + candidate documents\n- **Output**: Re-ranked documents following the instruction\n- **Evaluation**: MAP\n\n## Key Features\n\n- 5 datasets testing instruction-following in reranking\n- Requires Cross-Encoder models that understand nuanced ranking instructions\n- Advanced task combining reranking with instruction understanding\n\n## Evaluation Notes\n\n- Metric: MAP\n- Requires Cross-Encoder model with instruction support\n- Instructions specify ranking preferences beyond simple relevance\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Instruction Reranking |\n| **Datasets** | 5 |\n| **Metrics** | map |\n| **MTEB Category** | Reranker (Cross-Encoder) |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 5 |\n| Notable Datasets | Core17, News21, Robust04, mFollowIR |\n",
+    "zh": "# 指令重排序\n\n## 概述\n\n指令重排序评估 Cross-Encoder 模型在重排序文档时遵循自然语言指令的能力，将重排序能力与指令遵循相结合。\n\n## 任务描述\n\n- **任务类型**: 指令引导的 Cross-Encoder 重排序\n- **输入**: 指令 + 查询 + 候选文档\n- **输出**: 遵循指令的重新排序文档\n- **评测方式**: MAP\n\n## 主要特点\n\n- 5 个数据集测试重排序中的指令遵循能力\n- 需要理解细微排序指令的 Cross-Encoder 模型\n- 结合重排序与指令理解的高级任务\n\n## 评估说明\n\n- 指标: MAP\n- 需要支持指令的 Cross-Encoder 模型\n- 指令指定超越简单相关性的排序偏好\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 指令重排序 |\n| **数据集数量** | 5 |\n| **评估指标** | map |\n| **MTEB 类别** | Reranker (Cross-Encoder) |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 5 |\n| 代表性数据集 | Core17, News21, Robust04, mFollowIR |\n"
+  }
+}

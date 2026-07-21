@@ -142,6 +142,82 @@ def _report_dir_exists(report_name: str, root: str) -> bool:
         return False
 
 
+def _is_mteb_report(root: str, report_name: str) -> bool:
+    """Check if a report is an MTEB/RAG evaluation (has results/ but not reports/)."""
+    try:
+        prefix, _, _ = process_report_name(report_name)
+        task_dir = os.path.join(root, prefix)
+        results_dir = os.path.join(task_dir, 'results')
+        reports_dir = os.path.join(task_dir, 'reports')
+        return os.path.isdir(results_dir) and not os.path.isdir(reports_dir)
+    except Exception:
+        return False
+
+
+def _load_mteb_report_data(root: str, report_name: str, task_cfg: dict):
+    """Build a simplified report list and datasets from MTEB results/ directory."""
+    prefix, _, _ = process_report_name(report_name)
+    task_dir = os.path.join(root, prefix)
+    results_dir = os.path.join(task_dir, 'results')
+
+    reports = []
+    datasets = []
+    if not os.path.isdir(results_dir):
+        return reports, datasets
+
+    # Get sample count from task config (same logic as _read_mteb_sample_count)
+    limits = task_cfg.get('eval_config', {}).get('eval', {}).get('limits')
+
+    for rroot, _, rfiles in os.walk(results_dir):
+        for rf in rfiles:
+            if not rf.endswith('.json') or rf == 'model_meta.json':
+                continue
+            fpath = os.path.join(rroot, rf)
+            try:
+                with open(fpath, 'r') as f:
+                    data = json.load(f)
+                task_name = data.get('task_name', rf.replace('.json', ''))
+                main_score = None
+                for split_data in data.get('scores', {}).values():
+                    if isinstance(split_data, list) and split_data:
+                        main_score = split_data[0].get('main_score')
+                        break
+
+                rel_path = os.path.relpath(fpath, results_dir)
+                parts = rel_path.split(os.sep)
+                model_name = parts[0].replace('eval__', '') if parts else 'unknown'
+
+                if main_score is not None:
+                    samples = limits if limits is not None else -1  # -1 = 全量
+                    datasets.append(task_name)
+                    reports.append({
+                        'name': task_name,
+                        'dataset_name': task_name,
+                        'model_name': model_name,
+                        'score': main_score,
+                        'analysis': '',
+                        'metrics': [{
+                            'name': 'main_score',
+                            'score': main_score,
+                            'num': samples,
+                            'categories': [{
+                                'name': 'default',
+                                'score': main_score,
+                                'num': samples,
+                                'subsets': [{
+                                    'name': 'test',
+                                    'score': main_score,
+                                    'num': samples,
+                                }],
+                            }],
+                        }],
+                    })
+            except Exception:
+                continue
+
+    return reports, datasets
+
+
 def _extract_timestamp(report_name: str, root: str) -> str:
     """Try to extract a timestamp from the report directory name or fall back to mtime."""
     try:
@@ -178,10 +254,17 @@ def _build_report_meta(report_name: str, root: str) -> dict:
     total_num = 0
     dataset_names = []
     score_sum = 0.0
+    full_dataset = False  # track whether any dataset had "全量" (limits=null)
     for r in report_list:
         dataset_names.append(r.dataset_name)
-        total_num += r.num or 0
+        n = r.num or 0
+        if n <= 0:
+            full_dataset = True
+        else:
+            total_num += n
         score_sum += r.score
+    if full_dataset:
+        total_num = -1  # -1 = 全量 (at least one dataset ran without limit)
 
     avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
     timestamp = _extract_timestamp(report_name, root)
@@ -384,6 +467,27 @@ def load_report():
         root = _root_path()
         validate_report_name(report_name, root)
         report_list, datasets, task_cfg = load_single_report(root, report_name)
+        # Detect MTEB/RAG reports: results/ directory present but no standard report_list
+        is_mteb = _is_mteb_report(root, report_name)
+        if is_mteb:
+            mteb_reports, mteb_datasets = _load_mteb_report_data(root, report_name, task_cfg)
+            # Load perf metrics if available
+            prefix, _, _ = process_report_name(report_name)
+            perf_path = os.path.join(root, prefix, 'perf_metrics.json')
+            perf_metrics = None
+            if os.path.exists(perf_path):
+                try:
+                    with open(perf_path) as f:
+                        perf_metrics = json.load(f)
+                except Exception:
+                    pass
+            return jsonify({
+                'report_list': mteb_reports,
+                'datasets': mteb_datasets,
+                'task_config': task_cfg,
+                'eval_type': 'mteb',
+                'perf_metrics': perf_metrics,
+            }), 200
         return jsonify({
             'report_list': [r.to_dict() for r in report_list],
             'datasets': datasets,

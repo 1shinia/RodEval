@@ -11,6 +11,14 @@ interface Props {
   onApiKeyChange?: (key: string) => void
 }
 
+const EMBEDDING_APIS = ['openai_embedding']
+const RERANK_APIS = ['openai_rerank']
+const isEmbeddingOrRerank = (api: string) => EMBEDDING_APIS.includes(api) || RERANK_APIS.includes(api)
+
+const EMBEDDING_DATASETS = ['random_embedding', 'embedding', 'random_embedding_batch', 'embedding_batch']
+const RERANK_DATASETS = ['random_rerank', 'rerank']
+const LLM_DATASETS = ['openqa', 'random', 'random_vl', 'random_multi_turn', 'share_gpt_zh', 'share_gpt_en', 'longalpaca', 'line_by_line', 'speed_benchmark']
+
 export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: Props) {
   const { t } = useLocale()
   const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
@@ -58,6 +66,19 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
   const [prefixLength, setPrefixLength] = useState('')
   const [thinkingMode, setThinkingMode] = useState('auto')
   const [extraArgs, setExtraArgs] = useState('')
+
+  // Reset dataset when switching between LLM and embedding/reranker APIs
+  useEffect(() => {
+    if (isEmbeddingOrRerank(api)) {
+      if (![...EMBEDDING_DATASETS, ...RERANK_DATASETS].includes(dataset)) {
+        setDataset(EMBEDDING_APIS.includes(api) ? EMBEDDING_DATASETS[0] : RERANK_DATASETS[0])
+      }
+    } else {
+      if ([...EMBEDDING_DATASETS, ...RERANK_DATASETS].includes(dataset)) {
+        setDataset(LLM_DATASETS[0])
+      }
+    }
+  }, [api]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -269,15 +290,12 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
         {/* ── Dataset ── */}
         <FormField label={t('perf.dataset')}>
           <select value={dataset} onChange={(e) => setDataset(e.target.value)} className={FORM_INPUT_CLASS}>
-            <option value="openqa">{t('perf.datasetDefault', { name: 'openqa' })}</option>
-            <option value="random">random</option>
-            <option value="random_vl">random_vl</option>
-            <option value="random_multi_turn">random_multi_turn</option>
-            <option value="share_gpt_zh">share_gpt_zh</option>
-            <option value="share_gpt_en">share_gpt_en</option>
-            <option value="longalpaca">longalpaca</option>
-            <option value="line_by_line">line_by_line</option>
-            <option value="speed_benchmark">speed_benchmark</option>
+            {(isEmbeddingOrRerank(api)
+              ? (EMBEDDING_APIS.includes(api) ? EMBEDDING_DATASETS : RERANK_DATASETS)
+              : LLM_DATASETS
+            ).map((ds) => (
+              <option key={ds} value={ds}>{ds === 'openqa' ? t('perf.datasetDefault', { name: ds }) : ds}</option>
+            ))}
             <option value="custom">{t('perf.datasetCustom')}</option>
           </select>
         </FormField>
@@ -313,6 +331,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
         </FormField>
 
         {/* ── Token / Prompt ── */}
+        {!isEmbeddingOrRerank(api) && (<>
         <FormField label={t('perf.maxTokens')} error={errors.maxTokens}>
           <input type="number" value={maxTokens}
             onChange={(e) => { setMaxTokens(e.target.value.replace(/[^0-9]/g, '')); if (errors.maxTokens) setErrors((p) => ({ ...p, maxTokens: '' })) }}
@@ -324,6 +343,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
             onChange={(e) => { setMinTokens(e.target.value.replace(/[^0-9]/g, '')); if (errors.minTokens) setErrors((p) => ({ ...p, minTokens: '' })) }}
             className={inputClass(errors.minTokens)} placeholder={t('perf.placeholderNoLimit')} />
         </FormField>
+        </>)}
 
         <FormField label={t('perf.maxPromptLen')} error={errors.maxPromptLen}>
           <input type="number" value={maxPromptLen}
@@ -348,6 +368,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
       {/* ── 高级选项 ── */}
       <Collapsible header={<span className="text-sm text-[var(--accent)]">{t('perf.moreParams')}</span>} defaultOpen={false} chevronAfter chevronColor="var(--accent)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+          {!isEmbeddingOrRerank(api) && (
           <FormField label={t('perf.thinkingMode')}>
             <select value={thinkingMode} onChange={(e) => setThinkingMode(e.target.value)} className={FORM_INPUT_CLASS}>
               <option value="auto">{t('perf.thinkingModeAuto')}</option>
@@ -355,6 +376,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
               <option value="off">{t('perf.thinkingModeOff')}</option>
             </select>
           </FormField>
+          )}
 
           <FormField label={t('perf.prefixLength')} error={errors.prefixLength}>
             <input type="number" value={prefixLength}

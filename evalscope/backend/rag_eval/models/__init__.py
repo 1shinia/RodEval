@@ -18,6 +18,36 @@ __all__ = [
 ]
 
 
+def _resolve_hf_cache_path(model_path: str) -> str:
+    """Resolve HF cache path to the actual snapshot directory.
+
+    HF cache stores models as symlinks under models--org--repo/snapshots/<hash>/.
+    SentenceTransformer/transformers cannot read config.json through these symlinks
+    when given the top-level cache directory. This function detects that case and
+    returns the actual snapshot path.
+
+    Args:
+        model_path: Path to a local model directory.
+
+    Returns:
+        Resolved path (snapshot dir if applicable, otherwise original path).
+    """
+    import os
+    if not os.path.isdir(model_path):
+        return model_path
+    if os.path.isfile(os.path.join(model_path, 'config.json')):
+        return model_path
+    snapshots_dir = os.path.join(model_path, 'snapshots')
+    if not os.path.isdir(snapshots_dir):
+        return model_path
+    # Pick the first (usually only) snapshot hash
+    for entry in os.listdir(snapshots_dir):
+        candidate = os.path.join(snapshots_dir, entry)
+        if os.path.isdir(candidate) and os.path.isfile(os.path.join(candidate, 'config.json')):
+            return candidate
+    return model_path
+
+
 def load_model(config):
     """Factory function to load the appropriate model based on config.
 
@@ -68,12 +98,13 @@ def load_model(config):
         )
 
     # Route to local models
-    model_name_or_path = getattr(config, 'model_name_or_path', '')
+    original_path = getattr(config, 'model_name_or_path', '')
+    model_name_or_path = _resolve_hf_cache_path(original_path)
     hub = getattr(config, 'hub', 'modelscope')
     revision = getattr(config, 'revision', 'master')
 
     if getattr(config, 'is_cross_encoder', False):
-        return CrossEncoderReranker(
+        model = CrossEncoderReranker(
             model_name_or_path=model_name_or_path,
             max_seq_length=getattr(config, 'max_seq_length', 512),
             prompt=getattr(config, 'prompt', None),
@@ -84,8 +115,10 @@ def load_model(config):
             config_kwargs=getattr(config, 'config_kwargs', None),
             encode_kwargs=getattr(config, 'encode_kwargs', None),
         )
+        model.model_name_or_path = original_path or model_name_or_path
+        return model
 
-    return SentenceTransformerEncoder(
+    model = SentenceTransformerEncoder(
         model_name_or_path=model_name_or_path,
         pooling_mode=getattr(config, 'pooling_mode', None),
         max_seq_length=getattr(config, 'max_seq_length', 512),
@@ -97,3 +130,5 @@ def load_model(config):
         config_kwargs=getattr(config, 'config_kwargs', None),
         encode_kwargs=getattr(config, 'encode_kwargs', None),
     )
+    model.model_name_or_path = original_path or model_name_or_path
+    return model

@@ -127,16 +127,21 @@ async def run_benchmark(
     async with client:
         statistic_task = asyncio.create_task(statistic_benchmark_metric(queue, args, api_plugin))
 
-        request_gen = get_requests(args, api_plugin)
-        if args.open_loop:
-            strategy = OpenLoopStrategy(args, api_plugin, client, queue, request_gen)
-        else:
-            strategy = ClosedLoopStrategy(args, api_plugin, client, queue, request_gen)
+        try:
+            request_gen = get_requests(args, api_plugin)
+            if args.open_loop:
+                strategy = OpenLoopStrategy(args, api_plugin, client, queue, request_gen)
+            else:
+                strategy = ClosedLoopStrategy(args, api_plugin, client, queue, request_gen)
 
-        await strategy.run()
+            await strategy.run()
 
-        await queue.join()
-        data_process_completed_event.set()
+            await queue.join()
+        finally:
+            # Always signal the consumer loop to stop, even if strategy.run()
+            # or queue.join() raised an exception.  Without this, the consumer
+            # loop spins indefinitely waiting for the queue to drain.
+            data_process_completed_event.set()
 
         metrics, trace_summary, workload_timeline, result_db_path = await statistic_task
 

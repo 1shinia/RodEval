@@ -84,6 +84,8 @@ def exception_handler(func):
                 return await func(*args, **kwargs)
             except Exception as e:
                 logger.exception(f"Exception in async function '{func.__name__}': {e}")
+                # Gracefully cancel pending asyncio tasks before exiting
+                _cleanup_asyncio_tasks()
                 sys.exit(1)
 
         return async_wrapper
@@ -98,6 +100,34 @@ def exception_handler(func):
                 sys.exit(1)
 
         return sync_wrapper
+
+
+def _cleanup_asyncio_tasks() -> None:
+    """Cancel all pending asyncio tasks and give the loop one tick to clean up.
+
+    Called before sys.exit(1) to ensure in-flight requests, HTTP connections,
+    and background tasks (e.g. statistic_benchmark_metric) are cancelled rather
+    than left as orphans.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+
+    pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+    if not pending:
+        return
+
+    logger.info(f'Cancelling {len(pending)} pending asyncio tasks before exit...')
+    for task in pending:
+        task.cancel()
+
+    # Give the loop one tick to process cancellations and run __aexit__ / finally blocks.
+    # We use a short timeout to avoid blocking indefinitely if a task ignores cancellation.
+    try:
+        loop.run_until_complete(asyncio.sleep(0.1))
+    except Exception:
+        pass
 
 
 def signal_handler(signal_name, loop):

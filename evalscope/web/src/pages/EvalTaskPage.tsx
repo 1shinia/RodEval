@@ -1,10 +1,13 @@
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import EvalConfigForm from '@/components/eval/EvalConfigForm'
+import RAGEvalForm from '@/components/eval/RAGEvalForm'
 import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask } from '@/api/eval'
+
+type EvalMode = 'llm' | 'rag'
 
 const evalApi = {
   submit: submitEvalTask,
@@ -20,6 +23,7 @@ export default function EvalTaskPage() {
   const queryParams = useQueryParams()
   const initialDataset = queryParams.get('dataset')
   const apiKeyRef = useRef('')
+  const [evalMode, setEvalMode] = useState<EvalMode>('llm')
 
   const api = useMemo(() => evalApi, [])
   const { running, progress, result, logText, reportUrl, copied, taskId,
@@ -46,7 +50,33 @@ export default function EvalTaskPage() {
     taskId={taskId}
     sseState={sseState}
     >
-      <EvalConfigForm onSubmit={handleSubmit} disabled={running} initialDataset={initialDataset} onApiKeyChange={onApiKeyChange} />
+      {/* Eval Mode Selector */}
+      <div className="flex items-center gap-4 mb-4 pb-4 border-b border-[var(--border-md)]">
+        <span className="text-sm font-medium text-[var(--text)]">{t('eval.evalMode')}</span>
+        <div className="flex gap-1 rounded-lg bg-[var(--bg-card2)] p-1">
+          {([
+            ['llm', 'eval.evalModeLLM'],
+            ['rag', 'eval.evalModeRAG'],
+          ] as const).map(([mode, label]) => (
+            <button key={mode} type="button"
+              onClick={() => setEvalMode(mode)}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
+                evalMode === mode
+                  ? 'bg-[var(--accent)] text-white shadow-sm'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card)]'
+              }`}>
+              {t(label)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {evalMode === 'llm' && (
+        <EvalConfigForm onSubmit={handleSubmit} disabled={running} initialDataset={initialDataset} onApiKeyChange={onApiKeyChange} />
+      )}
+      {evalMode === 'rag' && (
+        <RAGEvalForm onSubmit={handleSubmit} disabled={running} />
+      )}
     </TaskPageLayout>
   )
 }

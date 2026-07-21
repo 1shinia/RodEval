@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "pretty_name": "Summarization",
+    "pretty_name_zh": "摘要生成评估",
+    "dataset_id": "",
+    "paper_url": "https://arxiv.org/abs/2210.07316",
+    "tags": ["MTEB", "Embedding", "Summarization"],
+    "metrics": [{"spearman": {"numeric": true}}],
+    "few_shot_num": 0,
+    "eval_split": "test",
+    "subset_list": ["SummEval"],
+    "category": "rag"
+  },
+  "statistics": {"total_samples": 2, "note": "datasets count, not individual samples"},
+  "readme": {
+    "en": "# Summarization\n\n## Overview\n\nSummarization evaluates how well embeddings correlate with human judgments of summary quality by comparing machine-generated summaries against reference summaries.\n\n## Task Description\n\n- **Task Type**: Summary quality evaluation via embedding similarity\n- **Input**: Machine-generated summaries + human quality scores\n- **Output**: Cosine similarity between summary and reference embeddings\n- **Evaluation**: Spearman correlation with human judgments\n\n## Key Features\n\n- 2 datasets focused on summary quality assessment\n- Evaluates whether embeddings capture summary fidelity\n- Useful for automatic summary evaluation systems\n\n## Evaluation Notes\n\n- Metric: Spearman rank correlation\n- SummEval is the primary benchmark\n- Compares embedding similarity against human-rated coherence, consistency, fluency, relevance\n\n## Properties\n\n| Property | Value |\n|----------|-------|\n| **Task Type** | Summarization Evaluation |\n| **Datasets** | 2 |\n| **Metrics** | spearman |\n| **MTEB Category** | Embedding |\n\n## Data Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Datasets | 2 |\n| Notable Datasets | SummEval |\n",
+    "zh": "# 摘要生成评估\n\n## 概述\n\n摘要评估通过比较机器生成摘要与参考摘要的 Embedding 相似度，评估 Embedding 与人工判断摘要质量的相关性。\n\n## 任务描述\n\n- **任务类型**: 基于 Embedding 相似度的摘要质量评估\n- **输入**: 机器生成摘要 + 人工质量评分\n- **输出**: 摘要与参考 Embedding 的余弦相似度\n- **评测方式**: 与人工判断的 Spearman 相关性\n\n## 主要特点\n\n- 2 个数据集专注于摘要质量评估\n- 评估 Embedding 是否捕获摘要保真度\n- 适用于自动摘要评估系统\n\n## 评估说明\n\n- 指标: Spearman 秩相关系数\n- SummEval 是主要基准\n- 比较 Embedding 相似度与人工评分的一致性、连贯性、流畅性、相关性\n\n## 属性\n\n| 属性 | 值 |\n|----------|-------|\n| **任务类型** | 摘要评估 |\n| **数据集数量** | 2 |\n| **评估指标** | spearman |\n| **MTEB 类别** | Embedding |\n\n## 数据统计\n\n| 指标 | 值 |\n|--------|-------|\n| 数据集总数 | 2 |\n| 代表性数据集 | SummEval |\n"
+  }
+}

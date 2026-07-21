@@ -5,6 +5,7 @@ Both implement the BaseEncoder interface aligned with MTEB 2.x EncoderProtocol.
 """
 from __future__ import annotations
 
+import os
 import torch
 from torch import Tensor
 from tqdm import tqdm
@@ -87,6 +88,31 @@ class SentenceTransformerEncoder(BaseEncoder):
                 config_kwargs=_config_kwargs,
                 model_kwargs=_model_kwargs,
             )
+            # Detect CLS fallback when modules.json is missing (BGE/E5/GTE all need mean)
+            for module in self.model.modules():
+                pooling = getattr(module, 'pooling_mode_name', None) or getattr(module, 'pooling_mode', None)
+                if pooling == 'cls':
+                    modules_json = os.path.join(self.model_name_or_path, 'modules.json')
+                    if not os.path.isfile(modules_json):
+                        logger.warning(
+                            'modules.json not found for %s, SentenceTransformer defaulted to CLS pooling. '
+                            'Rebuilding with mean pooling + L2 normalization.',
+                            os.path.basename(self.model_name_or_path),
+                        )
+                        word_embedding_model = models.Transformer(
+                            self.model_name_or_path,
+                            config_args=_config_kwargs,
+                            model_args=_model_kwargs,
+                        )
+                        pooling_model = models.Pooling(
+                            word_embedding_model.get_word_embedding_dimension(),
+                            pooling_mode='mean',
+                        )
+                        normalize_model = models.Normalize()
+                        self.model = SentenceTransformer(
+                            modules=[word_embedding_model, pooling_model, normalize_model],
+                        )
+                    break
         else:
             word_embedding_model = models.Transformer(
                 self.model_name_or_path,
@@ -97,7 +123,8 @@ class SentenceTransformerEncoder(BaseEncoder):
                 word_embedding_model.get_word_embedding_dimension(),
                 pooling_mode=pooling_mode,
             )
-            self.model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+            normalize_model = models.Normalize()
+            self.model = SentenceTransformer(modules=[word_embedding_model, pooling_model, normalize_model])
 
         self.model.max_seq_length = self.max_seq_length
         self._supported_encode_params = get_supported_params(self.model.encode)

@@ -43,7 +43,9 @@ function ReportSummaryStats({ reports }: Props) {
     const worstIdx = scores.indexOf(Math.min(...scores))
 
     const totalSamples = reports.reduce((sum, r) => {
-      return sum + (r.metrics[0]?.categories?.reduce((s, c) => s + c.num, 0) ?? 0)
+      const catNum = r.metrics[0]?.categories?.reduce((s, c) => s + c.num, 0) ?? 0
+      // -1 sentinel = 全量; keep it instead of adding
+      return catNum <= 0 ? -1 : sum + catNum
     }, 0)
 
     return {
@@ -99,7 +101,7 @@ function ReportSummaryStats({ reports }: Props) {
           {t('reportDetail.totalSamples')}
         </span>
         <span className="text-2xl font-bold font-mono tabular-nums text-[var(--accent)]">
-          {stats.totalSamples.toLocaleString()}
+          {stats.totalSamples > 0 ? stats.totalSamples.toLocaleString() : t('common.allData')}
         </span>
       </div>
     </div>
