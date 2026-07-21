@@ -18,6 +18,7 @@ const PerfTaskPage = lazy(() => import('@/pages/PerfTaskPage'))
 const PerfReportsPage = lazy(() => import('@/pages/PerfReportsPage'))
 const ReportViewerPage = lazy(() => import('@/pages/ReportViewerPage'))
 const BenchmarksPage = lazy(() => import('@/pages/BenchmarksPage'))
+const AIGCReportDetailPage = lazy(() => import('@/pages/AIGCReportDetailPage'))
 
 function AppRoutes() {
   return (
@@ -33,6 +34,7 @@ function AppRoutes() {
           <Route path="/perf-reports" element={<PageErrorBoundary pageName="perf-reports"><PerfReportsPage /></PageErrorBoundary>} />
           <Route path="/benchmarks" element={<PageErrorBoundary pageName="benchmarks"><BenchmarksPage /></PageErrorBoundary>} />
           <Route path="/viewer" element={<PageErrorBoundary pageName="viewer"><ReportViewerPage /></PageErrorBoundary>} />
+          <Route path="/aigc-report/:taskId" element={<PageErrorBoundary pageName="aigc-report"><AIGCReportDetailPage /></PageErrorBoundary>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

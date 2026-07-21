@@ -102,3 +102,13 @@ export function getChartUrl(
   if (opts.subsetName) params.set('subset_name', opts.subsetName)
   return `${BASE}/chart?${params.toString()}`
 }
+
+// ------------------------------------------------------------------ //
+// AIGC evaluation API                                                //
+// ------------------------------------------------------------------ //
+
+const AIGC_BASE = '/api/v1/aigc'
+
+export async function getAIGCReport(taskId: string): Promise<import('./types').AIGCReportResponse> {
+  return api<import('./types').AIGCReportResponse>(`${AIGC_BASE}/report`, { task_id: taskId })
+}

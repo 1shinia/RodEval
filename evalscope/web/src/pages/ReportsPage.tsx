@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Eye, FolderOpen, GitCompareArrows, Loader2, ScanSearch } from 'lucide-react'
+import { Eye, FileText, FolderOpen, GitCompareArrows, Loader2, ScanSearch, Image as ImageIcon } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
 import { toast } from '@/components/common/Toast'
@@ -12,6 +12,19 @@ import Skeleton from '@/components/ui/Skeleton'
 import ServerBadge from '@/components/ui/ServerBadge'
 import ReportFiltersBar, { type ReportFilters } from '@/components/reports/ReportFilters'
 import ReportCard from '@/components/reports/ReportCard'
+
+type TabType = 'llm' | 'aigc'
+
+interface AIGCReportSummary {
+  task_id: string
+  model_name: string
+  model_type: string
+  total_images: number
+  clip_score_mean?: number
+  fid?: number
+  inception_score?: number
+  created_at: string
+}
 
 const PAGE_SIZE = 20
 
@@ -40,6 +53,14 @@ export default function ReportsPage() {
     clearCompareSelection,
   } = useReports()
 
+  // ---- Tab state ----
+  const [activeTab, setActiveTab] = useState<TabType>('llm')
+
+  // ---- AIGC reports state ----
+  const [aigcReports, setAigcReports] = useState<AIGCReportSummary[]>([])
+  const [aigcLoading, setAigcLoading] = useState(false)
+  const [aigcError, setAigcError] = useState<string | null>(null)
+
   // ---- Local state ----
   const [filters, setFilters] = useState<ReportFilters>(defaultFilters)
   const [page, setPage] = useState(1)
@@ -59,6 +80,30 @@ export default function ReportsPage() {
     searchTimer.current = setTimeout(() => setDebouncedSearch(filters.search), 300)
     return () => clearTimeout(searchTimer.current)
   }, [filters.search])
+
+  // Fetch AIGC reports
+  const fetchAIGCReports = useCallback(async () => {
+    setAigcLoading(true)
+    setAigcError(null)
+    try {
+      const response = await fetch('/api/v1/aigc/reports')
+      if (!response.ok) {
+        throw new Error(`Failed to load reports: ${response.statusText}`)
+      }
+      const data = await response.json()
+      setAigcReports(data.reports || [])
+    } catch (err) {
+      setAigcError(err instanceof Error ? err.message : 'Failed to load reports')
+    } finally {
+      setAigcLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'aigc') {
+      fetchAIGCReports()
+    }
+  }, [activeTab, fetchAIGCReports])
 
   // Fetch reports when filters/page change
   const fetchReports = useCallback(async () => {
@@ -165,10 +210,18 @@ export default function ReportsPage() {
 
   const handleCardClick = useCallback(
     (name: string) => {
-      // Navigate to detail — use the report load route or a detail page
-      navigate(`/reports/${encodeURIComponent(name)}?root_path=${encodeURIComponent(rootPath)}`)
+      // Check if this is an AIGC report (name format: aigc_{task_id} or eval_type === 'aigc')
+      const report = reports.find((r) => r.name === name)
+      if (report?.eval_type === 'aigc' || name.startsWith('aigc_')) {
+        // Extract task_id from report name
+        const taskId = name.startsWith('aigc_') ? name.slice(5) : name
+        navigate(`/aigc-report/${encodeURIComponent(taskId)}`)
+      } else {
+        // Navigate to standard report detail
+        navigate(`/reports/${encodeURIComponent(name)}?root_path=${encodeURIComponent(rootPath)}`)
+      }
     },
-    [navigate, rootPath],
+    [navigate, rootPath, reports],
   )
 
   const handleCompare = useCallback(() => {
@@ -207,187 +260,293 @@ export default function ReportsPage() {
         <ServerBadge address={serverAddress} />
       </div>
 
-      {/* Path bar */}
-      <div className="flex items-center gap-2">
-        <FolderOpen size={16} className="text-[var(--text-muted)] shrink-0" />
-        <input
-          type="text"
-          value={rootPath}
-          onChange={(e) => setRootPath(e.target.value)}
-          className="flex-1 px-3 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)] transition-all duration-[var(--transition)]"
-          placeholder={t('reports.pathLabel')}
-        />
-        <Button onClick={handleScan} disabled={loading} size="md">
-          {loading ? (
-            <>
-              <Loader2 size={14} className="animate-spin" />
-              {t('reports.scanning')}
-            </>
-          ) : (
-            <>
-              <ScanSearch size={14} />
-              {t('reports.scan')}
-            </>
-          )}
-        </Button>
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b border-[var(--border)]">
+        <button
+          onClick={() => setActiveTab('llm')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 ${
+            activeTab === 'llm'
+              ? 'border-[var(--accent)] text-[var(--accent)]'
+              : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'
+          }`}
+        >
+          <FileText size={16} />
+          {t('reports.tabLLM')}
+        </button>
+        <button
+          onClick={() => setActiveTab('aigc')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 ${
+            activeTab === 'aigc'
+              ? 'border-[var(--accent)] text-[var(--accent)]'
+              : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'
+          }`}
+        >
+          <ImageIcon size={16} />
+          {t('reports.tabAIGC')}
+        </button>
       </div>
 
-      {/* Filters */}
-      {hasScanned && (
-        <ReportFiltersBar
-          filters={filters}
-          availableModels={availableModels}
-          availableDatasets={availableDatasets}
-          onChange={setFilters}
-        />
-      )}
-
-      {/* Action bar */}
-      {hasScanned && reports.length > 0 && (
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Select-all checkbox */}
-          <button
-            type="button"
-            onClick={handleSelectAll}
-            className="flex items-center gap-2 text-sm text-[var(--text-muted)] cursor-pointer hover:text-[var(--text)] transition-colors"
-          >
-            <span
-              role="checkbox"
-              aria-checked={allSelected}
-              className="w-4.5 h-4.5 rounded-[var(--radius-xs)] border-2 flex items-center justify-center transition-all duration-150 shrink-0"
-              style={{
-                borderColor: allSelected ? 'var(--accent)' : 'var(--border-strong)',
-                background: allSelected ? 'var(--accent)' : 'transparent',
-              }}
-            >
-              {allSelected && (
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  stroke="white"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="2,6 5,9 10,3" />
-                </svg>
+      {/* LLM/RAG Tab */}
+      {activeTab === 'llm' && (
+        <>
+          {/* Path bar */}
+          <div className="flex items-center gap-2">
+            <FolderOpen size={16} className="text-[var(--text-muted)] shrink-0" />
+            <input
+              type="text"
+              value={rootPath}
+              onChange={(e) => setRootPath(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)] transition-all duration-[var(--transition)]"
+              placeholder={t('reports.pathLabel')}
+            />
+            <Button onClick={handleScan} disabled={loading} size="md">
+              {loading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  {t('reports.scanning')}
+                </>
+              ) : (
+                <>
+                  <ScanSearch size={14} />
+                  {t('reports.scan')}
+                </>
               )}
-            </span>
-            {t('reports.selectAll')}
-          </button>
-
-          {selectedForCompare.length > 0 && (
-            <span className="text-xs text-[var(--text-muted)]">
-              {selectedForCompare.length} {t('reports.selected')}
-              {selectedForCompare.length > 3 && (
-                <span className="ml-1 text-[var(--warning-color)]">{t('compare.maxThreeSelected')}</span>
-              )}
-            </span>
-          )}
-
-          <div className="flex items-center gap-2 ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={selectedForCompare.length < 2}
-              onClick={handleCompare}
-            >
-              <GitCompareArrows size={14} />
-              {t('reports.compare')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={selectedForCompare.length !== 1}
-              onClick={handleViewHtml}
-            >
-              <Eye size={14} />
-              {t('reports.viewHtml')}
             </Button>
           </div>
-        </div>
-      )}
 
-      {/* Error */}
-      {error && (
-        <div className="px-4 py-3 rounded-[var(--radius)] bg-[var(--danger-bg)] border border-[var(--danger-border)] text-sm text-[var(--danger)]">
-          {error}
-        </div>
-      )}
-
-      {/* Content */}
-      {loading && !hasScanned ? null : loading ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} height={64} className="rounded-[var(--radius)]" />
-          ))}
-        </div>
-      ) : !hasScanned ? (
-        <EmptyState icon={<ScanSearch size={40} />} title={t('reports.noReports')} subtitle={t('reports.scanFirst')} />
-      ) : reports.length === 0 ? (
-        <EmptyState icon={<ScanSearch size={40} />} title={t('reports.noReports')} subtitle={t('reports.scanFirst')} />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {reports.map((report) => (
-            <ReportCard
-              key={report.name}
-              report={report}
-              selected={selectedForCompare.includes(report.name)}
-              onSelect={toggleSelectForCompare}
-              onClick={handleCardClick}
-              onDelete={handleDelete}
+          {/* Filters */}
+          {hasScanned && (
+            <ReportFiltersBar
+              filters={filters}
+              availableModels={availableModels}
+              availableDatasets={availableDatasets}
+              onChange={setFilters}
             />
-          ))}
-        </div>
+          )}
+
+          {/* Action bar */}
+          {hasScanned && reports.length > 0 && (
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Select-all checkbox */}
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="flex items-center gap-2 text-sm text-[var(--text-muted)] cursor-pointer hover:text-[var(--text)] transition-colors"
+              >
+                <span
+                  role="checkbox"
+                  aria-checked={allSelected}
+                  className="w-4.5 h-4.5 rounded-[var(--radius-xs)] border-2 flex items-center justify-center transition-all duration-150 shrink-0"
+                  style={{
+                    borderColor: allSelected ? 'var(--accent)' : 'var(--border-strong)',
+                    background: allSelected ? 'var(--accent)' : 'transparent',
+                  }}
+                >
+                  {allSelected && (
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 12 12"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="2,6 5,9 10,3" />
+                    </svg>
+                  )}
+                </span>
+                {t('reports.selectAll')}
+              </button>
+
+              {selectedForCompare.length > 0 && (
+                <span className="text-xs text-[var(--text-muted)]">
+                  {selectedForCompare.length} {t('reports.selected')}
+                  {selectedForCompare.length > 3 && (
+                    <span className="ml-1 text-[var(--warning-color)]">{t('compare.maxThreeSelected')}</span>
+                  )}
+                </span>
+              )}
+
+              <div className="flex items-center gap-2 ml-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={selectedForCompare.length < 2}
+                  onClick={handleCompare}
+                >
+                  <GitCompareArrows size={14} />
+                  {t('reports.compare')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={selectedForCompare.length !== 1}
+                  onClick={handleViewHtml}
+                >
+                  <Eye size={14} />
+                  {t('reports.viewHtml')}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="px-4 py-3 rounded-[var(--radius)] bg-[var(--danger-bg)] border border-[var(--danger-border)] text-sm text-[var(--danger)]">
+              {error}
+            </div>
+          )}
+
+          {/* Content */}
+          {loading && !hasScanned ? null : loading ? (
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} height={64} className="rounded-[var(--radius)]" />
+              ))}
+            </div>
+          ) : !hasScanned ? (
+            <EmptyState icon={<ScanSearch size={40} />} title={t('reports.noReports')} subtitle={t('reports.scanFirst')} />
+          ) : reports.length === 0 ? (
+            <EmptyState icon={<ScanSearch size={40} />} title={t('reports.noReports')} subtitle={t('reports.scanFirst')} />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {reports.map((report) => (
+                <ReportCard
+                  key={report.name}
+                  report={report}
+                  selected={selectedForCompare.includes(report.name)}
+                  onSelect={toggleSelectForCompare}
+                  onClick={handleCardClick}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {hasScanned && totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                ←
+              </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((item, idx) =>
+                  item === 'ellipsis' ? (
+                    // text-dim allowed: decorative pagination ellipsis (DESIGN.md §Text)
+                    <span key={`e${idx}`} className="px-1 text-[var(--text-dim)]">
+                      ...
+                    </span>
+                  ) : (
+                    <Button
+                      key={item}
+                      variant={item === page ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setPage(item as number)}
+                      className="!min-w-[32px]"
+                    >
+                      {item}
+                    </Button>
+                  ),
+                )}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                →
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Pagination */}
-      {hasScanned && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            ←
-          </Button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
-            .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
-              if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis')
-              acc.push(p)
-              return acc
-            }, [])
-            .map((item, idx) =>
-              item === 'ellipsis' ? (
-                // text-dim allowed: decorative pagination ellipsis (DESIGN.md §Text)
-                <span key={`e${idx}`} className="px-1 text-[var(--text-dim)]">
-                  ...
-                </span>
-              ) : (
-                <Button
-                  key={item}
-                  variant={item === page ? 'primary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setPage(item as number)}
-                  className="!min-w-[32px]"
-                >
-                  {item}
-                </Button>
-              ),
-            )}
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            →
-          </Button>
-        </div>
+      {/* AIGC Tab */}
+      {activeTab === 'aigc' && (
+        <>
+          {aigcError && (
+            <div className="px-4 py-3 rounded-[var(--radius)] bg-[var(--danger-bg)] border border-[var(--danger-border)] text-sm text-[var(--danger)]">
+              {aigcError}
+            </div>
+          )}
+
+          {aigcLoading ? (
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} height={64} className="rounded-[var(--radius)]" />
+              ))}
+            </div>
+          ) : aigcReports.length === 0 ? (
+            <EmptyState icon={<ImageIcon size={40} />} title={t('aigc.noReports')} subtitle={t('aigc.noReportsHint')} />
+          ) : (
+            <div className="rounded-[var(--radius)] border border-[var(--border)] overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[var(--bg-deep)] border-b border-[var(--border)]">
+                    <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.taskId')}</th>
+                    <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelName')}</th>
+                    <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelType')}</th>
+                    <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.totalImages')}</th>
+                    <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.clipScoreMean')}</th>
+                    <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.fid')}</th>
+                    <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.createdAt')}</th>
+                    <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('common.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aigcReports.map((report) => (
+                    <tr key={report.task_id} className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-card2)] transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{report.task_id}</td>
+                      <td className="px-4 py-3 text-[var(--text)]">{report.model_name}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{report.model_type}</td>
+                      <td className="px-4 py-3 text-right text-[var(--text)]">{report.total_images}</td>
+                      <td className="px-4 py-3 text-right font-mono">
+                        {report.clip_score_mean != null ? (
+                          <span className="text-[var(--accent)]">{report.clip_score_mean.toFixed(4)}</span>
+                        ) : (
+                          <span className="text-[var(--text-dim)]">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono">
+                        {report.fid != null ? (
+                          <span className="text-[var(--text)]">{report.fid.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-[var(--text-dim)]">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
+                        {new Date(report.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/aigc-report/${encodeURIComponent(report.task_id)}`)}
+                        >
+                          <Eye size={14} />
+                          {t('common.view')}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

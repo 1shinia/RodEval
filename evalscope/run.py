@@ -94,6 +94,14 @@ def setup_work_directory(task_cfg: TaskConfig):
             eval_cfg.eval.output_folder = task_cfg.work_dir
         elif tool == Tools.CLIP_BENCHMARK:
             eval_cfg.eval.output_dir = task_cfg.work_dir
+    elif task_cfg.eval_backend == EvalBackend.AIGC_EVAL:
+        eval_cfg = task_cfg.eval_config
+        if isinstance(eval_cfg, dict):
+            if 'eval' in eval_cfg:
+                eval_cfg['eval']['output_dir'] = task_cfg.work_dir
+                task_cfg.eval_config = eval_cfg  # ensure Pydantic sees the mutation
+        elif hasattr(eval_cfg, 'eval') and hasattr(eval_cfg.eval, 'output_dir'):
+            eval_cfg.eval.output_dir = task_cfg.work_dir
     return outputs
 
 
@@ -104,6 +112,11 @@ def run_non_native_backend(task_cfg: TaskConfig, outputs: OutputsStructure) -> d
 
     if eval_config is None:
         logger.warning(f'Got eval_backend {eval_backend}, but eval_config is not provided.')
+
+    # Ensure output_dir is set for backends that need it
+    if eval_backend == EvalBackend.AIGC_EVAL and isinstance(eval_config, dict) and 'eval' in eval_config:
+        if not eval_config['eval'].get('output_dir'):
+            eval_config['eval']['output_dir'] = task_cfg.work_dir
 
     backend_manager_class = get_backend_manager_class(eval_backend)
     backend_manager = backend_manager_class(config=eval_config)
@@ -130,6 +143,10 @@ def get_backend_manager_class(eval_backend: EvalBackend):
         logger.info('Using RAGEvalBackendManager')
         from evalscope.backend.rag_eval import RAGEvalBackendManager
         return RAGEvalBackendManager
+    elif eval_backend == EvalBackend.AIGC_EVAL:
+        logger.info('Using AIGCBackendManager')
+        from evalscope.backend.aigc_eval import AIGCBackendManager
+        return AIGCBackendManager
     elif eval_backend == EvalBackend.THIRD_PARTY:
         raise NotImplementedError(f'Not implemented for evaluation backend {eval_backend}')
 

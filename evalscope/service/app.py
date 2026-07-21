@@ -10,6 +10,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from evalscope.utils.logger import get_logger
 from . import db as _db
 from .blueprints import bp_eval, bp_perf, bp_reports
+from .blueprints.aigc import bp_aigc
 from .utils import OUTPUT_DIR as _DEFAULT_ROOT
 
 logger = get_logger()
@@ -72,6 +73,7 @@ def create_app(outputs: str = None):
     app.register_blueprint(bp_eval)
     app.register_blueprint(bp_perf)
     app.register_blueprint(bp_reports)
+    app.register_blueprint(bp_aigc)
 
     # Use HuggingFace mirror for MTEB dataset downloads (faster in CN)
     os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
@@ -341,6 +343,12 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
     logger.info('  GET  /api/v1/perf/progress/stream    - SSE stream for perf progress')
     logger.info('  GET  /api/v1/perf/log/stream         - SSE stream for perf log')
     logger.info('  GET  /api/v1/perf/report             - Get HTML performance benchmark report')
+    logger.info('  POST /api/v1/aigc/invoke             - Run AIGC evaluation task (blocking)')
+    logger.info('  GET  /api/v1/aigc/progress           - Get AIGC evaluation progress')
+    logger.info('  POST /api/v1/aigc/stop               - Stop AIGC evaluation task')
+    logger.info('  GET  /api/v1/aigc/media/<task_id>/<filename> - Serve generated media')
+    logger.info('  GET  /api/v1/aigc/thumbnails/<task_id>/<filename> - Serve thumbnails')
+    logger.info('  GET  /api/v1/aigc/benchmarks         - List AIGC benchmarks')
     logger.info('Refer to docs for parameters: https://evalscope.readthedocs.io/en/latest/user_guides/service.html')
 
     # Print a user-friendly dashboard URL

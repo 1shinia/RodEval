@@ -3,11 +3,12 @@ import { useLocale } from '@/contexts/LocaleContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import EvalConfigForm from '@/components/eval/EvalConfigForm'
 import RAGEvalForm from '@/components/eval/RAGEvalForm'
+import AIGCEvalForm from '@/components/eval/AIGCEvalForm'
 import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask } from '@/api/eval'
 
-type EvalMode = 'llm' | 'rag'
+type EvalMode = 'llm' | 'rag' | 'aigc'
 
 const evalApi = {
   submit: submitEvalTask,
@@ -25,7 +26,12 @@ export default function EvalTaskPage() {
   const apiKeyRef = useRef('')
   const [evalMode, setEvalMode] = useState<EvalMode>('llm')
 
-  const api = useMemo(() => evalApi, [])
+  const api = useMemo(() => ({
+    ...evalApi,
+    getReportUrl: (taskId: string) => evalMode === 'aigc'
+      ? `/aigc-report/${encodeURIComponent(taskId)}`
+      : getEvalReportUrl(taskId),
+  }), [evalMode])
   const { running, progress, result, logText, reportUrl, copied, taskId,
     handleSubmit, handleStop, handleResume: rawResume, copyLog, sseState } = useTaskRunner({ api, taskPrefix: 'eval' })
 
@@ -57,6 +63,7 @@ export default function EvalTaskPage() {
           {([
             ['llm', 'eval.evalModeLLM'],
             ['rag', 'eval.evalModeRAG'],
+            ['aigc', 'eval.evalModeAIGC'],
           ] as const).map(([mode, label]) => (
             <button key={mode} type="button"
               onClick={() => setEvalMode(mode)}
@@ -76,6 +83,9 @@ export default function EvalTaskPage() {
       )}
       {evalMode === 'rag' && (
         <RAGEvalForm onSubmit={handleSubmit} disabled={running} />
+      )}
+      {evalMode === 'aigc' && (
+        <AIGCEvalForm onSubmit={handleSubmit} disabled={running} />
       )}
     </TaskPageLayout>
   )

@@ -1,0 +1,1 @@
+"""AIGC evaluation metrics."""

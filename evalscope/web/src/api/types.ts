@@ -283,6 +283,7 @@ export interface ReportSummary {
   dataset_scores?: Record<string, number>
   num_samples: number
   timestamp: string
+  eval_type?: 'llm' | 'rag' | 'aigc'
 }
 
 export interface ListReportsResponse {
@@ -294,4 +295,83 @@ export interface ListReportsResponse {
     available_models: string[]
     available_datasets: string[]
   }
+}
+
+// ------------------------------------------------------------------ //
+// AIGC evaluation types                                              //
+// ------------------------------------------------------------------ //
+
+export interface AIGCModelConfig {
+  model_name_or_path: string
+  model_type: 'txt2img' | 'txt2video' | 'img2img'
+  api_base?: string
+  api_key?: string
+  device?: string
+  dtype?: string
+}
+
+export interface AIGCGenerateConfig {
+  width: number
+  height: number
+  num_inference_steps: number
+  guidance_scale: number
+  negative_prompt?: string
+  seed?: number
+  batch_size?: number
+}
+
+export interface AIGCEvalConfig {
+  metrics: string[]
+  prompt_dataset: string
+  prompt_limit: number
+  reference_dir?: string
+  output_dir?: string
+}
+
+export interface AIGCGeneratedImage {
+  filename: string
+  prompt: string
+  clip_score?: number
+  url: string
+  thumbnail_url: string
+}
+
+export interface AIGCMetricsResult {
+  clip_score_mean?: number
+  clip_score_std?: number
+  fid?: number
+  inception_score?: number
+  total_images: number
+}
+
+export interface AIGCTaskResult {
+  task_id: string
+  status: 'completed' | 'failed' | 'stopped'
+  metrics: AIGCMetricsResult
+  images: AIGCGeneratedImage[]
+  config: {
+    model: AIGCModelConfig
+    generate: AIGCGenerateConfig
+    eval: AIGCEvalConfig
+  }
+  error?: string
+}
+
+export interface AIGCSampleResult {
+  index: number
+  prompt: string
+  image_path: string
+  thumbnail_path: string
+  clip_score?: number
+  url: string
+  thumbnail_url: string
+}
+
+export interface AIGCReportResponse {
+  model: string
+  model_type: string
+  num_samples: number
+  metrics: Record<string, number>
+  generation_time: number
+  per_sample: AIGCSampleResult[]
 }

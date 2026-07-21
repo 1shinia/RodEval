@@ -102,6 +102,7 @@ class EvalBackend:
     OPEN_COMPASS = 'OpenCompass'
     VLM_EVAL_KIT = 'VLMEvalKit'
     RAG_EVAL = 'RAGEval'
+    AIGC_EVAL = 'AIGCEval'
     THIRD_PARTY = 'ThirdParty'
 
 

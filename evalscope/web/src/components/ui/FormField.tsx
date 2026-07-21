@@ -5,12 +5,13 @@ interface FormFieldProps {
   label: string
   required?: boolean
   error?: string
+  hint?: string
   children: ReactNode
   className?: string
 }
 
 /** label + (children: control) + error message wrapper. */
-export default function FormField({ label, required, error, children, className }: FormFieldProps) {
+export default function FormField({ label, required, error, hint, children, className }: FormFieldProps) {
   return (
     <div className={className}>
       <label className={FORM_LABEL_CLASS}>
@@ -18,6 +19,7 @@ export default function FormField({ label, required, error, children, className 
         {required && <span className="text-[var(--danger)]"> *</span>}
       </label>
       {children}
+      {hint && <p className="text-xs text-[var(--text-muted)] mt-1">{hint}</p>}
       {error && <p className="text-xs text-[var(--danger)] mt-1">{error}</p>}
     </div>
   )
