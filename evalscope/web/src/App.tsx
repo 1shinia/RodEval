@@ -15,7 +15,10 @@ const LLMReportsTab = lazy(() => import('@/pages/LLMReportsTab'))
 const AIGCReportsTab = lazy(() => import('@/pages/AIGCReportsTab'))
 const ReportDetailPage = lazy(() => import('@/pages/ReportDetailPage'))
 const ComparePage = lazy(() => import('@/pages/ComparePage'))
-const EvalTaskPage = lazy(() => import('@/pages/EvalTaskPage'))
+const EvalLayout = lazy(() => import('@/pages/EvalLayout'))
+const EvalLLMTab = lazy(() => import('@/pages/EvalLLMTab'))
+const EvalRAGTab = lazy(() => import('@/pages/EvalRAGTab'))
+const EvalAIGCTab = lazy(() => import('@/pages/EvalAIGCTab'))
 const PerfTaskPage = lazy(() => import('@/pages/PerfTaskPage'))
 const PerfReportsPage = lazy(() => import('@/pages/PerfReportsPage'))
 const ReportViewerPage = lazy(() => import('@/pages/ReportViewerPage'))
@@ -35,7 +38,12 @@ function AppRoutes() {
           </Route>
           <Route path="/reports/:reportId" element={<PageErrorBoundary pageName="report-detail"><ReportDetailPage /></PageErrorBoundary>} />
           <Route path="/compare" element={<PageErrorBoundary pageName="compare"><ComparePage /></PageErrorBoundary>} />
-          <Route path="/eval" element={<PageErrorBoundary pageName="eval"><EvalTaskPage /></PageErrorBoundary>} />
+          <Route path="/eval" element={<PageErrorBoundary pageName="eval"><EvalLayout /></PageErrorBoundary>}>
+            <Route index element={<Navigate to="/eval/llm" replace />} />
+            <Route path="llm" element={<PageErrorBoundary pageName="eval"><EvalLLMTab /></PageErrorBoundary>} />
+            <Route path="rag" element={<PageErrorBoundary pageName="eval"><EvalRAGTab /></PageErrorBoundary>} />
+            <Route path="aigc" element={<PageErrorBoundary pageName="eval"><EvalAIGCTab /></PageErrorBoundary>} />
+          </Route>
           <Route path="/perf" element={<PageErrorBoundary pageName="perf"><PerfTaskPage /></PageErrorBoundary>} />
           <Route path="/perf-reports" element={<PageErrorBoundary pageName="perf-reports"><PerfReportsPage /></PageErrorBoundary>} />
           <Route path="/benchmarks" element={<PageErrorBoundary pageName="benchmarks"><BenchmarksPage /></PageErrorBoundary>} />
