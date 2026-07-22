@@ -2,12 +2,12 @@
 import json
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-def load_prompts(dataset_name: str, limit: int = 100) -> List[str]:
+def load_prompts(dataset_name: str, limit: int = 100, custom_path: Optional[str] = None) -> List[str]:
     """Load prompts from a dataset.
 
     Args:
@@ -24,8 +24,7 @@ def load_prompts(dataset_name: str, limit: int = 100) -> List[str]:
     elif dataset_name == 'parti':
         return _load_parti_prompts(limit)
     elif dataset_name == 'custom':
-        logger.warning('Custom dataset not implemented, using default prompts')
-        return _get_default_prompts(limit)
+        return _load_custom_prompts(custom_path, limit)
     else:
         raise ValueError(f'Unknown dataset: {dataset_name}')
 
@@ -240,8 +239,15 @@ def _load_coco_captions(limit: int) -> List[str]:
 
 
 def _load_parti_prompts(limit: int) -> List[str]:
-    """Load PartiPrompts (placeholder)."""
-    logger.warning('PartiPrompts dataset not yet implemented, using default prompts')
+    """Load PartiPrompts from builtin JSON."""
+    builtin_dir = Path(__file__).parent / 'builtin'
+    json_path = builtin_dir / 'parti_prompts.json'
+    if json_path.exists():
+        with open(json_path) as f:
+            prompts = json.load(f)
+        logger.info(f'Loaded {len(prompts[:limit])} prompts from builtin PartiPrompts')
+        return prompts[:limit]
+    logger.warning('PartiPrompts JSON not found, using default prompts')
     return _get_default_prompts(limit)
 
 
@@ -258,5 +264,92 @@ def _get_default_prompts(limit: int) -> List[str]:
         'A medieval castle on a hill',
         'A futuristic city with flying cars',
         'A cozy cabin in the woods',
+    ]
+    return default[:limit]
+
+
+def _load_custom_prompts(custom_path: Optional[str], limit: int) -> List[str]:
+    """Load prompts from a custom file (one prompt per line)."""
+    if not custom_path:
+        logger.warning('Custom dataset selected but no path provided, using default prompts')
+        return _get_default_prompts(limit)
+
+    path = Path(custom_path)
+    if not path.exists():
+        logger.warning(f'Custom dataset file not found: {custom_path}, using default prompts')
+        return _get_default_prompts(limit)
+
+    with open(path, 'r') as f:
+        lines = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+    logger.info(f'Loaded {len(lines[:limit])} prompts from custom file: {custom_path}')
+    return lines[:limit]
+
+
+def load_video_prompts(dataset_name: str, limit: int = 100, custom_path: Optional[str] = None) -> List[str]:
+    """Load video generation prompts from a dataset.
+
+    Args:
+        dataset_name: Name of the dataset (msr_vtt, activitynet, custom)
+        limit: Maximum number of prompts to load
+
+    Returns:
+        List of text prompts suitable for video generation
+    """
+    if dataset_name == 'msr_vtt':
+        return _load_msr_vtt_prompts(limit)
+    elif dataset_name == 'activitynet':
+        return _load_activitynet_prompts(limit)
+    elif dataset_name == 'custom':
+        return _load_custom_prompts(custom_path, limit)
+    else:
+        raise ValueError(f'Unknown video dataset: {dataset_name}')
+
+
+def _load_msr_vtt_prompts(limit: int) -> List[str]:
+    """Load MSR-VTT prompts (placeholder — subset of video captions)."""
+    prompts = [
+        'A person is playing a musical instrument',
+        'A crowd of people walking on a street',
+        'A person is cooking food in a kitchen',
+        'Cars driving on a highway',
+        'A person is talking to the camera',
+        'People dancing at a party',
+        'A sports game is being played on a field',
+        'A person is giving a presentation',
+        'Someone is swimming in a pool',
+        'An animal is running in a field',
+        'A person is riding a bicycle',
+        'People are sitting and eating at a restaurant',
+        'A person is painting a picture',
+        'A band is performing on stage',
+        'Someone is typing on a computer',
+        'A person is walking a dog in a park',
+        'Birds flying in the sky at sunset',
+        'A waterfall flowing down a mountain',
+        'A firework display lighting up the night sky',
+        'A train arriving at a station platform',
+    ]
+    return prompts[:limit]
+
+
+def _load_activitynet_prompts(limit: int) -> List[str]:
+    """Load ActivityNet Captions prompts (placeholder)."""
+    logger.warning('ActivityNet Captions not yet implemented, using default video prompts')
+    return _get_default_video_prompts(limit)
+
+
+def _get_default_video_prompts(limit: int) -> List[str]:
+    """Get default video prompts for testing."""
+    default = [
+        'A serene lake at sunset with gentle ripples',
+        'A busy city intersection with cars and pedestrians',
+        'A cat playing with a ball of yarn',
+        'Waves crashing on a rocky shore',
+        'A chef preparing a gourmet meal',
+        'Aerial view of a winding mountain road',
+        'A dog chasing butterflies in a meadow',
+        'Rain falling on a city street at night',
+        'A dancer performing a contemporary routine',
+        'Time-lapse of clouds moving over mountains',
     ]
     return default[:limit]

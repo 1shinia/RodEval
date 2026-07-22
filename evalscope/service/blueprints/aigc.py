@@ -159,8 +159,12 @@ def get_aigc_report():
     for sample in results.get('per_sample', []):
         img_path = sample.get('image_path', '')
         thumb_path = sample.get('thumbnail_path', '')
-        sample['url'] = f'/api/v1/aigc/file/{task_id}/{img_path}'
-        sample['thumbnail_url'] = f'/api/v1/aigc/file/{task_id}/{thumb_path}'
+        video_path = sample.get('video_path', '')
+        if img_path:
+            sample['url'] = f'/api/v1/aigc/file/{task_id}/{img_path}'
+        if video_path:
+            sample['video_url'] = f'/api/v1/aigc/file/{task_id}/{video_path}'
+        sample['thumbnail_url'] = f'/api/v1/aigc/file/{task_id}/{thumb_path}' if thumb_path else ''
 
     return jsonify(results)
 
@@ -276,6 +280,8 @@ def _build_aigc_config(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
             'prompt_dataset': data.get('eval', {}).get('prompt_dataset', 'drawbench'),
             'prompt_limit': data.get('eval', {}).get('prompt_limit', 100),
             'reference_dir': data.get('eval', {}).get('reference_dir'),
+            'reference_video_dir': data.get('eval', {}).get('reference_video_dir'),
+            'custom_dataset_path': data.get('eval', {}).get('custom_dataset_path'),
             'output_dir': str(output_dir),
         },
     }

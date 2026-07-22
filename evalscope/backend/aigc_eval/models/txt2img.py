@@ -5,7 +5,7 @@ from pathlib import Path
 from PIL import Image
 from typing import Any, Dict, List, Optional
 
-from .base import AIGCModelBase
+from .base import AIGCModelBase, resolve_api_url
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +92,7 @@ class Txt2ImgModel(AIGCModelBase):
             'Content-Type': 'application/json'
         }
 
-        # OpenAI-compatible images/generations endpoint
-        api_base = self.api_base or ''
-        url = f'{api_base.rstrip("/")}/images/generations'
+        url = resolve_api_url(self.api_base or '', self.config.get('tool', 'txt2img'))
 
         # Map width/height to size string
         size = f'{width}x{height}'

@@ -147,36 +147,49 @@ export default function AIGCReportDetailPage() {
       </div>
 
       {/* Lightbox */}
-      {lightboxIndex !== null && samples[lightboxIndex] && (
-        <Lightbox
-          url={samples[lightboxIndex].url}
-          alt={samples[lightboxIndex].prompt}
-          onClose={() => setLightboxIndex(null)}
-          onPrev={() => setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i))}
-          onNext={() => setLightboxIndex((i) => (i !== null && i < samples.length - 1 ? i + 1 : i))}
-          hasPrev={lightboxIndex > 0}
-          hasNext={lightboxIndex < samples.length - 1}
-        />
-      )}
+      {lightboxIndex !== null && samples[lightboxIndex] && (() => {
+        const sample = samples[lightboxIndex]
+        const isVideo = !!sample.video_url
+        return (
+          <Lightbox
+            url={isVideo ? sample.video_url! : sample.url}
+            alt={sample.prompt}
+            isVideo={isVideo}
+            onClose={() => setLightboxIndex(null)}
+            onPrev={() => setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i))}
+            onNext={() => setLightboxIndex((i) => (i !== null && i < samples.length - 1 ? i + 1 : i))}
+            hasPrev={lightboxIndex > 0}
+            hasNext={lightboxIndex < samples.length - 1}
+          />
+        )
+      })()}
     </div>
   )
 }
 
 // ---- Sample Card Component ----
 function SampleCard({ sample, onClick }: { sample: AIGCSampleResult; onClick: () => void }) {
+  const isVideo = !!sample.video_url
   return (
     <div
       className="group cursor-pointer rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-deep)] overflow-hidden hover:border-[var(--accent)] hover:shadow-lg transition-all duration-200"
       onClick={onClick}
     >
       {/* Thumbnail */}
-      <div className="aspect-square overflow-hidden bg-[var(--bg-card2)]">
+      <div className="aspect-square overflow-hidden bg-[var(--bg-card2)] relative">
         <img
           src={sample.thumbnail_url}
           alt={sample.prompt}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
         />
+        {isVideo && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="white" opacity="0.85">
+              <polygon points="8,5 19,12 8,19" />
+            </svg>
+          </div>
+        )}
       </div>
 
       {/* Info */}

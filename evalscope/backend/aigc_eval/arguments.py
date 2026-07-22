@@ -46,6 +46,8 @@ class AIGCEvalConfig(BaseArgument):
     prompt_dataset: str = Field('drawbench', description='Prompt dataset (drawbench, coco_captions, parti, custom)')
     prompt_limit: int = Field(100, ge=1, le=10000, description='Number of prompts to evaluate')
     reference_dir: Optional[str] = Field(None, description='Reference image directory for FID calculation')
+    reference_video_dir: Optional[str] = Field(None, description='Reference video directory for FVD calculation')
+    custom_dataset_path: Optional[str] = Field(None, description='Path to custom prompt file (one prompt per line)')
     output_dir: str = Field('', description='Output directory for generated media')
 
 

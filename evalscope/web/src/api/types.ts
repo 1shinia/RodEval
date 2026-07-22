@@ -360,10 +360,12 @@ export interface AIGCTaskResult {
 export interface AIGCSampleResult {
   index: number
   prompt: string
-  image_path: string
+  image_path?: string
+  video_path?: string
   thumbnail_path: string
   clip_score?: number
   url: string
+  video_url?: string
   thumbnail_url: string
 }
 

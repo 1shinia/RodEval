@@ -11,18 +11,30 @@ interface Props {
 
 type AIGCTool = 'txt2img' | 'txt2video' | 'img2img'
 
-const PROMPT_DATASETS = [
+const IMAGE_DATASETS = [
   { value: 'drawbench', label: 'DrawBench (200 prompts)' },
-  { value: 'coco_captions', label: 'COCO Captions (5000 prompts)' },
-  { value: 'parti', label: 'PartiPrompts (1600 prompts)' },
+  { value: 'coco_captions', label: 'COCO Captions (待实现，fallback 默认)' },
+  { value: 'parti', label: 'PartiPrompts (150 prompts)' },
   { value: 'custom', label: '自定义数据集' },
 ]
 
-const METRICS = [
+const VIDEO_DATASETS = [
+  { value: 'msr_vtt', label: 'MSR-VTT (20 prompts)' },
+  { value: 'activitynet', label: 'ActivityNet Captions (待实现)' },
+  { value: 'custom', label: '自定义数据集' },
+]
+
+const IMAGE_METRICS = [
   { value: 'clip_score', label: 'CLIP Score' },
   { value: 'fid', label: 'FID (Fréchet Inception Distance)' },
   { value: 'is', label: 'IS (Inception Score)' },
   { value: 'lpips', label: 'LPIPS (感知相似度)' },
+]
+
+const VIDEO_METRICS = [
+  { value: 'fvd', label: 'FVD (视频质量距离)' },
+  { value: 'is', label: 'IS (逐帧画质)' },
+  { value: 'clip_score', label: 'CLIP Score (文本-视频对齐)' },
 ]
 
 export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
@@ -33,6 +45,17 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const isLocal = modelSource === 'local'
 
   const [tool, setTool] = useState<AIGCTool>('txt2img')
+
+  const handleToolChange = (newTool: AIGCTool) => {
+    setTool(newTool)
+    if (newTool === 'txt2video') {
+      setPromptDataset('msr_vtt')
+      setMetrics(['fvd'])
+    } else {
+      setPromptDataset('drawbench')
+      setMetrics(['clip_score'])
+    }
+  }
 
   // API fields
   const [model, setModel] = useState('')
@@ -45,19 +68,28 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [dtype, setDtype] = useState('float16')
 
   // Generation params
-  const [width, setWidth] = useState('512')
-  const [height, setHeight] = useState('512')
+  const [width, setWidth] = useState('1024')
+  const [height, setHeight] = useState('1024')
   const [steps, setSteps] = useState('50')
   const [guidance, setGuidance] = useState('7.5')
   const [negativePrompt, setNegativePrompt] = useState('')
   const [seed, setSeed] = useState('42')
   const [batchSize, setBatchSize] = useState('1')
 
+  // Video-specific params
+  const [numFrames, setNumFrames] = useState('16')
+  const [fps, setFps] = useState('8')
+
+  // Image-to-image params
+  const [strength, setStrength] = useState('0.8')
+
   // Eval config
   const [promptDataset, setPromptDataset] = useState('drawbench')
-  const [promptLimit, setPromptLimit] = useState('100')
+  const [promptLimit, setPromptLimit] = useState('1')
   const [metrics, setMetrics] = useState<string[]>(['clip_score'])
   const [referenceDir, setReferenceDir] = useState('')
+  const [referenceVideoDir, setReferenceVideoDir] = useState('')
+  const [customDatasetPath, setCustomDatasetPath] = useState('')
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -100,6 +132,14 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       batch_size: Number(batchSize) || 1,
     }
 
+    if (tool === 'txt2video') {
+      generateConfig.num_frames = Number(numFrames) || 16
+      generateConfig.fps = Number(fps) || 8
+    }
+    if (tool === 'img2img') {
+      generateConfig.strength = Number(strength) || 0.8
+    }
+
     const evalConfig: Record<string, unknown> = {
       metrics,
       prompt_dataset: promptDataset,
@@ -108,6 +148,12 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
     if (referenceDir.trim()) {
       evalConfig.reference_dir = referenceDir.trim()
+    }
+    if (referenceVideoDir.trim()) {
+      evalConfig.reference_video_dir = referenceVideoDir.trim()
+    }
+    if (promptDataset === 'custom' && customDatasetPath.trim()) {
+      evalConfig.custom_dataset_path = customDatasetPath.trim()
     }
 
     onSubmit({
@@ -126,7 +172,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       {/* Tool Selector */}
       <div className="flex items-center gap-3 border-b border-[var(--border-md)] pb-4">
         <span className="text-sm font-medium text-[var(--text)]">{t('aigc.toolType')}</span>
-        <select value={tool} onChange={e => setTool(e.target.value as AIGCTool)} className={FORM_INPUT_CLASS + ' !w-auto'}>
+        <select value={tool} onChange={e => handleToolChange(e.target.value as AIGCTool)} className={FORM_INPUT_CLASS + ' !w-auto'}>
           <option value="txt2img">{t('aigc.txt2img')}</option>
           <option value="txt2video">{t('aigc.txt2video')}</option>
           <option value="img2img">{t('aigc.img2img')}</option>
@@ -165,7 +211,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           <FormField label={t('eval.apiUrl')} required error={errors.apiBase}>
             <input value={apiBase}
               onChange={e => { setApiBase(e.target.value); if (errors.apiBase) setErrors(p => ({ ...p, apiBase: '' })) }}
-              className={FORM_INPUT_CLASS} placeholder="https://api.example.com/v1" />
+              className={FORM_INPUT_CLASS} placeholder="https://api.example.com/v1/images/generations" />
           </FormField>
 
           <FormField label={t('eval.apiKey')} required error={errors.apiKey}>
@@ -241,6 +287,28 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
             onChange={e => setBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
             className={FORM_INPUT_CLASS} placeholder="1" />
         </FormField>
+
+        {tool === 'txt2video' && (<>
+          <FormField label={t('aigc.numFrames')}>
+            <input type="number" value={numFrames}
+              onChange={e => setNumFrames(e.target.value.replace(/[^0-9]/g, ''))}
+              className={FORM_INPUT_CLASS} placeholder="16" />
+          </FormField>
+
+          <FormField label={t('aigc.fps')}>
+            <input type="number" value={fps}
+              onChange={e => setFps(e.target.value.replace(/[^0-9]/g, ''))}
+              className={FORM_INPUT_CLASS} placeholder="8" />
+          </FormField>
+        </>)}
+
+        {tool === 'img2img' && (
+          <FormField label={t('aigc.strength')} hint="0-1，越大越偏离原图">
+            <input type="number" value={strength}
+              onChange={e => setStrength(e.target.value)}
+              className={FORM_INPUT_CLASS} placeholder="0.8" step="0.05" min="0" max="1" />
+          </FormField>
+        )}
       </div>
 
       <FormField label={t('aigc.negativePrompt')}>
@@ -257,11 +325,20 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
       <FormField label={t('aigc.promptDataset')}>
         <select value={promptDataset} onChange={e => setPromptDataset(e.target.value)} className={FORM_INPUT_CLASS}>
-          {PROMPT_DATASETS.map(ds => (
+          {(tool === 'txt2video' ? VIDEO_DATASETS : IMAGE_DATASETS).map(ds => (
             <option key={ds.value} value={ds.value}>{ds.label}</option>
           ))}
         </select>
       </FormField>
+
+      {promptDataset === 'custom' && (
+        <FormField label="自定义数据集路径">
+          <input value={customDatasetPath}
+            onChange={e => setCustomDatasetPath(e.target.value)}
+            className={FORM_INPUT_CLASS}
+            placeholder="/path/to/prompts.txt（每行一条 prompt）" />
+        </FormField>
+      )}
 
       <FormField label={t('aigc.promptLimit')}>
         <input type="number" value={promptLimit}
@@ -271,7 +348,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
       <FormField label={t('aigc.metrics')}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {METRICS.map(m => {
+          {(tool === 'txt2video' ? VIDEO_METRICS : IMAGE_METRICS).map(m => {
             const selected = metrics.includes(m.value)
             return (
               <label key={m.value} className="flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer">
@@ -293,6 +370,14 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           <input value={referenceDir}
             onChange={e => setReferenceDir(e.target.value)}
             className={FORM_INPUT_CLASS} placeholder="/path/to/reference/images (FID 计算需要)" />
+        </FormField>
+      )}
+
+      {metrics.includes('fvd') && (
+        <FormField label="参考视频目录 (FVD)">
+          <input value={referenceVideoDir}
+            onChange={e => setReferenceVideoDir(e.target.value)}
+            className={FORM_INPUT_CLASS} placeholder="/path/to/reference/videos (可选，留空则自参照)" />
         </FormField>
       )}
 

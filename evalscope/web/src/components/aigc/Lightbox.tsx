@@ -4,6 +4,7 @@ import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 interface LightboxProps {
   url: string
   alt: string
+  isVideo?: boolean
   onClose: () => void
   onPrev?: () => void
   onNext?: () => void
@@ -11,7 +12,7 @@ interface LightboxProps {
   hasNext: boolean
 }
 
-export default function Lightbox({ url, alt, onClose, onPrev, onNext, hasPrev, hasNext }: LightboxProps) {
+export default function Lightbox({ url, alt, isVideo, onClose, onPrev, onNext, hasPrev, hasNext }: LightboxProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -63,13 +64,25 @@ export default function Lightbox({ url, alt, onClose, onPrev, onNext, hasPrev, h
         </button>
       )}
 
-      {/* Image */}
-      <img
-        src={url}
-        alt={alt}
-        className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      />
+      {/* Media */}
+      {isVideo ? (
+        <video
+          src={url}
+          controls
+          autoPlay
+          className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          您的浏览器不支持视频播放
+        </video>
+      ) : (
+        <img
+          src={url}
+          alt={alt}
+          className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
     </div>
   )
 }
