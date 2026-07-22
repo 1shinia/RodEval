@@ -10,7 +10,9 @@ import { lazy, Suspense } from 'react'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
-const ReportsPage = lazy(() => import('@/pages/ReportsPage'))
+const ReportsLayout = lazy(() => import('@/pages/ReportsLayout'))
+const LLMReportsTab = lazy(() => import('@/pages/LLMReportsTab'))
+const AIGCReportsTab = lazy(() => import('@/pages/AIGCReportsTab'))
 const ReportDetailPage = lazy(() => import('@/pages/ReportDetailPage'))
 const ComparePage = lazy(() => import('@/pages/ComparePage'))
 const EvalTaskPage = lazy(() => import('@/pages/EvalTaskPage'))
@@ -26,7 +28,11 @@ function AppRoutes() {
       <Routes>
         <Route element={<MainLayout />}>
           <Route path="/dashboard" element={<PageErrorBoundary pageName="dashboard"><DashboardPage /></PageErrorBoundary>} />
-          <Route path="/reports" element={<PageErrorBoundary pageName="reports"><ReportsPage /></PageErrorBoundary>} />
+          <Route path="/reports" element={<PageErrorBoundary pageName="reports"><ReportsLayout /></PageErrorBoundary>}>
+            <Route index element={<Navigate to="/reports/llm" replace />} />
+            <Route path="llm" element={<PageErrorBoundary pageName="reports"><LLMReportsTab /></PageErrorBoundary>} />
+            <Route path="aigc" element={<PageErrorBoundary pageName="reports"><AIGCReportsTab /></PageErrorBoundary>} />
+          </Route>
           <Route path="/reports/:reportId" element={<PageErrorBoundary pageName="report-detail"><ReportDetailPage /></PageErrorBoundary>} />
           <Route path="/compare" element={<PageErrorBoundary pageName="compare"><ComparePage /></PageErrorBoundary>} />
           <Route path="/eval" element={<PageErrorBoundary pageName="eval"><EvalTaskPage /></PageErrorBoundary>} />
@@ -34,7 +40,7 @@ function AppRoutes() {
           <Route path="/perf-reports" element={<PageErrorBoundary pageName="perf-reports"><PerfReportsPage /></PageErrorBoundary>} />
           <Route path="/benchmarks" element={<PageErrorBoundary pageName="benchmarks"><BenchmarksPage /></PageErrorBoundary>} />
           <Route path="/viewer" element={<PageErrorBoundary pageName="viewer"><ReportViewerPage /></PageErrorBoundary>} />
-          <Route path="/aigc-report/:taskId" element={<PageErrorBoundary pageName="aigc-report"><AIGCReportDetailPage /></PageErrorBoundary>} />
+          <Route path="/reports/aigc/:taskId" element={<PageErrorBoundary pageName="aigc-report"><AIGCReportDetailPage /></PageErrorBoundary>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

@@ -67,7 +67,7 @@ export default function AIGCReportDetailPage() {
       <div className="page-enter p-6">
         <Breadcrumb
           items={[
-            { label: t('reports.title'), href: '/reports' },
+            { label: t('reports.title'), href: '/reports/aigc' },
             { label: t('aigc.reportDetail') || 'AIGC 报告详情' },
           ]}
         />
@@ -85,7 +85,7 @@ export default function AIGCReportDetailPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { label: t('reports.title'), href: '/reports' },
+          { label: t('reports.title'), href: '/reports/aigc' },
           { label: data.model || taskId || '' },
         ]}
       />
