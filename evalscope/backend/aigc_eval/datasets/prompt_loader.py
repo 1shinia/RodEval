@@ -297,8 +297,6 @@ def load_video_prompts(dataset_name: str, limit: int = 100, custom_path: Optiona
     """
     if dataset_name == 'msr_vtt':
         return _load_msr_vtt_prompts(limit)
-    elif dataset_name == 'activitynet':
-        return _load_activitynet_prompts(limit)
     elif dataset_name == 'custom':
         return _load_custom_prompts(custom_path, limit)
     else:
@@ -306,50 +304,100 @@ def load_video_prompts(dataset_name: str, limit: int = 100, custom_path: Optiona
 
 
 def _load_msr_vtt_prompts(limit: int) -> List[str]:
-    """Load MSR-VTT prompts (placeholder — subset of video captions)."""
+    """Load built-in video prompts — diverse scenes for text-to-video evaluation.
+
+    Covers 8 categories: action/sports, nature/landscape, urban/city,
+    animals, people/daily, weather/phenomena, vehicles/transport, art/performance.
+    """
     prompts = [
-        'A person is playing a musical instrument',
-        'A crowd of people walking on a street',
-        'A person is cooking food in a kitchen',
-        'Cars driving on a highway',
-        'A person is talking to the camera',
-        'People dancing at a party',
-        'A sports game is being played on a field',
-        'A person is giving a presentation',
-        'Someone is swimming in a pool',
-        'An animal is running in a field',
-        'A person is riding a bicycle',
-        'People are sitting and eating at a restaurant',
-        'A person is painting a picture',
-        'A band is performing on stage',
-        'Someone is typing on a computer',
-        'A person is walking a dog in a park',
-        'Birds flying in the sky at sunset',
-        'A waterfall flowing down a mountain',
-        'A firework display lighting up the night sky',
-        'A train arriving at a station platform',
+        # --- Action & Sports ---
+        'A soccer player scoring a goal with a powerful kick',
+        'A basketball player making a slam dunk',
+        'A surfer riding a large wave at sunset',
+        'A skateboarder performing a kickflip on a ramp',
+        'A gymnast performing a floor routine',
+        'A boxer throwing rapid punches at a heavy bag',
+        'A rock climber scaling a steep cliff face',
+        'A marathon runner crossing the finish line',
+        'A swimmer diving into a pool from a starting block',
+        'A tennis player serving the ball with full force',
+        # --- Nature & Landscape ---
+        'A waterfall cascading down a rocky cliff in a lush forest',
+        'Waves crashing against rocks on a rugged coastline',
+        'A time-lapse of clouds rolling over mountain peaks',
+        'A river winding through a green valley at golden hour',
+        'A volcanic eruption with lava flowing down the slope',
+        'A field of sunflowers swaying in the wind',
+        'Heavy rain falling on a dense tropical rainforest',
+        'The northern lights shimmering across a snowy sky',
+        'A thunderstorm with lightning striking the horizon',
+        'Snow falling gently on a quiet pine forest',
+        # --- Urban & City ---
+        'A busy intersection with cars and pedestrians crossing',
+        'A subway train arriving at a crowded station platform',
+        'An aerial view of a city skyline at night with traffic trails',
+        'A street market with vendors and colorful stalls',
+        'People walking through a modern glass shopping mall',
+        'Construction workers on scaffolding building a skyscraper',
+        'A coffee shop barista preparing a latte with latte art',
+        'Raindrops on a window overlooking a neon-lit city street',
+        'A food truck serving customers at a busy night market',
+        'A cyclist weaving through city traffic during rush hour',
+        # --- Animals ---
+        'A cheetah sprinting across the African savanna',
+        'Dolphins leaping out of the ocean in perfect arcs',
+        'A cat stalking and pouncing on a toy mouse',
+        'Birds migrating in a V-formation across a sunset sky',
+        'A dog catching a frisbee mid-air in a park',
+        'A school of colorful fish swimming through a coral reef',
+        'A horse galloping across an open meadow',
+        'A hummingbird hovering and drinking nectar from a flower',
+        'A bear catching salmon in a rushing river',
+        'A butterfly emerging from its chrysalis in slow motion',
+        # --- People & Daily Life ---
+        'A chef tossing vegetables in a flaming wok',
+        'A musician playing a grand piano on a concert stage',
+        'A painter creating a landscape on a canvas with oil paints',
+        'Children blowing out candles on a birthday cake',
+        'A person reading a book by a fireplace on a rainy evening',
+        'A couple dancing a waltz in a grand ballroom',
+        'A barber cutting a customer hair with scissors',
+        'A gardener planting flowers in a backyard garden',
+        'A photographer taking pictures at a wedding ceremony',
+        'An elderly couple walking hand in hand along a beach',
+        # --- Weather & Natural Phenomena ---
+        'A tornado forming and touching down over open farmland',
+        'A sandstorm rolling across a vast desert landscape',
+        'Fireworks exploding in a cascade of colors over a city',
+        'A solar eclipse darkening the sky with a glowing corona',
+        'Leaves falling and swirling in an autumn breeze',
+        'A river of lava slowly advancing down a volcanic slope',
+        'Snowflakes drifting down on a Christmas market',
+        'A rainbow forming after a heavy summer rainstorm',
+        'Fog rolling over a suspension bridge at dawn',
+        'A meteor shower streaking across a star-filled night sky',
+        # --- Vehicles & Transport ---
+        'A high-speed train passing through countryside at sunset',
+        'A rocket launching from a launchpad with massive exhaust',
+        'A hot air balloon rising over patchwork farmland',
+        'A sailboat gliding across calm blue waters at sunrise',
+        'A fighter jet performing an aerial loop at an airshow',
+        'A vintage car driving along a winding coastal road',
+        'A cargo ship navigating through icy arctic waters',
+        'A helicopter landing on a rooftop helipad in a city',
+        'A cable car climbing up a steep mountain slope',
+        'A motorcycle racing on a circuit track at high speed',
+        # --- Art & Performance ---
+        'A ballet dancer performing a pirouette on stage',
+        'A street performer juggling flaming torches at night',
+        'A calligrapher writing Chinese characters with a brush',
+        'A sculptor chiseling a marble statue in a studio',
+        'A marching band parading down a decorated street',
+        'A theater actor delivering a dramatic monologue',
+        'A puppet show being performed for a crowd of children',
+        'A DJ mixing tracks at a festival with colorful lasers',
+        'A magician pulling a rabbit out of a top hat',
+        'A traditional lion dance performance during a festival',
     ]
     return prompts[:limit]
 
-
-def _load_activitynet_prompts(limit: int) -> List[str]:
-    """Load ActivityNet Captions prompts (placeholder)."""
-    logger.warning('ActivityNet Captions not yet implemented, using default video prompts')
-    return _get_default_video_prompts(limit)
-
-
-def _get_default_video_prompts(limit: int) -> List[str]:
-    """Get default video prompts for testing."""
-    default = [
-        'A serene lake at sunset with gentle ripples',
-        'A busy city intersection with cars and pedestrians',
-        'A cat playing with a ball of yarn',
-        'Waves crashing on a rocky shore',
-        'A chef preparing a gourmet meal',
-        'Aerial view of a winding mountain road',
-        'A dog chasing butterflies in a meadow',
-        'Rain falling on a city street at night',
-        'A dancer performing a contemporary routine',
-        'Time-lapse of clouds moving over mountains',
-    ]
-    return default[:limit]

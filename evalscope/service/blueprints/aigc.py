@@ -230,14 +230,16 @@ def list_aigc_reports():
                 results = json.load(f)
 
             # Extract summary info
+            metrics = results.get('metrics', {})
             report = {
                 'task_id': task_dir.name,
                 'model_name': results.get('model', 'unknown'),
                 'model_type': results.get('model_type', 'txt2img'),
                 'total_images': results.get('num_samples', 0),
-                'clip_score_mean': results.get('metrics', {}).get('clip_score_mean'),
-                'fid': results.get('metrics', {}).get('fid'),
-                'inception_score': results.get('metrics', {}).get('inception_score'),
+                'clip_score_mean': metrics.get('clip_score_mean'),
+                'lpips_mean': metrics.get('lpips_mean'),
+                'fvd': metrics.get('fvd'),
+                'inception_score': metrics.get('inception_score'),
                 'created_at': datetime.fromtimestamp(float(results.get('timestamp')
                                                            or task_dir.stat().st_mtime)).isoformat(),
             }

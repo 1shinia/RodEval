@@ -12,7 +12,8 @@ interface AIGCReportSummary {
   model_type: string
   total_images: number
   clip_score_mean?: number
-  fid?: number
+  lpips_mean?: number
+  fvd?: number
   inception_score?: number
   created_at: string
 }
@@ -21,12 +22,10 @@ export default function AIGCReportsTab() {
   const { t } = useLocale()
   const navigate = useNavigate()
 
-  // ---- AIGC reports state ----
   const [aigcReports, setAigcReports] = useState<AIGCReportSummary[]>([])
   const [aigcLoading, setAigcLoading] = useState(false)
   const [aigcError, setAigcError] = useState<string | null>(null)
 
-  // Fetch AIGC reports
   const fetchAIGCReports = useCallback(async () => {
     setAigcLoading(true)
     setAigcError(null)
@@ -73,8 +72,7 @@ export default function AIGCReportsTab() {
                 <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelName')}</th>
                 <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelType')}</th>
                 <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.totalImages')}</th>
-                <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.clipScoreMean')}</th>
-                <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.fid')}</th>
+                <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>
                 <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.createdAt')}</th>
                 <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('common.actions')}</th>
               </tr>
@@ -86,19 +84,21 @@ export default function AIGCReportsTab() {
                   <td className="px-4 py-3 text-[var(--text)]">{report.model_name}</td>
                   <td className="px-4 py-3 text-[var(--text-muted)]">{report.model_type}</td>
                   <td className="px-4 py-3 text-right text-[var(--text)]">{report.total_images}</td>
-                  <td className="px-4 py-3 text-right font-mono">
-                    {report.clip_score_mean != null ? (
-                      <span className="text-[var(--accent)]">{report.clip_score_mean.toFixed(4)}</span>
-                    ) : (
-                      <span className="text-[var(--text-dim)]">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono">
-                    {report.fid != null ? (
-                      <span className="text-[var(--text)]">{report.fid.toFixed(2)}</span>
-                    ) : (
-                      <span className="text-[var(--text-dim)]">-</span>
-                    )}
+                  <td className="px-4 py-3 text-right font-mono text-xs">
+                    <div className="flex flex-col gap-0.5 items-end">
+                      {report.clip_score_mean != null && (
+                        <span className="text-[var(--accent)]">CLIP: {report.clip_score_mean.toFixed(2)}</span>
+                      )}
+                      {report.lpips_mean != null && (
+                        <span className="text-[var(--text)]">LPIPS: {report.lpips_mean.toFixed(4)}</span>
+                      )}
+                      {report.fvd != null && (
+                        <span className="text-[var(--warning-color)]">FVD: {report.fvd.toFixed(2)}</span>
+                      )}
+                      {report.clip_score_mean == null && report.lpips_mean == null && report.fvd == null && (
+                        <span className="text-[var(--text-dim)]">-</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
                     {new Date(report.created_at).toLocaleString()}

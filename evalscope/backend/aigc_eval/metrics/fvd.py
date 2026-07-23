@@ -1,7 +1,7 @@
 """FVD (Fréchet Video Distance) metric for video quality evaluation.
 
-Uses a pre-trained 3D ResNet (r3d_18) from torchvision for feature extraction
-when available, falling back to CLIP-based per-frame features.
+Uses CLIP ViT-B/32 vision encoder for per-frame feature extraction,
+then mean-pools across frames before computing Fréchet Distance.
 """
 import logging
 import numpy as np
@@ -12,7 +12,6 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 # Cache for loaded models to avoid reloading per evaluation
-_3d_model = None
 _clip_model = None
 _clip_processor = None
 
@@ -21,7 +20,7 @@ def compute_fvd(
     generated_frames: List[List[Image.Image]],
     prompts: List[str],
     reference_video_dir: Optional[str] = None,
-    device: str = 'cuda',
+    device: Optional[str] = None,
 ) -> float:
     """Compute FVD between generated and reference video features.
 
@@ -32,20 +31,19 @@ def compute_fvd(
         reference_video_dir: Path to reference video files.
             If None, returns 0 (reference-free mode) or uses generated stats
             as a self-reference for debugging.
-        device: Device to run on.
+        device: Device to run on (auto-detected if None).
 
     Returns:
         FVD score (lower is better). Returns -1 if computation fails.
     """
+    if device is None:
+        import torch
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
     if not generated_frames or not any(len(f) > 0 for f in generated_frames):
         logger.warning('No frames available for FVD computation')
         return -1.0
 
-    # Try 3D ResNet first, fall back to CLIP
-    gen_features = _extract_features_3d(generated_frames, device)
-    if gen_features is None:
-        logger.info('3D model unavailable, falling back to CLIP-based features')
-        gen_features = _extract_features_clip(generated_frames, prompts, device)
+    gen_features = _extract_features(generated_frames, prompts, device)
 
     if gen_features is None or len(gen_features) == 0:
         logger.warning('Could not extract features for FVD')
@@ -67,84 +65,12 @@ def compute_fvd(
     return fd
 
 
-def _extract_features_3d(
-    frame_sequences: List[List[Image.Image]],
-    device: str,
-    num_frames: int = 16,
-) -> Optional[np.ndarray]:
-    """Extract features using 3D ResNet (r3d_18).
-
-    Returns (N, D) feature array or None if model unavailable.
-    """
-    global _3d_model
-
-    try:
-        import torch
-        from torchvision.models.video import r3d_18
-        from torchvision.transforms import CenterCrop, Compose, Normalize, Resize
-    except ImportError:
-        logger.debug('torchvision not available for 3D feature extraction')
-        return None
-
-    if _3d_model is None:
-        try:
-            _3d_model = r3d_18(weights='DEFAULT')
-            _3d_model = _3d_model.to(device)
-            _3d_model.eval()
-            # Remove classifier head for feature extraction
-            _3d_model.fc = torch.nn.Identity()
-            logger.info('Loaded r3d_18 for FVD feature extraction')
-        except Exception as e:
-            logger.warning(f'Failed to load 3D model: {e}')
-            return None
-
-    transform = Compose([
-        Resize(128),
-        CenterCrop(112),
-        Normalize(mean=[0.43216, 0.394666, 0.37645], std=[0.22803, 0.22145, 0.216989]),
-    ])
-
-    features = []
-    with torch.no_grad():
-        for frames in frame_sequences:
-            if len(frames) == 0:
-                continue
-
-            # Sample `num_frames` evenly
-            indices = np.linspace(0, len(frames) - 1, num=min(num_frames, len(frames)), dtype=int)
-            selected = [frames[i] for i in indices]
-
-            # Pad if fewer than num_frames
-            while len(selected) < num_frames:
-                selected.append(selected[-1])
-
-            # Transform frames
-            tensors = []
-            for frame in selected:
-                t = transform(frame.convert('RGB'))
-                tensors.append(t)
-
-            # Stack: (T, C, H, W) → (C, T, H, W)
-            clip = torch.stack(tensors).permute(1, 0, 2, 3).unsqueeze(0).to(device)
-
-            feat = _3d_model(clip).cpu().numpy()
-            features.append(feat[0])
-
-    if not features:
-        return None
-
-    return np.stack(features)
-
-
-def _extract_features_clip(
+def _extract_features(
     frame_sequences: List[List[Image.Image]],
     prompts: List[str],
     device: str,
 ) -> Optional[np.ndarray]:
-    """Extract features using CLIP vision encoder (per-frame, then mean-pool).
-
-    Falls back when 3D ResNet is unavailable.
-    """
+    """Extract features using CLIP vision encoder (per-frame, then mean-pool)."""
     global _clip_model, _clip_processor
 
     try:
@@ -156,11 +82,18 @@ def _extract_features_clip(
 
     if _clip_model is None:
         try:
-            _clip_model = CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
-            _clip_processor = CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
+            _clip_model = CLIPModel.from_pretrained(
+                'openai/clip-vit-base-patch32',
+                local_files_only=True,
+                use_safetensors=True,
+            )
+            _clip_processor = CLIPProcessor.from_pretrained(
+                'openai/clip-vit-base-patch32',
+                local_files_only=True,
+            )
             _clip_model = _clip_model.to(device)
             _clip_model.eval()
-            logger.info('Using CLIP ViT-B/32 for FVD feature extraction (fallback)')
+            logger.info('Loaded CLIP ViT-B/32 for FVD feature extraction')
         except Exception as e:
             logger.warning(f'Failed to load CLIP: {e}')
             return None
@@ -223,9 +156,7 @@ def _load_reference_features(
     if not all_frames:
         return None
 
-    feat = _extract_features_3d(all_frames, device)
-    if feat is None:
-        feat = _extract_features_clip(all_frames, [], device)
+    feat = _extract_features(all_frames, [], device)
 
     if feat is not None:
         np.save(features_file, feat)
@@ -266,19 +197,23 @@ def _frechet_distance(feats1: np.ndarray, feats2: np.ndarray) -> float:
 
     FD = ||mu1 - mu2||^2 + Tr(S1 + S2 - 2*sqrt(S1*S2))
     """
-    try:
-        from scipy.linalg import sqrtm
-    except ImportError:
-        logger.debug('scipy not available, using approximate sqrtm')
-        sqrtm = _approx_sqrtm
+    # Need at least 2 samples per distribution for meaningful covariance
+    if len(feats1) < 2 or len(feats2) < 2:
+        return 0.0
+
+    # Use eigendecomposition-based sqrtm (faster than scipy for high-dim features)
+    sqrtm = _approx_sqrtm
 
     mu1, mu2 = np.mean(feats1, axis=0), np.mean(feats2, axis=0)
-    sigma1 = np.cov(feats1, rowvar=False)
-    sigma2 = np.cov(feats2, rowvar=False)
-
-    # Mean difference
     diff = mu1 - mu2
     mean_dist = np.dot(diff, diff)
+
+    # Self-reference: feats1 == feats2 → sqrtm(S²) = S
+    if feats1 is feats2:
+        return float(max(0, mean_dist))
+
+    sigma1 = np.cov(feats1, rowvar=False)
+    sigma2 = np.cov(feats2, rowvar=False)
 
     # Covariance term
     covmean = sqrtm(sigma1 @ sigma2)

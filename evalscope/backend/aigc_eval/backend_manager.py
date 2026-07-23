@@ -135,6 +135,14 @@ class AIGCBackendManager(BackendManager):
                     except Exception as e:
                         logger.warning(f'CLIP score computation failed: {e}')
 
+                if 'lpips' in config.eval.metrics:
+                    try:
+                        from .metrics.lpips import compute_lpips
+                        score = compute_lpips([img])
+                        sample_result['lpips'] = score[0]
+                    except Exception as e:
+                        logger.warning(f'LPIPS computation failed: {e}')
+
                 per_sample_results.append(sample_result)
                 progress.update(i + 1)
 
@@ -149,6 +157,12 @@ class AIGCBackendManager(BackendManager):
                 metrics['clip_score_min'] = min(scores)
                 metrics['clip_score_max'] = max(scores)
                 logger.info(f'CLIP Score: mean={metrics["clip_score_mean"]:.4f}')
+
+            if 'lpips' in config.eval.metrics:
+                scores = [r.get('lpips', 0) for r in per_sample_results if 'lpips' in r]
+                if scores:
+                    metrics['lpips_mean'] = sum(scores) / len(scores)
+                    logger.info(f'LPIPS: mean={metrics["lpips_mean"]:.4f}')
 
             # Save results
             results = {
@@ -389,6 +403,14 @@ class AIGCBackendManager(BackendManager):
                     except Exception as e:
                         logger.warning(f'CLIP score computation failed: {e}')
 
+                if 'lpips' in config.eval.metrics:
+                    try:
+                        from .metrics.lpips import compute_lpips
+                        score = compute_lpips([img])
+                        sample_result['lpips'] = score[0]
+                    except Exception as e:
+                        logger.warning(f'LPIPS computation failed: {e}')
+
                 per_sample_results.append(sample_result)
                 progress.update(i + 1)
 
@@ -403,6 +425,12 @@ class AIGCBackendManager(BackendManager):
                 metrics['clip_score_min'] = min(scores)
                 metrics['clip_score_max'] = max(scores)
                 logger.info(f'CLIP Score: mean={metrics["clip_score_mean"]:.4f}')
+
+            if 'lpips' in config.eval.metrics:
+                scores = [r.get('lpips', 0) for r in per_sample_results if 'lpips' in r]
+                if scores:
+                    metrics['lpips_mean'] = sum(scores) / len(scores)
+                    logger.info(f'LPIPS: mean={metrics["lpips_mean"]:.4f}')
 
             results = {
                 'model': config.model.model_name_or_path,

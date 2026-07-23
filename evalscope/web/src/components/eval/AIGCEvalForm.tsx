@@ -13,29 +13,48 @@ type AIGCTool = 'txt2img' | 'txt2video' | 'img2img'
 
 const IMAGE_DATASETS = [
   { value: 'drawbench', label: 'DrawBench (200 prompts)' },
-  { value: 'coco_captions', label: 'COCO Captions (待实现，fallback 默认)' },
   { value: 'parti', label: 'PartiPrompts (150 prompts)' },
   { value: 'custom', label: '自定义数据集' },
 ]
 
 const VIDEO_DATASETS = [
-  { value: 'msr_vtt', label: 'MSR-VTT (20 prompts)' },
-  { value: 'activitynet', label: 'ActivityNet Captions (待实现)' },
+  { value: 'msr_vtt', label: '内置视频提示词 (80 prompts)' },
   { value: 'custom', label: '自定义数据集' },
 ]
 
 const IMAGE_METRICS = [
   { value: 'clip_score', label: 'CLIP Score' },
-  { value: 'fid', label: 'FID (Fréchet Inception Distance)' },
-  { value: 'is', label: 'IS (Inception Score)' },
-  { value: 'lpips', label: 'LPIPS (感知相似度)' },
+  { value: 'lpips', label: 'LPIPS (感知质量)' },
 ]
 
 const VIDEO_METRICS = [
-  { value: 'fvd', label: 'FVD (视频质量距离)' },
-  { value: 'is', label: 'IS (逐帧画质)' },
   { value: 'clip_score', label: 'CLIP Score (文本-视频对齐)' },
+  { value: 'fvd', label: 'FVD (视频质量距离)' },
 ]
+
+const VIDEO_RESOLUTIONS = [
+  { value: '480p', label: '480P (标清)' },
+  { value: '720p', label: '720P (高清)' },
+  { value: '1080p', label: '1080P (全高清)' },
+]
+
+const VIDEO_ASPECT_RATIOS = [
+  { value: '16:9', label: '16:9 (横屏)' },
+  { value: '9:16', label: '9:16 (竖屏)' },
+  { value: '4:3', label: '4:3 (传统)' },
+  { value: '1:1', label: '1:1 (方形)' },
+]
+
+function resolveVideoSize(resolution: string, ratio: string): { width: number; height: number } {
+  // Standard resolution mappings
+  const presets: Record<string, Record<string, [number, number]>> = {
+    '480p':  { '16:9': [854, 480], '9:16': [480, 854], '4:3': [640, 480], '1:1': [480, 480] },
+    '720p':  { '16:9': [1280, 720], '9:16': [720, 1280], '4:3': [960, 720], '1:1': [720, 720] },
+    '1080p': { '16:9': [1920, 1080], '9:16': [1080, 1920], '4:3': [1440, 1080], '1:1': [1080, 1080] },
+  }
+  const [w, h] = presets[resolution]?.[ratio] || [1280, 720]
+  return { width: w, height: h }
+}
 
 export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const { t } = useLocale()
@@ -50,7 +69,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     setTool(newTool)
     if (newTool === 'txt2video') {
       setPromptDataset('msr_vtt')
-      setMetrics(['fvd'])
+      setMetrics(['clip_score'])
     } else {
       setPromptDataset('drawbench')
       setMetrics(['clip_score'])
@@ -79,6 +98,9 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   // Video-specific params
   const [numFrames, setNumFrames] = useState('16')
   const [fps, setFps] = useState('8')
+  // Video resolution + aspect ratio (replaces width/height)
+  const [videoResolution, setVideoResolution] = useState('720p')
+  const [videoAspectRatio, setVideoAspectRatio] = useState('16:9')
 
   // Image-to-image params
   const [strength, setStrength] = useState('0.8')
@@ -87,7 +109,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [promptDataset, setPromptDataset] = useState('drawbench')
   const [promptLimit, setPromptLimit] = useState('1')
   const [metrics, setMetrics] = useState<string[]>(['clip_score'])
-  const [referenceDir, setReferenceDir] = useState('')
   const [referenceVideoDir, setReferenceVideoDir] = useState('')
   const [customDatasetPath, setCustomDatasetPath] = useState('')
 
@@ -133,6 +154,9 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     }
 
     if (tool === 'txt2video') {
+      const size = resolveVideoSize(videoResolution, videoAspectRatio)
+      generateConfig.width = size.width
+      generateConfig.height = size.height
       generateConfig.num_frames = Number(numFrames) || 16
       generateConfig.fps = Number(fps) || 8
     }
@@ -146,9 +170,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       prompt_limit: Number(promptLimit) || 100,
     }
 
-    if (referenceDir.trim()) {
-      evalConfig.reference_dir = referenceDir.trim()
-    }
     if (referenceVideoDir.trim()) {
       evalConfig.reference_video_dir = referenceVideoDir.trim()
     }
@@ -252,17 +273,29 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         {t('aigc.generateConfig')}
       </h4>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <FormField label={t('aigc.width')} hint={t('aigc.sizeHint')}>
-          <input type="number" value={width}
-            onChange={e => setWidth(e.target.value.replace(/[^0-9]/g, ''))}
-            className={FORM_INPUT_CLASS} placeholder="1024" />
-        </FormField>
-
-        <FormField label={t('aigc.height')} hint={t('aigc.sizeHint')}>
-          <input type="number" value={height}
-            onChange={e => setHeight(e.target.value.replace(/[^0-9]/g, ''))}
-            className={FORM_INPUT_CLASS} placeholder="1024" />
-        </FormField>
+        {tool === 'txt2video' ? (<>
+          <FormField label="分辨率">
+            <select value={videoResolution} onChange={e => setVideoResolution(e.target.value)} className={FORM_INPUT_CLASS}>
+              {VIDEO_RESOLUTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </FormField>
+          <FormField label="画幅比">
+            <select value={videoAspectRatio} onChange={e => setVideoAspectRatio(e.target.value)} className={FORM_INPUT_CLASS}>
+              {VIDEO_ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </FormField>
+        </>) : (<>
+          <FormField label={t('aigc.width')} hint={t('aigc.sizeHint')}>
+            <input type="number" value={width}
+              onChange={e => setWidth(e.target.value.replace(/[^0-9]/g, ''))}
+              className={FORM_INPUT_CLASS} placeholder="1024" />
+          </FormField>
+          <FormField label={t('aigc.height')} hint={t('aigc.sizeHint')}>
+            <input type="number" value={height}
+              onChange={e => setHeight(e.target.value.replace(/[^0-9]/g, ''))}
+              className={FORM_INPUT_CLASS} placeholder="1024" />
+          </FormField>
+        </>)}
 
         <FormField label={t('aigc.steps')}>
           <input type="number" value={steps}
@@ -364,14 +397,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           })}
         </div>
       </FormField>
-
-      {metrics.includes('fid') && (
-        <FormField label={t('aigc.referenceDir')}>
-          <input value={referenceDir}
-            onChange={e => setReferenceDir(e.target.value)}
-            className={FORM_INPUT_CLASS} placeholder="/path/to/reference/images (FID 计算需要)" />
-        </FormField>
-      )}
 
       {metrics.includes('fvd') && (
         <FormField label="参考视频目录 (FVD)">
