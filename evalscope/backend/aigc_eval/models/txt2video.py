@@ -1,6 +1,7 @@
 """Text-to-video model adapter."""
 import base64
 import io
+import json
 import logging
 import os
 import requests
@@ -62,6 +63,8 @@ class Txt2VideoModel(AIGCModelBase):
         seed: int = 42,
         num_frames: int = 16,
         fps: int = 8,
+        resolution: str = '720p',
+        ratio: str = '16:9',
         **kwargs,
     ) -> List[Dict[str, Any]]:
         """Generate videos from prompts.
@@ -80,6 +83,8 @@ class Txt2VideoModel(AIGCModelBase):
                 seed,
                 num_frames,
                 fps,
+                resolution,
+                ratio,
             )
 
         if self.pipe is None:
@@ -108,6 +113,8 @@ class Txt2VideoModel(AIGCModelBase):
         seed: int,
         num_frames: int,
         fps: int,
+        resolution: str,
+        ratio: str,
     ) -> List[Dict[str, Any]]:
         """Generate videos using OpenAI-compatible API."""
         headers = {'Content-Type': 'application/json'}
@@ -115,6 +122,7 @@ class Txt2VideoModel(AIGCModelBase):
             headers['Authorization'] = f'Bearer {self.api_key}'
 
         url = resolve_api_url(self.api_base or '', self.config.get('tool', 'txt2video'))
+        duration = num_frames // fps if fps > 0 else 5
 
         results = []
         for i, prompt in enumerate(prompts):
@@ -124,10 +132,15 @@ class Txt2VideoModel(AIGCModelBase):
                 'n': 1,
                 'size': f'{width}x{height}',
             }
-            if num_frames:
-                payload['num_frames'] = num_frames
-            if fps:
-                payload['fps'] = fps
+            if duration >= 2:
+                payload['duration'] = duration
+            if resolution:
+                payload['resolution'] = resolution
+            if ratio:
+                payload['ratio'] = ratio
+
+            logger.info(f'API payload keys: {list(payload.keys())}, duration={payload.get("duration")}, '
+                        f'resolution={payload.get("resolution")}, ratio={payload.get("ratio")}')
 
             response = requests.post(url, json=payload, headers=headers, timeout=300)
             if not response.ok:

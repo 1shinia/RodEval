@@ -835,8 +835,8 @@ def stream_evaluation_log():
     log_file = os.path.join(OUTPUT_DIR, task_id, 'logs', 'eval_log.log')
 
     def generate():
-        # Send initial heartbeat to confirm connection is alive
-        yield ': connected\n\n'
+        # Send initial message so the browser EventSource gets onopen immediately
+        yield 'data: {"status":"connected"}\n\n'
         last_pos = initial_pos
         idle_count = 0
         max_idle = 300  # Close after 5 minutes of no new log lines
@@ -862,9 +862,9 @@ def stream_evaluation_log():
                     if idle_count >= max_idle:
                         yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
                         break
-                # Send heartbeat every 30s
-                if idle_count % 30 == 0 and idle_count > 0:
-                    yield f': heartbeat\n\n'
+                # Heartbeat every 3s to keep the proxy/connection alive
+                if idle_count % 3 == 0 and idle_count > 0:
+                    yield ': heartbeat\n\n'
                 time.sleep(1)
             except GeneratorExit:
                 break

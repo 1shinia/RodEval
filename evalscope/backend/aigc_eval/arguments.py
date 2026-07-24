@@ -34,6 +34,8 @@ class AIGCGenerateConfig(BaseArgument):
     # Video-specific parameters
     num_frames: int = Field(16, ge=1, le=128, description='Number of frames (video only)')
     fps: int = Field(8, ge=1, le=60, description='Frames per second (video only)')
+    resolution: Optional[str] = Field(None, description='Video resolution: 480p/720p/1080p/4k')
+    ratio: Optional[str] = Field(None, description='Video aspect ratio: 16:9/9:16/4:3/1:1')
 
 
 class AIGCEvalConfig(BaseArgument):

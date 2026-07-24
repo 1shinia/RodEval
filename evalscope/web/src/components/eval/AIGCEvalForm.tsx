@@ -183,6 +183,8 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       generateConfig.height = size.height
       generateConfig.num_frames = Number(numFrames) || 16
       generateConfig.fps = Number(fps) || 8
+      generateConfig.resolution = videoResolution
+      generateConfig.ratio = videoAspectRatio
     }
     if (tool === 'img2img') {
       generateConfig.strength = Number(strength) || 0.8
