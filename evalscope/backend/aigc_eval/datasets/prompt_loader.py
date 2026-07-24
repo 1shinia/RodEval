@@ -1,32 +1,44 @@
 """Prompt dataset loaders for AIGC evaluation."""
 import json
 import logging
+import random
 from pathlib import Path
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-def load_prompts(dataset_name: str, limit: int = 100, custom_path: Optional[str] = None) -> List[str]:
+def load_prompts(dataset_name: str, limit: int = 100, custom_path: Optional[str] = None,
+                 shuffle: bool = False, seed: int = 42) -> List[str]:
     """Load prompts from a dataset.
 
     Args:
         dataset_name: Name of the dataset (drawbench, coco_captions, parti, custom)
         limit: Maximum number of prompts to load
+        shuffle: Whether to randomly shuffle before taking limit
+        seed: Random seed for shuffle reproducibility
 
     Returns:
         List of text prompts
     """
+    # Load all available prompts, then optionally shuffle, then slice.
+    # Always load everything so shuffle has a meaningful population.
     if dataset_name == 'drawbench':
-        return _load_drawbench(limit)
+        prompts = _load_drawbench(None)  # type: ignore[arg-type]
     elif dataset_name == 'coco_captions':
-        return _load_coco_captions(limit)
+        prompts = _load_coco_captions(None)
     elif dataset_name == 'parti':
-        return _load_parti_prompts(limit)
+        prompts = _load_parti_prompts(None)
     elif dataset_name == 'custom':
-        return _load_custom_prompts(custom_path, limit)
+        prompts = _load_custom_prompts(custom_path, None)
     else:
         raise ValueError(f'Unknown dataset: {dataset_name}')
+
+    if shuffle and len(prompts) > 1:
+        rng = random.Random(seed)
+        rng.shuffle(prompts)
+
+    return prompts[:limit]
 
 
 def _load_drawbench(limit: int) -> List[str]:
@@ -285,22 +297,32 @@ def _load_custom_prompts(custom_path: Optional[str], limit: int) -> List[str]:
     return lines[:limit]
 
 
-def load_video_prompts(dataset_name: str, limit: int = 100, custom_path: Optional[str] = None) -> List[str]:
+def load_video_prompts(dataset_name: str, limit: int = 100, custom_path: Optional[str] = None,
+                       shuffle: bool = False, seed: int = 42) -> List[str]:
     """Load video generation prompts from a dataset.
 
     Args:
         dataset_name: Name of the dataset (msr_vtt, activitynet, custom)
         limit: Maximum number of prompts to load
+        shuffle: Whether to randomly shuffle before taking limit
+        seed: Random seed for shuffle reproducibility
 
     Returns:
         List of text prompts suitable for video generation
     """
+    # Load all available prompts first
     if dataset_name == 'msr_vtt':
-        return _load_msr_vtt_prompts(limit)
+        prompts = _load_msr_vtt_prompts(limit)
     elif dataset_name == 'custom':
-        return _load_custom_prompts(custom_path, limit)
+        prompts = _load_custom_prompts(custom_path, limit)
     else:
         raise ValueError(f'Unknown video dataset: {dataset_name}')
+
+    if shuffle and len(prompts) > 1:
+        rng = random.Random(seed)
+        rng.shuffle(prompts)
+
+    return prompts[:limit]
 
 
 def _load_msr_vtt_prompts(limit: int) -> List[str]:

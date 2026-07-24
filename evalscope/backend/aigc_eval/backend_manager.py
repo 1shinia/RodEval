@@ -72,13 +72,20 @@ class AIGCBackendManager(BackendManager):
         thumbs_dir = output_dir / 'thumbnails'
         thumbs_dir.mkdir(exist_ok=True)
 
-        # Load prompts
-        logger.info(f'Loading prompts from: {config.eval.prompt_dataset}')
-        prompts = load_prompts(
-            config.eval.prompt_dataset,
-            limit=config.eval.prompt_limit,
-            custom_path=config.eval.custom_dataset_path,
-        )
+        # Load prompts — use custom_prompt if provided, otherwise load from dataset
+        custom_prompt = getattr(config.eval, 'custom_prompt', None)
+        if custom_prompt:
+            prompts = [custom_prompt.strip()]
+            logger.info(f'Using custom prompt for txt2img: {prompts[0][:80]}...')
+        else:
+            logger.info(f'Loading prompts from: {config.eval.prompt_dataset}')
+            prompts = load_prompts(
+                config.eval.prompt_dataset,
+                limit=config.eval.prompt_limit,
+                custom_path=config.eval.custom_dataset_path,
+                shuffle=getattr(config.eval, 'random_prompt', False),
+                seed=config.generate.seed,
+            )
         logger.info(f'Loaded {len(prompts)} prompts')
 
         # Initialize progress tracker
@@ -201,13 +208,20 @@ class AIGCBackendManager(BackendManager):
         frames_dir = output_dir / 'frames'
         frames_dir.mkdir(exist_ok=True)
 
-        # Load prompts
-        logger.info(f'Loading video prompts from: {config.eval.prompt_dataset}')
-        prompts = load_video_prompts(
-            config.eval.prompt_dataset,
-            limit=config.eval.prompt_limit,
-            custom_path=config.eval.custom_dataset_path,
-        )
+        # Load prompts — use custom_prompt if provided, otherwise load from dataset
+        custom_prompt = getattr(config.eval, 'custom_prompt', None)
+        if custom_prompt:
+            prompts = [custom_prompt.strip()]
+            logger.info(f'Using custom prompt for txt2video: {prompts[0][:80]}...')
+        else:
+            logger.info(f'Loading video prompts from: {config.eval.prompt_dataset}')
+            prompts = load_video_prompts(
+                config.eval.prompt_dataset,
+                limit=config.eval.prompt_limit,
+                custom_path=config.eval.custom_dataset_path,
+                shuffle=getattr(config.eval, 'random_prompt', False),
+                seed=config.generate.seed,
+            )
         logger.info(f'Loaded {len(prompts)} prompts')
 
         progress = ProgressTracker(output_dir / 'progress.json', total=len(prompts))
@@ -386,6 +400,8 @@ class AIGCBackendManager(BackendManager):
                 config.eval.prompt_dataset,
                 limit=config.eval.prompt_limit,
                 custom_path=config.eval.custom_dataset_path,
+                shuffle=getattr(config.eval, 'random_prompt', False),
+                seed=config.generate.seed,
             )
         logger.info(f'Loaded {len(prompts)} prompts')
 

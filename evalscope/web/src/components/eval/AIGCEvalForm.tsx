@@ -21,6 +21,7 @@ const IMAGE_DATASETS = [
 const VIDEO_DATASETS = [
   { value: 'msr_vtt', label: '内置视频提示词 (80 prompts)' },
   { value: 'custom', label: '自定义数据集' },
+  { value: '', label: '不使用（仅用自定义提示词）' },
 ]
 
 const IMAGE_METRICS = [
@@ -115,6 +116,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   // Eval config
   const [promptDataset, setPromptDataset] = useState('drawbench')
   const [promptLimit, setPromptLimit] = useState('1')
+  const [randomPrompt, setRandomPrompt] = useState(false)
   const [metrics, setMetrics] = useState<string[]>(['clip_score'])
   const [referenceVideoDir, setReferenceVideoDir] = useState('')
   const [customDatasetPath, setCustomDatasetPath] = useState('')
@@ -190,6 +192,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       metrics,
       prompt_dataset: promptDataset,
       prompt_limit: Number(promptLimit) || 1,
+      random_prompt: randomPrompt,
     }
 
     if (referenceVideoDir.trim()) {
@@ -198,7 +201,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     if (referenceImageBase64) {
       evalConfig.reference_image = referenceImageBase64
     }
-    if (tool === 'img2img' && customPrompt.trim()) {
+    if (customPrompt.trim()) {
       evalConfig.custom_prompt = customPrompt.trim()
     }
     if (promptDataset === 'custom' && customDatasetPath.trim()) {
@@ -387,12 +390,19 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         )}
       </div>
 
-      {tool === 'img2img' && (
+      {tool === 'img2img' ? (
         <FormField label="自定义提示词" hint="描述你希望对参考图做的修改（必填）">
           <textarea value={customPrompt}
             onChange={e => setCustomPrompt(e.target.value)}
             className={FORM_INPUT_CLASS + ' h-20 resize-none'}
             placeholder="例如：把背景换成海边日落，保持人物不变..." />
+        </FormField>
+      ) : (
+        <FormField label="自定义提示词（可选）" hint="留空则使用上方选择的数据集">
+          <textarea value={customPrompt}
+            onChange={e => setCustomPrompt(e.target.value)}
+            className={FORM_INPUT_CLASS + ' h-20 resize-none'}
+            placeholder={tool === 'txt2video' ? '例如：一架无人机飞过雪山湖泊上空，航拍视角...' : '例如：一只橘猫坐在窗台上看着夕阳，温暖的色调...'} />
         </FormField>
       )}
 
@@ -410,11 +420,9 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
       <FormField label={t('aigc.promptDataset')}>
         <select value={promptDataset} onChange={e => setPromptDataset(e.target.value)} className={FORM_INPUT_CLASS}>
-          {(tool === 'txt2video' ? VIDEO_DATASETS : IMAGE_DATASETS)
-            .filter(ds => tool === 'img2img' || ds.value !== '')
-            .map(ds => (
-              <option key={ds.value} value={ds.value}>{ds.label}</option>
-            ))}
+          {(tool === 'txt2video' ? VIDEO_DATASETS : IMAGE_DATASETS).map(ds => (
+            <option key={ds.value} value={ds.value}>{ds.label}</option>
+          ))}
         </select>
       </FormField>
 
@@ -428,9 +436,17 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       )}
 
       <FormField label={t('aigc.promptLimit')}>
-        <input type="number" value={promptLimit}
-          onChange={e => setPromptLimit(e.target.value.replace(/[^0-9]/g, ''))}
-          className={FORM_INPUT_CLASS} placeholder="100" />
+        <div className="flex items-center gap-3">
+          <input type="number" value={promptLimit}
+            onChange={e => setPromptLimit(e.target.value.replace(/[^0-9]/g, ''))}
+            className={FORM_INPUT_CLASS + ' flex-1'} placeholder="100" />
+          <label className="flex items-center gap-1.5 text-sm text-[var(--text)] whitespace-nowrap cursor-pointer">
+            <input type="checkbox" checked={randomPrompt}
+              onChange={e => setRandomPrompt(e.target.checked)}
+              className="accent-[var(--accent)]" />
+            随机抽取
+          </label>
+        </div>
       </FormField>
 
       <FormField label={t('aigc.metrics')}>
