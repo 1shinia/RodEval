@@ -310,11 +310,12 @@ def load_video_prompts(dataset_name: str, limit: int = 100, custom_path: Optiona
     Returns:
         List of text prompts suitable for video generation
     """
-    # Load all available prompts first
+    # Load all available prompts, then optionally shuffle, then slice.
+    # Always load everything so shuffle has a meaningful population.
     if dataset_name == 'msr_vtt':
-        prompts = _load_msr_vtt_prompts(limit)
+        prompts = _load_msr_vtt_prompts(None)
     elif dataset_name == 'custom':
-        prompts = _load_custom_prompts(custom_path, limit)
+        prompts = _load_custom_prompts(custom_path, None)
     else:
         raise ValueError(f'Unknown video dataset: {dataset_name}')
 
