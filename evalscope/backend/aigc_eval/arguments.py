@@ -44,7 +44,8 @@ class AIGCEvalConfig(BaseArgument):
         description='Evaluation metrics to compute (clip_score, fid, is, lpips)',
     )
     prompt_dataset: str = Field('drawbench', description='Prompt dataset (drawbench, coco_captions, parti, custom)')
-    prompt_limit: int = Field(100, ge=1, le=10000, description='Number of prompts to evaluate')
+    prompt_limit: int = Field(1, ge=1, le=10000, description='Number of prompts to evaluate')
+    custom_prompt: Optional[str] = Field(None, description='Custom prompt for img2img (takes priority over dataset)')
     reference_dir: Optional[str] = Field(None, description='Reference image directory for FID calculation')
     reference_video_dir: Optional[str] = Field(None, description='Reference video directory for FVD calculation')
     custom_dataset_path: Optional[str] = Field(None, description='Path to custom prompt file (one prompt per line)')

@@ -332,6 +332,10 @@ class AIGCBackendManager(BackendManager):
 
     def _run_img2img(self, config: AIGCToolConfig) -> Dict[str, Any]:
         """Run image-to-image evaluation."""
+        import base64
+        import io
+        from PIL import Image
+
         from .datasets.prompt_loader import load_prompts
         from .models.img2img import Img2ImgModel
         from .utils.media import create_thumbnails
@@ -343,13 +347,46 @@ class AIGCBackendManager(BackendManager):
         thumbs_dir = output_dir / 'thumbnails'
         thumbs_dir.mkdir(exist_ok=True)
 
-        # Load prompts (same datasets as txt2img)
-        logger.info(f'Loading prompts from: {config.eval.prompt_dataset}')
-        prompts = load_prompts(
-            config.eval.prompt_dataset,
-            limit=config.eval.prompt_limit,
-            custom_path=config.eval.custom_dataset_path,
-        )
+        # Decode reference image from base64 if provided
+        reference_images: list = []
+        ref_image_base64 = getattr(config.eval, 'reference_image', None)
+        if ref_image_base64:
+            try:
+                # Strip data:image/...;base64, prefix if present
+                if ',' in ref_image_base64:
+                    ref_image_base64 = ref_image_base64.split(',', 1)[1]
+                img_bytes = base64.b64decode(ref_image_base64)
+                ref_img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+                reference_images = [ref_img]
+                ref_w, ref_h = ref_img.size
+                gen_w = config.generate.width
+                gen_h = config.generate.height
+                ref_aspect = ref_w / ref_h
+                gen_aspect = gen_w / gen_h
+                logger.info(f'Loaded reference image: {ref_img.size}')
+                if abs(ref_aspect - gen_aspect) > 0.05:
+                    logger.warning(
+                        f'Reference image aspect ratio ({ref_w}x{ref_h}, {ref_aspect:.2f}) '
+                        f'differs from generation target ({gen_w}x{gen_h}, {gen_aspect:.2f}). '
+                        f'Reference will be letterboxed to fit target size — consider using '
+                        f'matching dimensions for best results.'
+                    )
+            except Exception as e:
+                logger.warning(f'Failed to decode reference image: {e}')
+                reference_images = []
+
+        # Load prompts — use custom_prompt if provided, otherwise load from dataset
+        custom_prompt = getattr(config.eval, 'custom_prompt', None)
+        if custom_prompt:
+            prompts = [custom_prompt.strip()]
+            logger.info(f'Using custom prompt for img2img: {prompts[0][:80]}...')
+        else:
+            logger.info(f'Loading prompts from: {config.eval.prompt_dataset}')
+            prompts = load_prompts(
+                config.eval.prompt_dataset,
+                limit=config.eval.prompt_limit,
+                custom_path=config.eval.custom_dataset_path,
+            )
         logger.info(f'Loaded {len(prompts)} prompts')
 
         progress = ProgressTracker(output_dir / 'progress.json', total=len(prompts))
@@ -368,9 +405,10 @@ class AIGCBackendManager(BackendManager):
             per_sample_results = []
 
             for i, prompt in enumerate(prompts):
+                # Pass the same reference image for all prompts if provided
                 img = model.generate(
                     [prompt],
-                    reference_images=None,  # API generates without reference; local uses blank
+                    reference_images=reference_images if reference_images else None,
                     width=config.generate.width,
                     height=config.generate.height,
                     num_inference_steps=config.generate.num_inference_steps,
@@ -406,7 +444,7 @@ class AIGCBackendManager(BackendManager):
                 if 'lpips' in config.eval.metrics:
                     try:
                         from .metrics.lpips import compute_lpips
-                        score = compute_lpips([img])
+                        score = compute_lpips([img], reference_images=reference_images[:1] if reference_images else None)
                         sample_result['lpips'] = score[0]
                     except Exception as e:
                         logger.warning(f'LPIPS computation failed: {e}')
@@ -430,7 +468,7 @@ class AIGCBackendManager(BackendManager):
                 scores = [r.get('lpips', 0) for r in per_sample_results if 'lpips' in r]
                 if scores:
                     metrics['lpips_mean'] = sum(scores) / len(scores)
-                    logger.info(f'LPIPS: mean={metrics["lpips_mean"]:.4f}')
+                    logger.info(f'LPIPS (vs reference): mean={metrics["lpips_mean"]:.4f}')
 
             results = {
                 'model': config.model.model_name_or_path,

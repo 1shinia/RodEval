@@ -4,12 +4,14 @@ import logging
 import os
 import time
 from datetime import datetime
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, Response, jsonify, request, send_file
 from pathlib import Path
 from typing import Any, Dict
 
 from evalscope.backend.aigc_eval.backend_manager import AIGCBackendManager
+from evalscope.service.utils.log import create_log_file, validate_task_id
 from evalscope.service.utils.process import register_process, try_reserve_slot, unregister_process
+from evalscope.utils.logger import get_logger, configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +255,130 @@ def list_aigc_reports():
     return jsonify({'reports': reports})
 
 
+@bp_aigc.route('/log/stream', methods=['GET'])
+def stream_aigc_log():
+    """SSE stream for real-time AIGC evaluation log updates.
+
+    Query params:
+        task_id (str): the task identifier
+        last_pos (int, optional): byte offset for resume support
+
+    Pushes new log lines as they are appended to the log file.
+    The stream closes when the client disconnects.
+    """
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'task_id is required'}), 400
+    try:
+        initial_pos = int(request.args.get('last_pos', 0))
+    except (ValueError, TypeError):
+        initial_pos = 0
+
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    log_file = os.path.join(OUTPUT_DIR, task_id, 'logs', 'aigc_log.log')
+
+    def generate():
+        yield ': connected\n\n'
+        last_pos = initial_pos
+        idle_count = 0
+        max_idle = 300  # 5 minutes timeout
+        while True:
+            try:
+                if os.path.isfile(log_file):
+                    with open(log_file, 'r') as f:
+                        f.seek(last_pos)
+                        new_content = f.read()
+                        if new_content:
+                            last_pos = f.tell()
+                            idle_count = 0
+                            payload = json.dumps({'text': new_content, 'pos': last_pos})
+                            yield f'data: {payload}\n\n'
+                        else:
+                            idle_count += 1
+                            if idle_count >= max_idle:
+                                yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                                break
+                else:
+                    idle_count += 1
+                    if idle_count >= max_idle:
+                        yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                        break
+                if idle_count % 30 == 0 and idle_count > 0:
+                    yield f': heartbeat\n\n'
+                time.sleep(1)
+            except GeneratorExit:
+                break
+            except Exception as e:
+                logger.debug(f'SSE log stream error for {task_id}: {e}')
+                time.sleep(2)
+
+    return Response(generate(), mimetype='text/event-stream')
+
+
+@bp_aigc.route('/progress/stream', methods=['GET'])
+def stream_aigc_progress():
+    """SSE stream for real-time AIGC evaluation progress updates.
+
+    Query params:
+        task_id (str): the task identifier
+
+    Pushes progress updates whenever the progress file changes.
+    Closes when the task reaches 100% or stops.
+    """
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    progress_file_path = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+
+    def generate():
+        yield ': connected\n\n'
+        last_percent = -1.0
+        idle_count = 0
+        max_idle = 300
+        while True:
+            try:
+                if os.path.isfile(progress_file_path):
+                    with open(progress_file_path, 'r') as f:
+                        progress = json.load(f)
+                    percent = progress.get('percent', 0.0) or 0.0
+                    status = progress.get('status', 'running')
+                    if abs(percent - last_percent) > 0.01 or status != 'running':
+                        last_percent = percent
+                        idle_count = 0
+                        yield f'data: {json.dumps(progress)}\n\n'
+                        if percent >= 100.0 or status in ('completed', 'failed', 'stopped'):
+                            break
+                    else:
+                        idle_count += 1
+                        if idle_count >= max_idle:
+                            yield f'data: {json.dumps({"event": "timeout", "message": "SSE idle timeout"})}\n\n'
+                            break
+                else:
+                    idle_count += 1
+                    if idle_count >= max_idle:
+                        break
+                if idle_count % 30 == 0 and idle_count > 0:
+                    yield f': heartbeat\n\n'
+                time.sleep(1)
+            except GeneratorExit:
+                break
+            except Exception as e:
+                logger.debug(f'SSE progress stream error for {task_id}: {e}')
+                time.sleep(2)
+
+    return Response(generate(), mimetype='text/event-stream')
+
+
 def _build_aigc_config(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
     """Build AIGC configuration from request data."""
     output_dir = OUTPUT_DIR / task_id
@@ -280,9 +406,11 @@ def _build_aigc_config(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
         'eval': {
             'metrics': data.get('eval', {}).get('metrics', ['clip_score']),
             'prompt_dataset': data.get('eval', {}).get('prompt_dataset', 'drawbench'),
-            'prompt_limit': data.get('eval', {}).get('prompt_limit', 100),
+            'prompt_limit': data.get('eval', {}).get('prompt_limit', 1),
+            'custom_prompt': data.get('eval', {}).get('custom_prompt'),
             'reference_dir': data.get('eval', {}).get('reference_dir'),
             'reference_video_dir': data.get('eval', {}).get('reference_video_dir'),
+            'reference_image': data.get('eval', {}).get('reference_image'),
             'custom_dataset_path': data.get('eval', {}).get('custom_dataset_path'),
             'output_dir': str(output_dir),
         },
@@ -293,9 +421,9 @@ def _build_aigc_config(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
 
 def _execute_aigc_task(task_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute AIGC evaluation task."""
-    # Note: register_process expects (task_id, proc, task_type, model)
-    # but we're running synchronously here, so we just use try_reserve_slot
-    # which already registered a placeholder. No need to call register_process again.
+    # Set up file logging so SSE log stream can serve it
+    log_file = create_log_file(task_id, os.path.join('logs', 'aigc_log.log'))
+    configure_logging(log_file=log_file, debug=os.getenv('EVALSCOPE_LOG_LEVEL') == 'DEBUG')
 
     manager = AIGCBackendManager(config)
     result = manager.run()

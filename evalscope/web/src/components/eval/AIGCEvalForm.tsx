@@ -15,6 +15,7 @@ const IMAGE_DATASETS = [
   { value: 'drawbench', label: 'DrawBench (200 prompts)' },
   { value: 'parti', label: 'PartiPrompts (150 prompts)' },
   { value: 'custom', label: '自定义数据集' },
+  { value: '', label: '不使用（仅用自定义提示词）' },
 ]
 
 const VIDEO_DATASETS = [
@@ -70,6 +71,9 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     if (newTool === 'txt2video') {
       setPromptDataset('msr_vtt')
       setMetrics(['clip_score'])
+    } else if (newTool === 'img2img') {
+      setPromptDataset('')
+      setMetrics(['clip_score'])
     } else {
       setPromptDataset('drawbench')
       setMetrics(['clip_score'])
@@ -104,6 +108,9 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
   // Image-to-image params
   const [strength, setStrength] = useState('0.8')
+  const [customPrompt, setCustomPrompt] = useState('')
+  const [referenceImageBase64, setReferenceImageBase64] = useState('')
+  const [referenceImageName, setReferenceImageName] = useState('')
 
   // Eval config
   const [promptDataset, setPromptDataset] = useState('drawbench')
@@ -113,6 +120,21 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [customDatasetPath, setCustomDatasetPath] = useState('')
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const handleReferenceImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) {
+      setReferenceImageBase64('')
+      setReferenceImageName('')
+      return
+    }
+    setReferenceImageName(file.name)
+    const reader = new FileReader()
+    reader.onload = () => {
+      setReferenceImageBase64(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -167,11 +189,17 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     const evalConfig: Record<string, unknown> = {
       metrics,
       prompt_dataset: promptDataset,
-      prompt_limit: Number(promptLimit) || 100,
+      prompt_limit: Number(promptLimit) || 1,
     }
 
     if (referenceVideoDir.trim()) {
       evalConfig.reference_video_dir = referenceVideoDir.trim()
+    }
+    if (referenceImageBase64) {
+      evalConfig.reference_image = referenceImageBase64
+    }
+    if (tool === 'img2img' && customPrompt.trim()) {
+      evalConfig.custom_prompt = customPrompt.trim()
     }
     if (promptDataset === 'custom' && customDatasetPath.trim()) {
       evalConfig.custom_dataset_path = customDatasetPath.trim()
@@ -336,13 +364,37 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         </>)}
 
         {tool === 'img2img' && (
-          <FormField label={t('aigc.strength')} hint="0-1，越大越偏离原图">
-            <input type="number" value={strength}
-              onChange={e => setStrength(e.target.value)}
-              className={FORM_INPUT_CLASS} placeholder="0.8" step="0.05" min="0" max="1" />
-          </FormField>
+          <>
+            <FormField label={t('aigc.strength')} hint="0-1，越大越偏离原图">
+              <input type="number" value={strength}
+                onChange={e => setStrength(e.target.value)}
+                className={FORM_INPUT_CLASS} placeholder="0.8" step="0.05" min="0" max="1" />
+            </FormField>
+            <FormField label="参考图" hint="选一张图片作为 img2img 的输入">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleReferenceImageChange}
+                className={FORM_INPUT_CLASS + ' file:mr-3 file:border-0 file:bg-[var(--surface)] file:text-[var(--text)] file:px-3 file:py-1 file:rounded file:cursor-pointer text-sm'}
+              />
+              {referenceImageName && (
+                <span className="text-xs text-[var(--text-secondary)] mt-1 block">
+                  已选择: {referenceImageName}
+                </span>
+              )}
+            </FormField>
+          </>
         )}
       </div>
+
+      {tool === 'img2img' && (
+        <FormField label="自定义提示词" hint="描述你希望对参考图做的修改（必填）">
+          <textarea value={customPrompt}
+            onChange={e => setCustomPrompt(e.target.value)}
+            className={FORM_INPUT_CLASS + ' h-20 resize-none'}
+            placeholder="例如：把背景换成海边日落，保持人物不变..." />
+        </FormField>
+      )}
 
       <FormField label={t('aigc.negativePrompt')}>
         <textarea value={negativePrompt}
@@ -358,9 +410,11 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
       <FormField label={t('aigc.promptDataset')}>
         <select value={promptDataset} onChange={e => setPromptDataset(e.target.value)} className={FORM_INPUT_CLASS}>
-          {(tool === 'txt2video' ? VIDEO_DATASETS : IMAGE_DATASETS).map(ds => (
-            <option key={ds.value} value={ds.value}>{ds.label}</option>
-          ))}
+          {(tool === 'txt2video' ? VIDEO_DATASETS : IMAGE_DATASETS)
+            .filter(ds => tool === 'img2img' || ds.value !== '')
+            .map(ds => (
+              <option key={ds.value} value={ds.value}>{ds.label}</option>
+            ))}
         </select>
       </FormField>
 

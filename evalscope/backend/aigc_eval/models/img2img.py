@@ -136,10 +136,11 @@ class Img2ImgModel(AIGCModelBase):
             # Include reference image as base64 if provided
             if reference_images and i < len(reference_images) and reference_images[i] is not None:
                 ref = reference_images[i].copy()
-                ref = ref.resize((width, height), Image.Resampling.LANCZOS)
+                # Preserve aspect ratio: pad to target size instead of squashing
+                ref = self._fit_to_size(ref, width, height)
                 buf = io.BytesIO()
                 ref.save(buf, format='PNG')
-                payload['image'] = base64.b64encode(buf.getvalue()).decode('utf-8')
+                payload['image'] = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
 
             if strength:
                 payload['strength'] = strength
@@ -187,7 +188,7 @@ class Img2ImgModel(AIGCModelBase):
         for i, prompt in enumerate(prompts):
             # Use reference image or create a blank one
             if reference_images and i < len(reference_images) and reference_images[i] is not None:
-                init_image = reference_images[i].resize((width, height), Image.Resampling.LANCZOS)
+                init_image = self._fit_to_size(reference_images[i], width, height)
             else:
                 init_image = Image.new('RGB', (width, height), color=(128, 128, 128))
 
@@ -212,3 +213,28 @@ class Img2ImgModel(AIGCModelBase):
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             logger.info('Img2Img model unloaded')
+
+    @staticmethod
+    def _fit_to_size(img: Image.Image, target_width: int, target_height: int) -> Image.Image:
+        """Resize image to fit target size while preserving aspect ratio.
+        
+        Pads with black bars (letterbox/pillarbox) to achieve exact target dimensions,
+        avoiding distortion from direct resize when aspect ratios differ.
+        """
+        img_w, img_h = img.size
+        if img_w == target_width and img_h == target_height:
+            return img
+        
+        # Scale to fit within target, preserving aspect ratio
+        scale = min(target_width / img_w, target_height / img_h)
+        new_w = int(img_w * scale)
+        new_h = int(img_h * scale)
+        resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        
+        # Create canvas and center the resized image
+        canvas = Image.new('RGB', (target_width, target_height), (0, 0, 0))
+        offset_x = (target_width - new_w) // 2
+        offset_y = (target_height - new_h) // 2
+        canvas.paste(resized, (offset_x, offset_y))
+        
+        return canvas
