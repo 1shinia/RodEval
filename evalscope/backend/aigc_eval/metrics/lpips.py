@@ -15,8 +15,8 @@ weighted and averaged, with zero-channel masking for sparse deep layers.
 """
 import io
 import logging
-import torch
 import numpy as np
+import torch
 from PIL import Image
 from torchvision import models, transforms
 from typing import List, Optional
@@ -138,7 +138,7 @@ def _layer_cosine_distance(orig: torch.Tensor, ref: torch.Tensor) -> float:
 
     # L2 norm per channel
     orig_norm = orig_f.norm(p=2, dim=2)  # (N, C)
-    ref_norm = ref_f.norm(p=2, dim=2)    # (N, C)
+    ref_norm = ref_f.norm(p=2, dim=2)  # (N, C)
 
     # Only consider channels where at least one side has signal
     eps = 1e-6

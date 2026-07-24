@@ -11,6 +11,7 @@ from evalscope.utils.logger import get_logger
 from . import db as _db
 from .blueprints import bp_eval, bp_perf, bp_reports
 from .blueprints.aigc import bp_aigc
+from .blueprints.audio import bp_audio
 from .utils import OUTPUT_DIR as _DEFAULT_ROOT
 
 logger = get_logger()
@@ -74,6 +75,7 @@ def create_app(outputs: str = None):
     app.register_blueprint(bp_perf)
     app.register_blueprint(bp_reports)
     app.register_blueprint(bp_aigc)
+    app.register_blueprint(bp_audio)
 
     # Use HuggingFace mirror for MTEB dataset downloads (faster in CN)
     os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')

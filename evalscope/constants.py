@@ -103,6 +103,7 @@ class EvalBackend:
     VLM_EVAL_KIT = 'VLMEvalKit'
     RAG_EVAL = 'RAGEval'
     AIGC_EVAL = 'AIGCEval'
+    AUDIO_EVAL = 'AudioEval'
     THIRD_PARTY = 'ThirdParty'
 
 

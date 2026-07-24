@@ -168,8 +168,8 @@ _BASE_FIELDS = ['model', 'datasets']
 
 def _get_required_fields(data: dict) -> list[str]:
     """Return required fields based on model_source. RAG/AIGC eval has its own config."""
-    if data.get('eval_backend') in (EvalBackend.RAG_EVAL, EvalBackend.AIGC_EVAL):
-        return []  # RAG/AIGC eval validates via eval_config, not top-level fields
+    if data.get('eval_backend') in (EvalBackend.RAG_EVAL, EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
+        return []  # RAG/AIGC/AUDIO eval validates via eval_config, not top-level fields
     fields = list(_BASE_FIELDS)
     if data.get('model_source') == ModelSource.LOCAL:
         fields.append('model_path')
@@ -290,9 +290,9 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                 run_eval_wrapper, task_config, task_id=task_id, task_type='eval', model=task_config.model
             )
         table_str = _build_result_table(task_config.work_dir)
-        # RAG and AIGC eval have different result structures, skip empty check
+        # RAG, AIGC, Audio eval have different result structures, skip empty check
         if (
-            task_config.eval_backend not in (EvalBackend.RAG_EVAL, EvalBackend.AIGC_EVAL)
+            task_config.eval_backend not in (EvalBackend.RAG_EVAL, EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL)
             and _all_results_empty(result)
         ):
             error_msg = (
@@ -498,6 +498,28 @@ def run_evaluation():
                 logger.warning(f'[{task_id}] Failed to save task config: {e}')
             logger.info(f'[{task_id}] Running AIGC eval: tool={eval_config.get("tool")}')
             return _execute_task(task_id, task_config, label='AIGC Eval')
+
+        # ── Audio Eval mode ──────────────────────────────────────────
+        if data.get('eval_backend') == EvalBackend.AUDIO_EVAL:
+            eval_config = data.get('eval_config', {})
+            if not eval_config:
+                return jsonify({'error': 'eval_config is required for Audio eval'}), 400
+
+            task_config = TaskConfig(
+                eval_backend=EvalBackend.AUDIO_EVAL,
+                eval_config=eval_config,
+                work_dir=os.path.join(OUTPUT_DIR, task_id),
+                no_timestamp=True,
+                enable_progress_tracker=True,
+            )
+            task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+            os.makedirs(task_config.work_dir, exist_ok=True)
+            try:
+                task_config.dump_yaml(task_config.work_dir)
+            except Exception as e:
+                logger.warning(f'[{task_id}] Failed to save task config: {e}')
+            logger.info(f'[{task_id}] Running Audio eval: tool={eval_config.get("tool")}')
+            return _execute_task(task_id, task_config, label='Audio Eval')
 
         # ── Build TaskConfig ───────────────────────────────────────────
         try:

@@ -217,24 +217,24 @@ class Img2ImgModel(AIGCModelBase):
     @staticmethod
     def _fit_to_size(img: Image.Image, target_width: int, target_height: int) -> Image.Image:
         """Resize image to fit target size while preserving aspect ratio.
-        
+
         Pads with black bars (letterbox/pillarbox) to achieve exact target dimensions,
         avoiding distortion from direct resize when aspect ratios differ.
         """
         img_w, img_h = img.size
         if img_w == target_width and img_h == target_height:
             return img
-        
+
         # Scale to fit within target, preserving aspect ratio
         scale = min(target_width / img_w, target_height / img_h)
         new_w = int(img_w * scale)
         new_h = int(img_h * scale)
         resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        
+
         # Create canvas and center the resized image
         canvas = Image.new('RGB', (target_width, target_height), (0, 0, 0))
         offset_x = (target_width - new_w) // 2
         offset_y = (target_height - new_h) // 2
         canvas.paste(resized, (offset_x, offset_y))
-        
+
         return canvas

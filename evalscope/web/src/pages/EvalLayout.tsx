@@ -6,7 +6,7 @@ import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask } from '@/api/eval'
 
-type EvalMode = 'llm' | 'rag' | 'aigc'
+type EvalMode = 'llm' | 'rag' | 'aigc' | 'audio'
 
 export interface EvalTabContext {
   onSubmit: ReturnType<typeof useTaskRunner>['handleSubmit']
@@ -19,6 +19,7 @@ const MODES: { mode: EvalMode; label: string }[] = [
   { mode: 'llm', label: 'eval.evalModeLLM' },
   { mode: 'rag', label: 'eval.evalModeRAG' },
   { mode: 'aigc', label: 'eval.evalModeAIGC' },
+  { mode: 'audio', label: 'eval.evalModeAudio' },
 ]
 
 export default function EvalLayout() {
@@ -41,7 +42,9 @@ export default function EvalLayout() {
       getReportUrl: (taskId: string) =>
         evalMode === 'aigc'
           ? `/reports/aigc/${encodeURIComponent(taskId)}`
-          : getEvalReportUrl(taskId),
+          : evalMode === 'audio'
+            ? `/reports/audio/${encodeURIComponent(taskId)}`
+            : getEvalReportUrl(taskId),
       resume: resumeEvalTask,
     }),
     [evalMode],

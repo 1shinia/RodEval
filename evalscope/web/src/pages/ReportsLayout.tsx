@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { FileText, Image as ImageIcon } from 'lucide-react'
+import { FileText, Image as ImageIcon, Mic } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
@@ -34,6 +34,10 @@ export default function ReportsLayout() {
         <NavLink to="/reports/aigc" className={tabClass}>
           <ImageIcon size={16} />
           {t('reports.tabAIGC')}
+        </NavLink>
+        <NavLink to="/reports/audio" className={tabClass}>
+          <Mic size={16} />
+          {t('reports.tabAudio')}
         </NavLink>
       </div>
 

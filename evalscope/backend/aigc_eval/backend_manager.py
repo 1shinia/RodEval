@@ -462,7 +462,8 @@ class AIGCBackendManager(BackendManager):
                 if 'lpips' in config.eval.metrics:
                     try:
                         from .metrics.lpips import compute_lpips
-                        score = compute_lpips([img], reference_images=reference_images[:1] if reference_images else None)
+                        score = compute_lpips([img],
+                                              reference_images=reference_images[:1] if reference_images else None)
                         sample_result['lpips'] = score[0]
                     except Exception as e:
                         logger.warning(f'LPIPS computation failed: {e}')

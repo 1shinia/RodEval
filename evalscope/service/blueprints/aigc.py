@@ -11,7 +11,7 @@ from typing import Any, Dict
 from evalscope.backend.aigc_eval.backend_manager import AIGCBackendManager
 from evalscope.service.utils.log import create_log_file, validate_task_id
 from evalscope.service.utils.process import register_process, try_reserve_slot, unregister_process
-from evalscope.utils.logger import get_logger, configure_logging
+from evalscope.utils.logger import configure_logging, get_logger
 
 logger = logging.getLogger(__name__)
 

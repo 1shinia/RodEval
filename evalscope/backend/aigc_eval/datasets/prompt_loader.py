@@ -8,8 +8,13 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 
-def load_prompts(dataset_name: str, limit: int = 100, custom_path: Optional[str] = None,
-                 shuffle: bool = False, seed: int = 42) -> List[str]:
+def load_prompts(
+    dataset_name: str,
+    limit: int = 100,
+    custom_path: Optional[str] = None,
+    shuffle: bool = False,
+    seed: int = 42
+) -> List[str]:
     """Load prompts from a dataset.
 
     Args:
@@ -297,8 +302,13 @@ def _load_custom_prompts(custom_path: Optional[str], limit: int) -> List[str]:
     return lines[:limit]
 
 
-def load_video_prompts(dataset_name: str, limit: int = 100, custom_path: Optional[str] = None,
-                       shuffle: bool = False, seed: int = 42) -> List[str]:
+def load_video_prompts(
+    dataset_name: str,
+    limit: int = 100,
+    custom_path: Optional[str] = None,
+    shuffle: bool = False,
+    seed: int = 42
+) -> List[str]:
     """Load video generation prompts from a dataset.
 
     Args:
@@ -423,4 +433,3 @@ def _load_msr_vtt_prompts(limit: int) -> List[str]:
         'A traditional lion dance performance during a festival',
     ]
     return prompts[:limit]
-

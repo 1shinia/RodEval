@@ -139,8 +139,10 @@ class Txt2VideoModel(AIGCModelBase):
             if ratio:
                 payload['ratio'] = ratio
 
-            logger.info(f'API payload keys: {list(payload.keys())}, duration={payload.get("duration")}, '
-                        f'resolution={payload.get("resolution")}, ratio={payload.get("ratio")}')
+            logger.info(
+                f'API payload keys: {list(payload.keys())}, duration={payload.get("duration")}, '
+                f'resolution={payload.get("resolution")}, ratio={payload.get("ratio")}'
+            )
 
             response = requests.post(url, json=payload, headers=headers, timeout=300)
             if not response.ok:

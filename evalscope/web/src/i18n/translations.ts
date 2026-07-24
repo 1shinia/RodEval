@@ -165,6 +165,7 @@ const en: Dict = {
     evalModeLLM: 'LLM/VLM Evaluation',
     evalModeRAG: 'RAG Evaluation',
     evalModeAIGC: 'AIGC Evaluation',
+    evalModeAudio: 'Audio Evaluation',
     ragApiKey: 'API Key',
     ragTaskNames: 'Task Names',
     ragLanguages: 'Languages',
@@ -395,6 +396,7 @@ const en: Dict = {
     scanFirst: 'Scan a directory to view reports',
     tabLLM: 'LLM / VLM / RAG',
     tabAIGC: 'AIGC',
+    tabAudio: 'Audio',
     confirmDelete: 'Are you sure you want to delete "${name}"? This cannot be undone.',
   },
   reportDetail: {
@@ -741,6 +743,7 @@ const zh: Dict = {
     evalModeLLM: 'LLM/VLM 评估',
     evalModeRAG: 'RAG 评估',
     evalModeAIGC: 'AIGC 评估',
+    evalModeAudio: 'AUDIO 评估',
     ragApiKey: 'API Key',
     ragTaskNames: '任务名称',
     ragLanguages: '语言',
@@ -971,6 +974,7 @@ const zh: Dict = {
     scanFirst: '扫描目录以查看报告',
     tabLLM: 'LLM / VLM / RAG',
     tabAIGC: 'AIGC',
+    tabAudio: 'AUDIO',
     confirmDelete: '确定要删除 "${name}" 吗？此操作不可撤销。',
   },
   reportDetail: {
