@@ -198,7 +198,7 @@ class AudioBackendManager(BackendManager):
     # ── TTS Pipeline ──────────────────────────────────────────────
 
     def _run_tts(self, config: AudioToolConfig) -> Dict[str, Any]:
-        """Run TTS evaluation pipeline (generation only, no metrics yet)."""
+        """Run TTS evaluation pipeline, optionally with ASR closed-loop eval."""
         from .datasets.prompt_loader import load_tts_prompts
         from .utils.audio import save_audio, get_audio_duration
 
@@ -223,8 +223,27 @@ class AudioBackendManager(BackendManager):
         model_config = config.model.dict()
         model = self._create_tts_model(model_config)
 
+        # Optional ASR for closed-loop evaluation
+        asr_model = None
+        asr_model_name = getattr(config.eval, 'asr_model_name', None)
+        if asr_model_name:
+            asr_api_base = getattr(config.eval, 'asr_api_base', None) or config.model.api_base
+            asr_config = {
+                'model_name_or_path': asr_model_name,
+                'model_type': 'asr',
+                'provider': config.model.provider,
+                'api_base': asr_api_base,
+                'api_key': config.model.api_key,
+                'language': config.model.language,
+            }
+            asr_model = self._create_asr_model(asr_config)
+            logger.info(
+                f'TTS→ASR closed-loop enabled: ASR model={asr_model_name}'
+            )
+
         per_sample_results = []
         total_elapsed = 0.0
+        metrics_summary: Dict[str, float] = {}
 
         for i, prompt in enumerate(prompts):
             logger.info(f'TTS sample {i+1}/{len(prompts)}: {prompt[:60]}...')
@@ -239,18 +258,64 @@ class AudioBackendManager(BackendManager):
                 elapsed = time.time() - start_time
                 total_elapsed += elapsed
 
-                audio_filename = f'sample_{i:04d}.{config.generate.response_format}'
-                audio_path = save_audio(audio_bytes, audio_dir / audio_filename,
-                                        fmt=config.generate.response_format)
+                audio_filename = (
+                    f'sample_{i:04d}.{config.generate.response_format}'
+                )
+                audio_path = save_audio(
+                    audio_bytes, audio_dir / audio_filename,
+                    fmt=config.generate.response_format,
+                )
                 duration = get_audio_duration(audio_path)
 
-                per_sample_results.append({
+                sample_result = {
                     'index': i,
                     'prompt': prompt,
                     'audio_path': str(audio_path),
                     'elapsed_seconds': round(elapsed, 2),
                     'duration_seconds': duration,
-                })
+                }
+
+                # ASR closed-loop evaluation
+                if asr_model:
+                    from .metrics.wer import compute_cer, compute_wer
+
+                    asr_start = time.time()
+                    try:
+                        asr_result = asr_model.generate(
+                            str(audio_path),
+                            language=config.model.language,
+                        )
+                        asr_elapsed = time.time() - asr_start
+                        hypothesis = asr_result.get('text', '')
+                        sample_result['hypothesis'] = hypothesis
+                        sample_result['asr_elapsed_seconds'] = round(
+                            asr_elapsed, 2
+                        )
+                        if 'wer' in config.eval.metrics:
+                            try:
+                                sample_result['wer'] = float(
+                                    compute_wer(prompt, hypothesis)
+                                )
+                            except Exception:
+                                sample_result['wer'] = -1.0
+                        if 'cer' in config.eval.metrics:
+                            try:
+                                sample_result['cer'] = float(
+                                    compute_cer(prompt, hypothesis)
+                                )
+                            except Exception:
+                                sample_result['cer'] = -1.0
+                        logger.info(
+                            f'TTS→ASR: WER={sample_result.get("wer","-")}, '
+                            f'CER={sample_result.get("cer","-")}'
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f'TTS→ASR failed for sample {i}: {e}'
+                        )
+                        sample_result['asr_error'] = str(e)
+
+                per_sample_results.append(sample_result)
             except Exception as e:
                 logger.error(f'TTS sample {i} failed: {e}')
                 per_sample_results.append({
@@ -259,6 +324,25 @@ class AudioBackendManager(BackendManager):
                     'error': str(e),
                 })
 
+        # Compute aggregate metrics
+        if asr_model:
+            wer_vals = [
+                s.get('wer') for s in per_sample_results
+                if s.get('wer') is not None and s.get('wer', -1) >= 0
+            ]
+            cer_vals = [
+                s.get('cer') for s in per_sample_results
+                if s.get('cer') is not None and s.get('cer', -1) >= 0
+            ]
+            if wer_vals:
+                metrics_summary['wer_avg'] = round(
+                    sum(wer_vals) / len(wer_vals), 4
+                )
+            if cer_vals:
+                metrics_summary['cer_avg'] = round(
+                    sum(cer_vals) / len(cer_vals), 4
+                )
+
         results = {
             'tool': 'tts',
             'model': config.model.model_name_or_path,
@@ -266,6 +350,9 @@ class AudioBackendManager(BackendManager):
             'total_elapsed_seconds': round(total_elapsed, 2),
             'per_sample': per_sample_results,
         }
+        if metrics_summary:
+            results['metrics'] = metrics_summary
+            results['asr_model'] = asr_model_name
 
         results_path = output_dir / 'results.json'
         with open(results_path, 'w', encoding='utf-8') as f:

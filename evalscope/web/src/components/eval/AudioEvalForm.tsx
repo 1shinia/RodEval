@@ -98,6 +98,10 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
   const [customPrompt, setCustomPrompt] = useState('')
   const [promptDataset, setPromptDataset] = useState('builtin')
   const [promptLimit, setPromptLimit] = useState('1')
+  // TTS→ASR closed-loop
+  const [asrEnabled, setAsrEnabled] = useState(false)
+  const [asrModelName, setAsrModelName] = useState('paraformer-realtime-v2')
+  const [asrApiBase, setAsrApiBase] = useState('https://ws-dwy81zmcwutmk6py.cn-beijing.maas.aliyuncs.com/api/v1')
 
   // Metrics
   const [metrics, setMetrics] = useState<string[]>(['wer'])
@@ -172,6 +176,11 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
 
     if (tool === 'tts' && customPrompt.trim()) {
       evalConfig.custom_prompt = customPrompt.trim()
+    }
+    if (tool === 'tts' && asrEnabled && asrModelName.trim()) {
+      evalConfig.asr_model_name = asrModelName.trim()
+      if (asrApiBase.trim()) evalConfig.asr_api_base = asrApiBase.trim()
+      evalConfig.metrics = metrics.length > 0 ? metrics : ['wer', 'cer']
     }
 
     onSubmit({
@@ -354,6 +363,44 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
                 className="w-full accent-[var(--accent)]" />
               <span className="text-xs text-[var(--text-muted)]">{speed}x</span>
             </FormField>
+          </div>
+
+          {/* TTS→ASR Closed-Loop Evaluation */}
+          <div className="p-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-deep)]">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={asrEnabled} onChange={e => setAsrEnabled(e.target.checked)}
+                className="w-4 h-4 rounded accent-[var(--accent)]" />
+              <span className="text-sm font-medium text-[var(--text)]">ASR 闭环评估</span>
+              <span className="text-xs text-[var(--text-dim)]">TTS 生成后自动用 ASR 转写，计算 WER/CER</span>
+            </label>
+            {asrEnabled && (
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <FormField label="ASR 模型">
+                  <input type="text" value={asrModelName} onChange={e => setAsrModelName(e.target.value)}
+                    className={FORM_INPUT_CLASS}
+                    placeholder="paraformer-realtime-v2" />
+                </FormField>
+                <FormField label="ASR API URL" hint="默认继承TTS的API URL">
+                  <input type="text" value={asrApiBase} onChange={e => setAsrApiBase(e.target.value)}
+                    className={FORM_INPUT_CLASS}
+                    placeholder="https://ws-dwy81zmcwutmk6py.cn-beijing.maas.aliyuncs.com/api/v1" />
+                </FormField>
+              </div>
+            )}
+            {asrEnabled && (
+              <div className="mt-2 flex gap-6">
+                {METRICS_OPTIONS.map(({ value, label }) => (
+                  <label key={value} className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={metrics.includes(value)}
+                      onChange={() => setMetrics(prev =>
+                        prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
+                      )}
+                      className="accent-[var(--accent)]" />
+                    <span className="text-sm text-[var(--text)]">{label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* TTS Prompts */}

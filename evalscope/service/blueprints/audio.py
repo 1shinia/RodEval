@@ -70,6 +70,11 @@ def list_audio_reports():
         if tool == 'tts':
             report['num_samples'] = results.get('num_samples', 0)
             report['total_elapsed'] = results.get('total_elapsed_seconds', 0)
+            # Closed-loop ASR evaluation metrics
+            if metrics.get('wer_avg') is not None:
+                report['wer'] = metrics['wer_avg']
+            if metrics.get('cer_avg') is not None:
+                report['cer'] = metrics['cer_avg']
 
         reports.append(report)
 

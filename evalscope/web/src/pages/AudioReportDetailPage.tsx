@@ -131,6 +131,30 @@ export default function AudioReportDetailPage() {
         </div>
       </div>
 
+      {/* TTS→ASR Closed-Loop Metrics */}
+      {!isASR && report.metrics && (
+        <div className="grid grid-cols-2 gap-4">
+          {report.metrics.wer_avg != null && (
+            <div className="p-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)]">
+              <div className="text-xs text-[var(--text-muted)] mb-1">WER 均值 (词错误率)</div>
+              <div className={`text-2xl font-bold font-mono ${report.metrics.wer_avg < 0.1 ? 'text-green-400' : report.metrics.wer_avg < 0.3 ? 'text-yellow-400' : 'text-red-400'}`}>
+                {(report.metrics.wer_avg * 100).toFixed(2)}%
+              </div>
+              <div className="text-xs text-[var(--text-dim)] mt-1">越低越好 · ASR: {report.asr_model}</div>
+            </div>
+          )}
+          {report.metrics.cer_avg != null && (
+            <div className="p-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)]">
+              <div className="text-xs text-[var(--text-muted)] mb-1">CER 均值 (字错误率)</div>
+              <div className={`text-2xl font-bold font-mono ${report.metrics.cer_avg < 0.1 ? 'text-green-400' : report.metrics.cer_avg < 0.3 ? 'text-yellow-400' : 'text-red-400'}`}>
+                {(report.metrics.cer_avg * 100).toFixed(2)}%
+              </div>
+              <div className="text-xs text-[var(--text-dim)] mt-1">越低越好 · ASR: {report.asr_model}</div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ASR Metrics */}
       {isASR && report.metrics && (
         <div className="grid grid-cols-2 gap-4">
@@ -227,6 +251,17 @@ export default function AudioReportDetailPage() {
                             耗时: {sample.elapsed_seconds}s
                             {sample.duration_seconds != null && ` · 时长: ${sample.duration_seconds.toFixed(1)}s`}
                           </div>
+                          {sample.hypothesis != null && (
+                            <div className="mt-2 p-2 rounded bg-[var(--bg-deep)] text-xs">
+                              <div className="text-[var(--text-muted)] mb-1">ASR 识别:</div>
+                              <div className="text-[var(--text)]">{sample.hypothesis}</div>
+                              <div className="flex gap-3 mt-1">
+                                {sample.wer != null && <span className="text-[var(--accent)]">WER: {(sample.wer * 100).toFixed(2)}%</span>}
+                                {sample.cer != null && <span className="text-[var(--text)]">CER: {(sample.cer * 100).toFixed(2)}%</span>}
+                                {sample.asr_elapsed_seconds != null && <span className="text-[var(--text-dim)]">ASR耗时: {sample.asr_elapsed_seconds}s</span>}
+                              </div>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>

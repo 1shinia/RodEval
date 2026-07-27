@@ -51,6 +51,13 @@ class AudioEvalConfig(BaseArgument):
         None, description='Path to custom audio dataset (one item per line)'
     )
     output_dir: str = Field('', description='Output directory')
+    # TTS closed-loop: run ASR on generated audio, compute WER/CER vs original text
+    asr_model_name: Optional[str] = Field(
+        None, description='ASR model name for TTS closed-loop evaluation (e.g. paraformer-realtime-v2)'
+    )
+    asr_api_base: Optional[str] = Field(
+        None, description='ASR API base URL (defaults to TTS api_base if not set)'
+    )
 
 
 class AudioToolConfig(BaseArgument):
