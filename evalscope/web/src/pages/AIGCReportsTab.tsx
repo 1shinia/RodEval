@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, Image as ImageIcon } from 'lucide-react'
+import { Eye, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
+import { toast } from '@/components/common/Toast'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import { EmptyState } from '@/pages/ReportsLayout'
@@ -42,6 +43,21 @@ export default function AIGCReportsTab() {
       setAigcLoading(false)
     }
   }, [])
+
+  const handleDelete = useCallback(async (taskId: string) => {
+    if (!window.confirm(`确定要删除此报告吗？\n\n${taskId}`)) return
+    try {
+      const response = await fetch(`/api/v1/aigc/reports/${encodeURIComponent(taskId)}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error((data as any).error || `HTTP ${response.status}`)
+      }
+      toast.success('已删除')
+      fetchAIGCReports()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '删除失败')
+    }
+  }, [fetchAIGCReports])
 
   useEffect(() => {
     fetchAIGCReports()
@@ -104,14 +120,24 @@ export default function AIGCReportsTab() {
                     {new Date(report.created_at).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/reports/aigc/${encodeURIComponent(report.task_id)}`)}
-                    >
-                      <Eye size={14} />
-                      {t('common.view')}
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/reports/aigc/${encodeURIComponent(report.task_id)}`)}
+                      >
+                        <Eye size={14} />
+                        {t('common.view')}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(report.task_id) }}
+                        className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all"
+                        title="删除"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, Mic } from 'lucide-react'
+import { Eye, Mic, Trash2 } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
+import { toast } from '@/components/common/Toast'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import { EmptyState } from '@/pages/ReportsLayout'
@@ -44,6 +45,21 @@ export default function AudioReportsTab() {
       setLoading(false)
     }
   }, [])
+
+  const handleDelete = useCallback(async (taskId: string) => {
+    if (!window.confirm(`确定要删除此报告吗？\n\n${taskId}`)) return
+    try {
+      const response = await fetch(`/api/v1/audio/reports/${encodeURIComponent(taskId)}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error((data as any).error || `HTTP ${response.status}`)
+      }
+      toast.success('已删除')
+      fetchReports()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '删除失败')
+    }
+  }, [fetchReports])
 
   useEffect(() => {
     fetchReports()
@@ -118,10 +134,20 @@ export default function AudioReportsTab() {
                     {r.created_at ? new Date(r.created_at).toLocaleString() : '-'}
                   </td>
                   <td className="px-4 py-3">
-                    <Button variant="ghost" size="sm" onClick={() => navigate(`/reports/audio/${encodeURIComponent(r.task_id)}`)}>
-                      <Eye size={14} className="mr-1" />
-                      查看
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/reports/audio/${encodeURIComponent(r.task_id)}`)}>
+                        <Eye size={14} className="mr-1" />
+                        查看
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(r.task_id) }}
+                        className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all"
+                        title="删除"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -429,3 +429,18 @@ def _execute_aigc_task(task_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     result = manager.run()
 
     return result
+
+
+@bp_aigc.route('/reports/<task_id>', methods=['DELETE'])
+def delete_aigc_report(task_id: str):
+    """Delete an AIGC evaluation report by task_id."""
+    import shutil
+    task_dir = (OUTPUT_DIR / task_id).resolve()
+    output_root = OUTPUT_DIR.resolve()
+    if not str(task_dir).startswith(str(output_root) + os.sep) and task_dir != output_root:
+        return jsonify({'error': 'Access denied'}), 403
+    if not task_dir.is_dir():
+        return jsonify({'error': 'Report not found'}), 404
+    shutil.rmtree(str(task_dir))
+    logger.info(f'Deleted AIGC report: {task_dir}')
+    return jsonify({'success': True})

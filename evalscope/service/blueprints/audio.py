@@ -118,3 +118,18 @@ def serve_file(task_id: str, filename: str):
         return jsonify({'error': 'File not found'}), 404
 
     return send_file(safe_path)
+
+
+@bp_audio.route('/reports/<task_id>', methods=['DELETE'])
+def delete_audio_report(task_id: str):
+    """Delete an Audio evaluation report by task_id."""
+    import shutil
+    task_dir = (OUTPUT_DIR / task_id).resolve()
+    output_root = OUTPUT_DIR.resolve()
+    if not str(task_dir).startswith(str(output_root) + os.sep) and task_dir != output_root:
+        return jsonify({'error': 'Access denied'}), 403
+    if not task_dir.is_dir():
+        return jsonify({'error': 'Report not found'}), 404
+    shutil.rmtree(str(task_dir))
+    logger.info(f'Deleted Audio report: {task_dir}')
+    return jsonify({'success': True})

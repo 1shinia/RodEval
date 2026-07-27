@@ -25,7 +25,7 @@ const PROVIDER_OPTIONS: { value: string; label: string; apiPlaceholder: string; 
     ],
   },
   {
-    value: 'dashscope', label: 'DashScope (百炼·HTTP)', apiPlaceholder: 'https://dashscope.aliyuncs.com/api/v1', modelPlaceholder: 'qwen-audio-asr / cosyvoice-v3.5-flash',
+    value: 'dashscope', label: 'DashScope (百炼)', apiPlaceholder: 'https://dashscope.aliyuncs.com/api/v1', modelPlaceholder: 'qwen-audio-asr / cosyvoice-v3.5-flash / sambert-zhichu-v1',
     defaultVoice: 'longxiaochun',
     voices: [
       { value: 'longxiaochun', label: 'longxiaochun (龙小春·女声)' },
@@ -35,15 +35,6 @@ const PROVIDER_OPTIONS: { value: string; label: string; apiPlaceholder: string; 
       { value: 'longxiaoqi', label: 'longxiaoqi (龙小七·男声)' },
       { value: 'longyue', label: 'longyue (龙悦·女声)' },
       { value: 'longfeiyu', label: 'longfeiyu (龙飞宇·男声)' },
-    ],
-  },
-  {
-    value: 'dashscope-ws', label: 'DashScope (百炼·WS)', apiPlaceholder: 'https://dashscope.aliyuncs.com/api/v1', modelPlaceholder: 'sambert-zhichu-v1 / sambert-zhixiaobai-v1',
-    defaultVoice: 'longxiaochun',
-    voices: [
-      { value: 'longxiaochun', label: 'longxiaochun (龙小春·女声)' },
-      { value: 'longbella', label: 'longbella (龙贝拉·女声)' },
-      { value: 'longcheng', label: 'longcheng (龙成·男声)' },
       { value: 'zhichu', label: 'zhichu (知厨·男声)' },
       { value: 'zhixiaobai', label: 'zhixiaobai (知小白·女声)' },
       { value: 'zhiluo', label: 'zhiluo (知萝·女声)' },

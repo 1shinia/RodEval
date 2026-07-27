@@ -73,11 +73,19 @@ class AudioBackendManager(BackendManager):
             raise ValueError(f'Unsupported ASR provider: {provider}')
 
     def _create_tts_model(self, model_config: dict):
-        """Factory: create TTS model based on provider."""
+        """Factory: create TTS model based on provider.
+
+        DashScope auto-detects transport: Sambert models → WebSocket, others → HTTP.
+        """
         provider = model_config.get('provider', 'openai')
         if provider == 'dashscope':
-            from .models.tts_dashscope import TtsModelDashScope
-            return TtsModelDashScope(model_config)
+            model_name = model_config.get('model_name_or_path', '')
+            if model_name.lower().startswith('sambert'):
+                from .models.tts_dashscope_ws import TtsModelDashScopeWS
+                return TtsModelDashScopeWS(model_config)
+            else:
+                from .models.tts_dashscope import TtsModelDashScope
+                return TtsModelDashScope(model_config)
         elif provider == 'dashscope-ws':
             from .models.tts_dashscope_ws import TtsModelDashScopeWS
             return TtsModelDashScopeWS(model_config)
