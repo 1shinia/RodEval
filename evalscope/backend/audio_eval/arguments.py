@@ -15,7 +15,7 @@ class AudioModelConfig(BaseArgument):
 
     model_name_or_path: str = Field(..., description='Model path or API model name')
     model_type: Literal['asr', 'tts'] = Field('asr', description='Model type')
-    provider: Literal['openai', 'dashscope', 'dashscope-ws', 'volcengine'] = Field(
+    provider: Literal['openai', 'dashscope', 'dashscope-ws', 'volcengine', 'local'] = Field(
         'openai', description='API provider (openai/dashscope/volcengine)'
     )
     api_base: Optional[str] = Field(None, description='API base URL for remote models')

@@ -102,6 +102,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
   const [asrEnabled, setAsrEnabled] = useState(false)
   const [asrModelName, setAsrModelName] = useState('paraformer-realtime-v2')
   const [asrApiBase, setAsrApiBase] = useState('https://ws-dwy81zmcwutmk6py.cn-beijing.maas.aliyuncs.com/api/v1')
+  const [asrApiKey, setAsrApiKey] = useState('')
 
   // Metrics
   const [metrics, setMetrics] = useState<string[]>(['wer'])
@@ -128,7 +129,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     const newErrors: Record<string, string> = {}
 
     if (isLocal) {
-      if (!modelPath.trim()) newErrors.modelPath = '请输入模型路径'
+      if (tool === 'asr' && !modelPath.trim()) newErrors.modelPath = '请输入模型路径'
     } else {
       if (!model.trim()) newErrors.model = '请输入模型名称'
       if (!apiBase.trim()) newErrors.apiBase = '请输入 API URL'
@@ -180,6 +181,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     if (tool === 'tts' && asrEnabled && asrModelName.trim()) {
       evalConfig.asr_model_name = asrModelName.trim()
       if (asrApiBase.trim()) evalConfig.asr_api_base = asrApiBase.trim()
+      if (asrApiKey.trim()) evalConfig.asr_api_key = asrApiKey.trim()
       evalConfig.metrics = metrics.length > 0 ? metrics : ['wer', 'cer']
     }
 
@@ -273,7 +275,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
       {/* Local model fields */}
       {isLocal && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField label="模型路径" required error={errors.modelPath}>
+          <FormField label="模型路径" required={tool === 'asr'} error={errors.modelPath}>
             <input value={modelPath}
               onChange={e => { setModelPath(e.target.value); if (errors.modelPath) setErrors(p => ({ ...p, modelPath: '' })) }}
               className={FORM_INPUT_CLASS} placeholder="openai/whisper-large-v3 或 /data/models/whisper" />
@@ -384,6 +386,15 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
                   <input type="text" value={asrApiBase} onChange={e => setAsrApiBase(e.target.value)}
                     className={FORM_INPUT_CLASS}
                     placeholder="https://ws-dwy81zmcwutmk6py.cn-beijing.maas.aliyuncs.com/api/v1" />
+                </FormField>
+              </div>
+            )}
+            {asrEnabled && (
+              <div className="mt-2">
+                <FormField label="ASR API Key" hint="使用云端ASR时必填；本地whisper可留空">
+                  <input type="password" value={asrApiKey} onChange={e => setAsrApiKey(e.target.value)}
+                    className={FORM_INPUT_CLASS}
+                    placeholder="sk-..." />
                 </FormField>
               </div>
             )}

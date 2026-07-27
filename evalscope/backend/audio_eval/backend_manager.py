@@ -77,6 +77,9 @@ class AudioBackendManager(BackendManager):
         elif provider == 'openai':
             from .models.asr_openai import AsrModel
             return AsrModel(model_config)
+        elif provider == 'local':
+            from .models.asr_local import AsrModelLocal
+            return AsrModelLocal(model_config)
         else:
             raise ValueError(f'Unsupported ASR provider: {provider}')
 
@@ -100,6 +103,9 @@ class AudioBackendManager(BackendManager):
         elif provider == 'openai':
             from .models.tts_openai import TtsModel
             return TtsModel(model_config)
+        elif provider == 'local':
+            from .models.tts_local import TtsModelLocal
+            return TtsModelLocal(model_config)
         else:
             raise ValueError(f'Unsupported TTS provider: {provider}')
 
@@ -228,12 +234,16 @@ class AudioBackendManager(BackendManager):
         asr_model_name = getattr(config.eval, 'asr_model_name', None)
         if asr_model_name:
             asr_api_base = getattr(config.eval, 'asr_api_base', None) or config.model.api_base
+            # Auto-detect provider: paraformer-* → dashscope, otherwise inherit from TTS
+            asr_provider = config.model.provider
+            if asr_model_name.lower().startswith('paraformer'):
+                asr_provider = 'dashscope'
             asr_config = {
                 'model_name_or_path': asr_model_name,
                 'model_type': 'asr',
-                'provider': config.model.provider,
+                'provider': asr_provider,
                 'api_base': asr_api_base,
-                'api_key': config.model.api_key,
+                'api_key': getattr(config.eval, 'asr_api_key', None) or config.model.api_key,
                 'language': config.model.language,
             }
             asr_model = self._create_asr_model(asr_config)
@@ -287,6 +297,12 @@ class AudioBackendManager(BackendManager):
                         )
                         asr_elapsed = time.time() - asr_start
                         hypothesis = asr_result.get('text', '')
+                        # Normalize traditional → simplified Chinese for fair WER/CER
+                        try:
+                            from opencc import OpenCC
+                            hypothesis = OpenCC('t2s').convert(hypothesis)
+                        except ImportError:
+                            pass
                         sample_result['hypothesis'] = hypothesis
                         sample_result['asr_elapsed_seconds'] = round(
                             asr_elapsed, 2

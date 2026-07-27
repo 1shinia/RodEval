@@ -82,6 +82,14 @@ class AsrModelDashScopeWS(AudioModelBase):
                 "format": audio_format,
             },
         }
+        # Detect actual sample rate for correct ASR decoding
+        try:
+            from mutagen.mp3 import MP3
+            audio_info = MP3(audio_path)
+            if audio_info.info.sample_rate:
+                payload["parameters"]["sample_rate"] = audio_info.info.sample_rate
+        except Exception:
+            pass
         if language and language != "auto":
             payload["parameters"]["language_hints"] = [language]
 
