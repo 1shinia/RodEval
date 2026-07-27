@@ -75,6 +75,13 @@ class AudioBackendManager(BackendManager):
                 from .models.asr_dashscope import AsrModelDashScope
                 return AsrModelDashScope(model_config)
         elif provider == 'openai':
+            model_name = model_config.get('model_name_or_path', '')
+            api_base = model_config.get('api_base', '')
+            # Auto-detect: paraformer models need DashScope WS, not OpenAI
+            if model_name.lower().startswith('paraformer'):
+                model_config['provider'] = 'dashscope'
+                from .models.asr_dashscope_ws import AsrModelDashScopeWS
+                return AsrModelDashScopeWS(model_config)
             from .models.asr_openai import AsrModel
             return AsrModel(model_config)
         elif provider == 'local':
@@ -101,6 +108,16 @@ class AudioBackendManager(BackendManager):
             from .models.tts_dashscope_ws import TtsModelDashScopeWS
             return TtsModelDashScopeWS(model_config)
         elif provider == 'openai':
+            model_name = model_config.get('model_name_or_path', '')
+            # Auto-detect: sambert-* / cosyvoice-* → DashScope
+            if model_name.lower().startswith(('sambert', 'cosyvoice')):
+                model_config['provider'] = 'dashscope'
+                if model_name.lower().startswith('sambert'):
+                    from .models.tts_dashscope_ws import TtsModelDashScopeWS
+                    return TtsModelDashScopeWS(model_config)
+                else:
+                    from .models.tts_dashscope import TtsModelDashScope
+                    return TtsModelDashScope(model_config)
             from .models.tts_openai import TtsModel
             return TtsModel(model_config)
         elif provider == 'local':

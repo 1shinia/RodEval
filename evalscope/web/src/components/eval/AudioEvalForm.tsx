@@ -262,6 +262,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
         </FormField>
       </div>
 
+      {tool !== 'asr' && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <FormField label="语言">
           <select value={language} onChange={e => setLanguage(e.target.value)} className={FORM_INPUT_CLASS}>
@@ -271,6 +272,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
           </select>
         </FormField>
       </div>
+      )}
       </>)}
       {/* Local model fields */}
       {isLocal && (
