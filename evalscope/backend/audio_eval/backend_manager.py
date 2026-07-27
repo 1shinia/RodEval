@@ -61,11 +61,19 @@ class AudioBackendManager(BackendManager):
         return output_dir
 
     def _create_asr_model(self, model_config: dict):
-        """Factory: create ASR model based on provider."""
+        """Factory: create ASR model based on provider.
+
+        DashScope auto-detects transport: paraformer-* models → WebSocket, others → HTTP.
+        """
         provider = model_config.get('provider', 'openai')
         if provider == 'dashscope':
-            from .models.asr_dashscope import AsrModelDashScope
-            return AsrModelDashScope(model_config)
+            model_name = model_config.get('model_name_or_path', '')
+            if model_name.lower().startswith('paraformer'):
+                from .models.asr_dashscope_ws import AsrModelDashScopeWS
+                return AsrModelDashScopeWS(model_config)
+            else:
+                from .models.asr_dashscope import AsrModelDashScope
+                return AsrModelDashScope(model_config)
         elif provider == 'openai':
             from .models.asr_openai import AsrModel
             return AsrModel(model_config)

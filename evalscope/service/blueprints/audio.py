@@ -93,7 +93,12 @@ def get_audio_report(task_id: str):
         return jsonify({'error': f'Failed to read report: {e}'}), 500
 
     # Build media URLs for audio files
-    for sample in results.get('per_sample', []):
+    samples = results.get('per_sample', [])
+    # Normalize: ASR stores single dict, TTS stores list of dicts
+    if isinstance(samples, dict):
+        samples = [samples]
+        results['per_sample'] = samples
+    for sample in samples:
         audio_path = sample.get('audio_path', '')
         if audio_path:
             if audio_path.startswith(str(task_dir)):

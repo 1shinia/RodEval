@@ -325,11 +325,19 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <FormField label="语音音色">
-              <select value={voice} onChange={e => setVoice(e.target.value)} className={FORM_INPUT_CLASS}>
+              <input
+                type="text"
+                value={voice}
+                onChange={e => setVoice(e.target.value)}
+                list="voice-suggestions"
+                className={FORM_INPUT_CLASS}
+                placeholder={currentProvider.defaultVoice}
+              />
+              <datalist id="voice-suggestions">
                 {currentProvider.voices.map(v => (
                   <option key={v.value} value={v.value}>{v.label}</option>
                 ))}
-              </select>
+              </datalist>
             </FormField>
 
             <FormField label="输出格式">

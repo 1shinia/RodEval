@@ -1,5 +1,6 @@
 """Audio prompt loader — builtin ASR/TTS datasets."""
 
+import random
 from typing import List, Optional
 
 # Builtin ASR test samples: (audio_filename_hint, reference_text, language)
@@ -45,7 +46,8 @@ def load_asr_samples(
         return _load_custom_asr(custom_path, limit)
 
     samples = []
-    for ref_text, _, lang in ASR_BUILTIN[:limit]:
+    picked = random.sample(ASR_BUILTIN, min(limit, len(ASR_BUILTIN)))
+    for ref_text, _, lang in picked:
         samples.append({'text': ref_text, 'lang': lang})
     return samples
 
@@ -58,7 +60,7 @@ def load_tts_prompts(
     """Load TTS text prompts. Returns list of strings."""
     if dataset == 'custom' and custom_path:
         return _load_custom_lines(custom_path, limit)
-    return TTS_BUILTIN[:limit]
+    return random.sample(TTS_BUILTIN, min(limit, len(TTS_BUILTIN)))
 
 
 def _load_custom_asr(path: str, limit: int) -> List[dict]:

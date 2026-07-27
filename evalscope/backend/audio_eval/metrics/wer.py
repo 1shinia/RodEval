@@ -1,8 +1,17 @@
 """WER / CER computation using jiwer."""
 import logging
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# Chinese + English punctuation to strip before WER/CER
+_PUNCT_RE = re.compile(r'[，。！？、；：""''（）《》【】\s,.!?;:\"\'()\[\]{}]')
+
+
+def _normalize(text: str) -> str:
+    """Strip punctuation for fair WER/CER comparison."""
+    return _PUNCT_RE.sub('', text)
 
 
 def compute_wer(reference: str, hypothesis: str) -> float:
@@ -16,11 +25,14 @@ def compute_wer(reference: str, hypothesis: str) -> float:
         logger.error('jiwer not installed. Install with: pip install jiwer')
         return -1.0
 
-    if not reference.strip():
-        return 0.0 if not hypothesis.strip() else 1.0
+    ref = _normalize(reference)
+    hyp = _normalize(hypothesis)
+
+    if not ref.strip():
+        return 0.0 if not hyp.strip() else 1.0
 
     try:
-        return float(wer(reference, hypothesis))
+        return float(wer(ref, hyp))
     except Exception as e:
         logger.warning(f'WER computation failed: {e}')
         return -1.0
@@ -37,11 +49,14 @@ def compute_cer(reference: str, hypothesis: str) -> float:
         logger.error('jiwer not installed. Install with: pip install jiwer')
         return -1.0
 
-    if not reference.strip():
-        return 0.0 if not hypothesis.strip() else 1.0
+    ref = _normalize(reference)
+    hyp = _normalize(hypothesis)
+
+    if not ref.strip():
+        return 0.0 if not hyp.strip() else 1.0
 
     try:
-        return float(cer(reference, hypothesis))
+        return float(cer(ref, hyp))
     except Exception as e:
         logger.warning(f'CER computation failed: {e}')
         return -1.0
