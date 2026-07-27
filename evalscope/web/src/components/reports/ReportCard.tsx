@@ -104,7 +104,7 @@ function ReportCard({ report, selected, onSelect, onClick, onDelete }: ReportCar
           {/* Secondary row: dataset + sample count */}
           <div className="flex items-center gap-3 mt-0.5">
             {report.eval_type === 'aigc' && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--accent-dim)] text-[var(--accent)]">
                 AIGC
               </span>
             )}
