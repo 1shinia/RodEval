@@ -223,7 +223,10 @@ export default function AudioReportDetailPage() {
                               浏览器不支持音频播放
                             </audio>
                           )}
-                          <div className="text-xs text-[var(--text-dim)] mt-1">耗时: {sample.elapsed_seconds}s</div>
+                          <div className="text-xs text-[var(--text-dim)] mt-1">
+                            耗时: {sample.elapsed_seconds}s
+                            {sample.duration_seconds != null && ` · 时长: ${sample.duration_seconds.toFixed(1)}s`}
+                          </div>
                         </>
                       )}
                     </div>

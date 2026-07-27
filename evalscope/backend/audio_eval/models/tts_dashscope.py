@@ -28,13 +28,15 @@ class TtsModelDashScope(AudioModelBase):
             'model': self.model_name,
             'input': {
                 'text': prompt,
+            },
+            'parameters': {
                 'voice': voice,
                 'format': fmt,
             },
         }
         # Add optional speed control
         if speed != 1.0:
-            payload['input']['rate'] = speed
+            payload['parameters']['rate'] = speed
 
         headers = {
             'Authorization': f'Bearer {self.api_key}',

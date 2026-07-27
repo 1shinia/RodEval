@@ -78,6 +78,9 @@ class AudioBackendManager(BackendManager):
         if provider == 'dashscope':
             from .models.tts_dashscope import TtsModelDashScope
             return TtsModelDashScope(model_config)
+        elif provider == 'dashscope-ws':
+            from .models.tts_dashscope_ws import TtsModelDashScopeWS
+            return TtsModelDashScopeWS(model_config)
         elif provider == 'openai':
             from .models.tts_openai import TtsModel
             return TtsModel(model_config)
@@ -181,7 +184,7 @@ class AudioBackendManager(BackendManager):
     def _run_tts(self, config: AudioToolConfig) -> Dict[str, Any]:
         """Run TTS evaluation pipeline (generation only, no metrics yet)."""
         from .datasets.prompt_loader import load_tts_prompts
-        from .utils.audio import save_audio
+        from .utils.audio import save_audio, get_audio_duration
 
         output_dir = self._ensure_output_dir(config.eval.output_dir)
         audio_dir = output_dir / 'audio'
@@ -223,12 +226,14 @@ class AudioBackendManager(BackendManager):
                 audio_filename = f'sample_{i:04d}.{config.generate.response_format}'
                 audio_path = save_audio(audio_bytes, audio_dir / audio_filename,
                                         fmt=config.generate.response_format)
+                duration = get_audio_duration(audio_path)
 
                 per_sample_results.append({
                     'index': i,
                     'prompt': prompt,
                     'audio_path': str(audio_path),
                     'elapsed_seconds': round(elapsed, 2),
+                    'duration_seconds': duration,
                 })
             except Exception as e:
                 logger.error(f'TTS sample {i} failed: {e}')

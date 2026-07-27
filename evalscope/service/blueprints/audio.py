@@ -80,7 +80,7 @@ def list_audio_reports():
 @bp_audio.route('/report/<task_id>', methods=['GET'])
 def get_audio_report(task_id: str):
     """Get full audio evaluation report."""
-    task_dir = OUTPUT_DIR / task_id
+    task_dir = (OUTPUT_DIR / task_id).resolve()
     results_file = task_dir / 'results.json'
 
     if not results_file.exists():
