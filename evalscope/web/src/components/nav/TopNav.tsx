@@ -4,7 +4,7 @@ import { useLocale } from '@/contexts/LocaleContext'
 import LocaleToggle from './LocaleToggle'
 import ThemeToggle from './ThemeToggle'
 import RunningTasksIndicator from './RunningTasksIndicator'
-import { BarChart3, Gauge, FlaskConical, BookOpen, FileText, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Sparkles, ClipboardCheck, Activity, BarChart4, Medal, Menu, X } from 'lucide-react'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 px-3.5 py-2 rounded-lg text-base font-medium transition-all duration-200 ${
@@ -32,12 +32,12 @@ export default function TopNav() {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const navItems = [
-    { to: '/dashboard', icon: <BarChart3 size={18} />, label: t('nav.dashboard') },
-    { to: '/eval', icon: <FlaskConical size={18} />, label: t('nav.eval') },
-    { to: '/reports', icon: <FileText size={18} />, label: t('nav.evalReports') },
-    { to: '/perf', icon: <Gauge size={18} />, label: t('nav.perf') },
-    { to: '/perf-reports', icon: <FileText size={18} />, label: t('nav.perfReports') },
-    { to: '/benchmarks', icon: <BookOpen size={18} />, label: t('nav.benchmarks') },
+    { to: '/dashboard', icon: <LayoutDashboard size={18} />, label: t('nav.dashboard') },
+    { to: '/eval', icon: <Sparkles size={18} />, label: t('nav.eval') },
+    { to: '/reports', icon: <ClipboardCheck size={18} />, label: t('nav.evalReports') },
+    { to: '/perf', icon: <Activity size={18} />, label: t('nav.perf') },
+    { to: '/perf-reports', icon: <BarChart4 size={18} />, label: t('nav.perfReports') },
+    { to: '/benchmarks', icon: <Medal size={18} />, label: t('nav.benchmarks') },
   ]
 
   return (
