@@ -10,7 +10,7 @@ import requests
 
 from .base import AudioModelBase, resolve_api_url
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 class AsrModel(AudioModelBase):

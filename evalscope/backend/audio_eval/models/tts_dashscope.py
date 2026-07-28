@@ -7,7 +7,7 @@ import requests
 from .asr_dashscope import _base_url
 from .base import AudioModelBase
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 class TtsModelDashScope(AudioModelBase):

@@ -21,7 +21,7 @@ from PIL import Image
 from torchvision import models, transforms
 from typing import List, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 # Global model cache — loaded once per process
 _alexnet = None

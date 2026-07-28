@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 # Chinese + English punctuation to strip before WER/CER
 _PUNCT_RE = re.compile(r'[，。！？、；：""''（）《》【】\s,.!?;:\"\'()\[\]{}]')

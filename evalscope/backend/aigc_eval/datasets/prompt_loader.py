@@ -5,7 +5,7 @@ import random
 from pathlib import Path
 from typing import List, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 def load_prompts(

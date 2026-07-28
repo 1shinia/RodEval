@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 from .base import AudioModelBase
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 # Voice mapping: frontend voice → edge-tts ShortName
 _VOICE_MAP = {

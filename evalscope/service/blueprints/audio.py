@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, send_file
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 bp_audio = Blueprint('audio', __name__, url_prefix='/api/v1/audio')
 

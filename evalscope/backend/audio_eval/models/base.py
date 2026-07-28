@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 class AudioModelBase:

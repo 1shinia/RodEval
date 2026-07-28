@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from evalscope.backend.rag_eval.ragas.arguments import RAGASTestsetConfig
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 def _build_ragas_llm(llm_config) -> Any:

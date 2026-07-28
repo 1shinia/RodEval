@@ -168,9 +168,9 @@ def get_logger(
     """
 
     if name:
-        logger_name = f"evalscope.{name.split('.')[-1]}"
+        logger_name = f"evalperf.{name.split('.')[-1]}"
     else:
-        logger_name = 'evalscope'
+        logger_name = 'evalperf'
     logger = logging.getLogger(logger_name)
     logger.propagate = False
 

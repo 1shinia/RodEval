@@ -11,7 +11,7 @@ import requests
 
 from .base import AudioModelBase
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 # Standard DashScope endpoints (fallback)
 _DEFAULT_BASE = 'https://dashscope.aliyuncs.com'

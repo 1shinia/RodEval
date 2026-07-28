@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 class ProgressTracker:

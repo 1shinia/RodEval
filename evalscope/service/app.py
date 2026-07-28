@@ -264,7 +264,7 @@ def _setup_access_logging(app: Flask, outputs_root: str) -> None:
     if os.environ.get('EVALSCOPE_ACCESS_LOG', '1') == '0':
         return
 
-    access_log = logging.getLogger('evalscope.access')
+    access_log = logging.getLogger('evalperf.access')
     access_log.propagate = False
 
     log_path = os.path.join(outputs_root, 'evalscope_access.log')

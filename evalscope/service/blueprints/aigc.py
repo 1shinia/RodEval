@@ -13,7 +13,7 @@ from evalscope.service.utils.log import create_log_file, validate_task_id
 from evalscope.service.utils.process import register_process, try_reserve_slot, unregister_process
 from evalscope.utils.logger import configure_logging, get_logger
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 bp_aigc = Blueprint('aigc', __name__, url_prefix='/api/v1/aigc')
 

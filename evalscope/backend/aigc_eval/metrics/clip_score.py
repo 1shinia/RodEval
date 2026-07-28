@@ -4,7 +4,7 @@ import torch
 from PIL import Image
 from typing import List, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 def compute_clip_score(

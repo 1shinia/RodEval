@@ -9,7 +9,7 @@ from pathlib import Path
 from PIL import Image
 from typing import List, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 # Cache for loaded models to avoid reloading per evaluation
 _clip_model = None

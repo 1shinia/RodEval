@@ -4,7 +4,7 @@ from pathlib import Path
 from PIL import Image
 from typing import List
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 def save_images(images: List[Image.Image], output_dir: Path, prefix: str = '') -> List[Path]:

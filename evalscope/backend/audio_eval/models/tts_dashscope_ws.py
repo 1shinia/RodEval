@@ -18,7 +18,7 @@ from websockets.sync.client import connect as ws_connect
 from .asr_dashscope import _base_url
 from .base import AudioModelBase
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 # ── protocol constants (mirrors dashscope.protocol.websocket) ──────────────
 

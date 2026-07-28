@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 from .base import AudioModelBase
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 # Default model cache dir
 _DEFAULT_MODEL_DIR = "/root/.cache/whisper"

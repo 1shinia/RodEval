@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from .base import AIGCModelBase, resolve_api_url
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 class Txt2ImgModel(AIGCModelBase):

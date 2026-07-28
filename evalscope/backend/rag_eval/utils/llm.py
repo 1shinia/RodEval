@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from evalscope.api.model import GenerateConfig, Model, get_model
 from evalscope.constants import DEFAULT_MODEL_REVISION, EvalType
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 class LLM:
