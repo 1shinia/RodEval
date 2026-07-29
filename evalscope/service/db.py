@@ -273,13 +273,18 @@ def query_eval_reports(
     col = sort_map.get(sort_by, 'timestamp')
     direction = 'DESC' if sort_order == 'desc' else 'ASC'
 
-    # Available filter values (before filtering)
+    # Available filter values (before filtering) — scoped to backend
+    _backend_where = 'AND eval_backend = ?' if backend else ''
+    _backend_params = [backend] if backend else []
     avail_models = [
         r[0] for r in conn.
-        execute('SELECT DISTINCT model_name FROM eval_reports WHERE model_name != "" ORDER BY model_name').fetchall()
+        execute(f'SELECT DISTINCT model_name FROM eval_reports WHERE model_name != "" {_backend_where} ORDER BY model_name',
+                _backend_params).fetchall()
     ]
-    avail_datasets_raw = conn.execute('SELECT DISTINCT dataset_name FROM eval_reports WHERE dataset_name != ""'
-                                      ).fetchall()
+    avail_datasets_raw = conn.execute(
+        f'SELECT DISTINCT dataset_name FROM eval_reports WHERE dataset_name != "" {_backend_where}',
+        _backend_params,
+    ).fetchall()
     avail_datasets: list[str] = []
     for r in avail_datasets_raw:
         for d in r[0].split(', '):

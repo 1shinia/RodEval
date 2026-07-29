@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Eye, FolderOpen, GitCompareArrows, Loader2, ScanSearch } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { BookOpen, Eye, Trash2 } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
 import { toast } from '@/components/common/Toast'
 import * as reportsApi from '@/api/reports'
-import type { ListReportsResponse, ReportSummary } from '@/api/types'
+import type { ReportSummary } from '@/api/types'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import ReportFiltersBar, { type ReportFilters } from '@/components/reports/ReportFilters'
-import ReportCard from '@/components/reports/ReportCard'
 import { EmptyState } from '@/pages/ReportsLayout'
 
 const PAGE_SIZE = 20
@@ -24,19 +23,15 @@ const defaultFilters: ReportFilters = {
   sortOrder: 'desc',
 }
 
+function extractTaskId(name: string): string {
+  const idx = name.indexOf('@@')
+  return idx > 0 ? name.slice(0, idx) : name
+}
+
 export default function RAGReportsTab() {
   const { t } = useLocale()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  const {
-    rootPath,
-    setRootPath,
-    selectedForCompare,
-    toggleSelectForCompare,
-    setCompareSelection,
-    clearCompareSelection,
-  } = useReports()
+  const { rootPath } = useReports()
 
   const [filters, setFilters] = useState<ReportFilters>(defaultFilters)
   const [page, setPage] = useState(1)
@@ -44,9 +39,8 @@ export default function RAGReportsTab() {
   const [total, setTotal] = useState(0)
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [availableDatasets, setAvailableDatasets] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [hasScanned, setHasScanned] = useState(false)
 
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -57,11 +51,10 @@ export default function RAGReportsTab() {
   }, [filters.search])
 
   const fetchReports = useCallback(async () => {
-    if (!hasScanned) return
     setLoading(true)
     setError(null)
     try {
-      const res: ListReportsResponse = await reportsApi.listReports({
+      const res = await reportsApi.listReports({
         rootPath,
         search: debouncedSearch || undefined,
         models: filters.models.length ? filters.models : undefined,
@@ -85,157 +78,98 @@ export default function RAGReportsTab() {
     } finally {
       setLoading(false)
     }
-  }, [rootPath, debouncedSearch, filters.models, filters.datasets, filters.scoreMin, filters.scoreMax, filters.sortBy, filters.sortOrder, page, hasScanned])
+  }, [rootPath, debouncedSearch, filters.models, filters.datasets, filters.scoreMin, filters.scoreMax, filters.sortBy, filters.sortOrder, page])
 
   useEffect(() => { fetchReports() }, [fetchReports])
-
   useEffect(() => { setPage(1) }, [debouncedSearch, filters.models, filters.datasets, filters.scoreMin, filters.scoreMax, filters.sortBy, filters.sortOrder])
-
-  const handleScan = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    setHasScanned(true)
-    try {
-      const res = await reportsApi.listReports({
-        rootPath,
-        page: 1,
-        pageSize: PAGE_SIZE,
-        sortBy: filters.sortBy,
-        sortOrder: filters.sortOrder,
-        backend: 'RAGEval',
-      })
-      setReports(res.reports)
-      setTotal(res.total)
-      setAvailableModels(res.filters.available_models)
-      setAvailableDatasets(res.filters.available_datasets)
-      setPage(1)
-      setFilters(defaultFilters)
-      clearCompareSelection()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Scan failed'
-      setError(msg)
-      toast.error(msg)
-    } finally {
-      setLoading(false)
-    }
-  }, [rootPath, filters.sortBy, filters.sortOrder, clearCompareSelection])
-
-  useEffect(() => {
-    const urlRoot = searchParams.get('root_path')
-    if (urlRoot) setRootPath(urlRoot)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const hasAutoScanned = useRef(false)
-  useEffect(() => {
-    const urlRoot = searchParams.get('root_path')
-    const effectiveRoot = urlRoot || rootPath
-    if (effectiveRoot && !hasScanned && !hasAutoScanned.current) {
-      hasAutoScanned.current = true
-      handleScan()
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const currentPageNames = useMemo(() => reports.map((r) => r.name), [reports])
-  const allSelected = currentPageNames.length > 0 && currentPageNames.every((n) => selectedForCompare.includes(n))
-
-  const handleSelectAll = useCallback(() => {
-    if (allSelected) {
-      setCompareSelection(selectedForCompare.filter((n) => !currentPageNames.includes(n)))
-    } else {
-      const merged = new Set([...selectedForCompare, ...currentPageNames])
-      setCompareSelection(Array.from(merged))
-    }
-  }, [allSelected, selectedForCompare, currentPageNames, setCompareSelection])
-
-  const handleCardClick = useCallback(
-    (name: string) => {
-      navigate(`/reports/${encodeURIComponent(name)}?root_path=${encodeURIComponent(rootPath)}`)
-    },
-    [navigate, rootPath],
-  )
-
-  const handleCompare = useCallback(() => {
-    if (selectedForCompare.length >= 2) {
-      navigate(`/compare?reports=${selectedForCompare.slice(0, 3).join(';')}&root_path=${encodeURIComponent(rootPath)}`)
-    }
-  }, [selectedForCompare, navigate, rootPath])
 
   const handleDelete = useCallback(async (name: string) => {
     if (!window.confirm(t('reports.confirmDelete', { name }))) return
     try {
       await reportsApi.deleteReport(rootPath, name)
       toast.success(t('common.deleteSuccess'))
-      clearCompareSelection()
       fetchReports()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('common.deleteFailed'))
     }
-  }, [rootPath, clearCompareSelection, fetchReports, t])
-
-  const handleViewHtml = useCallback(() => {
-    if (selectedForCompare.length === 1) {
-      const url = reportsApi.getHtmlReportUrl(rootPath, selectedForCompare[0])
-      window.open(url, '_blank')
-    }
-  }, [selectedForCompare, rootPath])
+  }, [rootPath, fetchReports, t])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <>
-      <div className="flex items-center gap-2">
-        <FolderOpen size={16} className="text-[var(--text-muted)] shrink-0" />
-        <input
-          type="text"
-          value={rootPath}
-          onChange={(e) => setRootPath(e.target.value)}
-          className="flex-1 px-3 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)] transition-all duration-[var(--transition)]"
-          placeholder={t('reports.pathLabel')}
-        />
-        <Button onClick={handleScan} disabled={loading} size="md">
-          {loading ? <><Loader2 size={14} className="animate-spin" />{t('reports.scanning')}</> : <><ScanSearch size={14} />{t('reports.scan')}</>}
-        </Button>
-      </div>
-
-      {hasScanned && <ReportFiltersBar filters={filters} availableModels={availableModels} availableDatasets={availableDatasets} onChange={setFilters} />}
+      <ReportFiltersBar filters={filters} availableModels={availableModels} availableDatasets={availableDatasets} onChange={setFilters} />
 
       {error && (
         <div className="px-4 py-3 rounded-[var(--radius)] bg-[var(--danger-bg)] border border-[var(--danger-border)] text-sm text-[var(--danger)]">{error}</div>
       )}
 
-      {loading && hasScanned ? (
-        <div className="flex flex-col gap-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height={64} className="rounded-[var(--radius)]" />)}</div>
-      ) : !hasScanned ? (
-        <EmptyState icon={<ScanSearch size={40} />} title={t('reports.noReports')} subtitle={t('reports.scanFirst')} />
+      {loading ? (
+        <div className="flex flex-col gap-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
       ) : reports.length === 0 ? (
-        <EmptyState icon={<ScanSearch size={40} />} title={t('reports.noRAGReports')} subtitle={t('reports.scanFirst')} />
+        <EmptyState icon={<BookOpen size={40} />} title="暂无 RAG 评估报告" subtitle="完成 RAG 评估后，报告将显示在这里" />
       ) : (
-        <div className="flex flex-col gap-2">
-          {reports.map((report) => (
-            <ReportCard key={report.name} report={report} selected={selectedForCompare.includes(report.name)} onSelect={toggleSelectForCompare} onClick={handleCardClick} onDelete={handleDelete} />
-          ))}
-        </div>
-      )}
+        <>
+          <div className="rounded-[var(--radius)] border border-[var(--border)] overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[var(--bg-deep)] border-b border-[var(--border)]">
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">任务 ID</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">模型</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">数据集</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">样本数</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">创建时间</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reports.map((report) => (
+                  <tr key={report.name} className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-card2)] transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{extractTaskId(report.name)}</td>
+                    <td className="px-4 py-3 text-[var(--text)]">{report.model_name}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{report.dataset_name}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text)]">{report.num_samples}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-[var(--accent)]">{report.score.toFixed(4)}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{report.timestamp ? new Date(report.timestamp).toLocaleString() : '-'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/reports/${encodeURIComponent(report.name)}?root_path=${encodeURIComponent(rootPath)}`)}>
+                          <Eye size={14} />
+                          查看
+                        </Button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(report.name) }} className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title="删除">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      {hasScanned && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>←</Button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
-            .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
-              if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis')
-              acc.push(p)
-              return acc
-            }, [])
-            .map((item, idx) =>
-              item === 'ellipsis' ? (
-                <span key={`e${idx}`} className="px-1 text-[var(--text-dim)]">...</span>
-              ) : (
-                <Button key={item} variant={item === page ? 'primary' : 'ghost'} size="sm" onClick={() => setPage(item as number)} className="!min-w-[32px]">{item}</Button>
-              ),
-            )}
-          <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>→</Button>
-        </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>←</Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((item, idx) =>
+                  item === 'ellipsis' ? (
+                    <span key={`e${idx}`} className="px-1 text-[var(--text-dim)]">...</span>
+                  ) : (
+                    <Button key={item} variant={item === page ? 'primary' : 'ghost'} size="sm" onClick={() => setPage(item as number)} className="!min-w-[32px]">{item}</Button>
+                  ),
+                )}
+              <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>→</Button>
+            </div>
+          )}
+        </>
       )}
     </>
   )

@@ -21,6 +21,7 @@ interface ReportFiltersProps {
   availableModels: string[]
   availableDatasets: string[]
   onChange: (filters: ReportFilters) => void
+  datasetLabel?: string
 }
 
 // Multi-select dropdown with checkboxes
@@ -97,6 +98,7 @@ export default function ReportFiltersBar({
   availableModels,
   availableDatasets,
   onChange,
+  datasetLabel,
 }: ReportFiltersProps) {
   const { t } = useLocale()
 
@@ -159,7 +161,7 @@ export default function ReportFiltersBar({
         />
 
         <MultiSelectDropdown
-          label={t('reports.filters.dataset')}
+          label={datasetLabel || t('reports.filters.dataset')}
           options={availableDatasets}
           selected={filters.datasets}
           onChange={(datasets) => update({ datasets })}

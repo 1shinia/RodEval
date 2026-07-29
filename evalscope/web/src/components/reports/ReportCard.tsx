@@ -8,8 +8,8 @@ import { scoreColor } from '@/utils/colorScale'
 
 interface ReportCardProps {
   report: ReportSummary
-  selected: boolean
-  onSelect: (name: string) => void
+  selected?: boolean
+  onSelect?: (name: string) => void
   /** Navigate to report detail */
   onClick: (name: string) => void
   /** Delete this report */
@@ -69,19 +69,20 @@ function ReportCard({ report, selected, onSelect, onClick, onDelete }: ReportCar
           : 'border-[var(--border)] hover:border-[var(--border-md)]',
       )}
     >
-      {/* Checkbox — always visible; dimmed when unchecked, full opacity on hover or when checked */}
-      <div
-        onClick={(e) => {
-          e.stopPropagation()
-          onSelect(report.name)
-        }}
-        className={cn(
-          'transition-opacity duration-150 cursor-pointer',
-          selected ? 'opacity-100' : 'opacity-30 group-hover:opacity-70',
-        )}
-      >
-        <Checkbox checked={selected} />
-      </div>
+      {onSelect && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelect(report.name)
+          }}
+          className={cn(
+            'transition-opacity duration-150 cursor-pointer',
+            selected ? 'opacity-100' : 'opacity-30 group-hover:opacity-70',
+          )}
+        >
+          <Checkbox checked={!!selected} />
+        </div>
+      )}
 
       {/* Content — clicking navigates to detail */}
       <div
