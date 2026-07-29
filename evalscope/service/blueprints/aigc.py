@@ -389,10 +389,17 @@ def _build_aigc_config(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
         'model': {
             'model_name_or_path': data.get('model', {}).get('model_name_or_path', ''),
             'model_type': data.get('model', {}).get('model_type', 'txt2img'),
+            'provider': data.get('model', {}).get('provider', 'openai'),
             'api_base': data.get('model', {}).get('api_base'),
             'api_key': data.get('model', {}).get('api_key'),
             'device': data.get('model', {}).get('device', 'cuda'),
             'dtype': data.get('model', {}).get('dtype', 'float16'),
+            # Advanced API overrides (for custom provider)
+            'endpoint_template': data.get('model', {}).get('endpoint_template'),
+            'param_aliases': data.get('model', {}).get('param_aliases'),
+            'response_path': data.get('model', {}).get('response_path'),
+            'async_poll_url': data.get('model', {}).get('async_poll_url'),
+            'async_content_url': data.get('model', {}).get('async_content_url'),
         },
         'generate': {
             'width': data.get('generate', {}).get('width', 512),

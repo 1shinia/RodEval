@@ -65,6 +65,18 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [modelSource, setModelSource] = useState<'api' | 'local'>('api')
   const isLocal = modelSource === 'local'
 
+  // API provider (only when modelSource === 'api')
+  const [provider, setProvider] = useState<'openai' | 'custom'>('openai')
+  const isCustomProvider = provider === 'custom'
+
+  // Advanced settings (for custom provider)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [endpointTemplate, setEndpointTemplate] = useState('')
+  const [paramAliases, setParamAliases] = useState('')
+  const [responsePath, setResponsePath] = useState('')
+  const [asyncPollUrl, setAsyncPollUrl] = useState('')
+  const [asyncContentUrl, setAsyncContentUrl] = useState('')
+
   const [tool, setTool] = useState<AIGCTool>('txt2img')
 
   const handleToolChange = (newTool: AIGCTool) => {
@@ -162,6 +174,20 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     if (!isLocal) {
       modelConfig.api_base = apiBase.trim()
       if (apiKey.trim()) modelConfig.api_key = apiKey.trim()
+      modelConfig.provider = provider
+      if (provider === 'custom') {
+        if (endpointTemplate.trim()) modelConfig.endpoint_template = endpointTemplate.trim()
+        if (paramAliases.trim()) {
+          try {
+            modelConfig.param_aliases = JSON.parse(paramAliases.trim())
+          } catch {
+            newErrors.paramAliases = 'JSON 格式错误，请修正后再提交'
+          }
+        }
+        if (responsePath.trim()) modelConfig.response_path = responsePath.trim()
+        if (asyncPollUrl.trim()) modelConfig.async_poll_url = asyncPollUrl.trim()
+        if (asyncContentUrl.trim()) modelConfig.async_content_url = asyncContentUrl.trim()
+      }
     } else {
       modelConfig.device = device
       modelConfig.dtype = dtype
@@ -245,6 +271,77 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           <span className="text-sm text-[var(--text)]">{t('eval.modelSourceLocal')}</span>
         </label>
       </div>
+
+      {/* API Provider (only when API mode) */}
+      {!isLocal && (
+        <div className="flex items-center gap-6">
+          <label className={`${FORM_LABEL_CLASS} !mb-0`}>API 提供商</label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="aigc_provider" value="openai" checked={!isCustomProvider}
+              onChange={() => setProvider('openai')} className="accent-[var(--accent)]" />
+            <span className="text-sm text-[var(--text)]">OpenAI 兼容</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="aigc_provider" value="custom" checked={isCustomProvider}
+              onChange={() => setProvider('custom')} className="accent-[var(--accent)]" />
+            <span className="text-sm text-[var(--text)]">自定义</span>
+          </label>
+        </div>
+      )}
+
+      {/* Advanced settings (for custom provider) */}
+      {!isLocal && isCustomProvider && (
+        <div className="border border-[var(--border-md)] rounded-lg p-4 space-y-3">
+          <button type="button"
+            className="flex items-center gap-2 text-sm font-medium text-[var(--text)] w-full"
+            onClick={() => setShowAdvanced(!showAdvanced)}>
+            <span className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>▶</span>
+            高级设置（路径映射 · 参数别名 · 异步轮询）
+          </button>
+
+          {showAdvanced && (
+            <div className="space-y-3 pt-2">
+              <FormField label="端点路径模板" hint='留空使用标准 OpenAI 路径（{base}/images/generations 或 /video/generations）。填 "passthrough" 表示不追加任何路径。'>
+                <input value={endpointTemplate}
+                  onChange={e => setEndpointTemplate(e.target.value)}
+                  className={FORM_INPUT_CLASS}
+                  placeholder="自动（OpenAI 标准路径）" />
+              </FormField>
+
+              <FormField label="请求参数别名（JSON）" hint='标准字段名对应的 API 实际字段名，如 {"duration": "seconds"}'>
+                <input value={paramAliases}
+                  onChange={e => setParamAliases(e.target.value)}
+                  className={FORM_INPUT_CLASS}
+                  placeholder='{"duration": "seconds"}' />
+                {errors.paramAliases && (
+                  <span className="text-xs text-[var(--error)] mt-1">{errors.paramAliases}</span>
+                )}
+              </FormField>
+
+              <FormField label="响应提取路径" hint='JMESPath 风格，如 data[0].b64_json。留空自动检测 OpenAI 格式。'>
+                <input value={responsePath}
+                  onChange={e => setResponsePath(e.target.value)}
+                  className={FORM_INPUT_CLASS}
+                  placeholder="data[0].b64_json" />
+              </FormField>
+
+              <FormField label="异步轮询查询接口" hint='模板，用 {id} 表示 task_id。如 /videos/{id}（仅视频需要）。'>
+                <input value={asyncPollUrl}
+                  onChange={e => setAsyncPollUrl(e.target.value)}
+                  className={FORM_INPUT_CLASS}
+                  placeholder="/videos/{id}" />
+              </FormField>
+
+              <FormField label="异步任务内容下载接口" hint='模板，如 /videos/{id}/content（仅视频需要）。'>
+                <input value={asyncContentUrl}
+                  onChange={e => setAsyncContentUrl(e.target.value)}
+                  className={FORM_INPUT_CLASS}
+                  placeholder="/videos/{id}/content" />
+              </FormField>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Model Configuration */}
       <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2">

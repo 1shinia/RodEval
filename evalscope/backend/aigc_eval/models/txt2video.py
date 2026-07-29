@@ -1,43 +1,34 @@
-"""Text-to-video model adapter."""
-import base64
-import io
-import json
+"""Text-to-video model adapter using API or local diffusers."""
+
 import logging
-import os
-import requests
 import tempfile
 from pathlib import Path
-from PIL import Image
 from typing import Any, Dict, List
 
-from .base import AIGCModelBase, resolve_api_url
+from PIL import Image
+
+from .adapters import create_adapter
+from .base import AIGCModelBase
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
-def _w_h_to_resolution(width: int, height: int) -> str:
-    """Convert WxH to resolution string for edgecloud fallback."""
-    if height <= 480:
-        return '480p'
-    if height <= 720:
-        return '720p'
-    return '1080p'
-
-
 class Txt2VideoModel(AIGCModelBase):
-    """Text-to-video model using API or local diffusers."""
+    """Text-to-video model using API adapter or local diffusers."""
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.pipe = None
         self.api_base = config.get('api_base')
-        self.api_key = config.get('api_key')
+        self._adapter = None
         self.num_frames = config.get('num_frames', 16)
         self.fps = config.get('fps', 8)
 
     def load(self) -> None:
+        """Load the video pipeline or init API adapter."""
         if self.api_base:
-            logger.info(f'Using API mode: {self.api_base}')
+            self._adapter = create_adapter(self.config)
+            logger.info('Using API adapter: %s', type(self._adapter).__name__)
             return
 
         try:
@@ -48,7 +39,7 @@ class Txt2VideoModel(AIGCModelBase):
                 'Install with: pip install diffusers'
             )
 
-        logger.info(f'Loading video model: {self.model_name}')
+        logger.info('Loading video model: %s', self.model_name)
         self.pipe = StableVideoDiffusionPipeline.from_pretrained(
             self.model_name,
             torch_dtype=self._get_dtype(),
@@ -81,34 +72,19 @@ class Txt2VideoModel(AIGCModelBase):
         Returns:
             List of dicts with keys: video_path, frames (List[PIL.Image])
         """
-        if self.api_base:
+        if self._adapter:
             return self._generate_api(
-                prompts,
-                width,
-                height,
-                num_inference_steps,
-                guidance_scale,
-                negative_prompt,
-                seed,
-                num_frames,
-                fps,
-                resolution,
-                ratio,
+                prompts, width, height, seed,
+                num_frames, fps, resolution, ratio,
             )
 
         if self.pipe is None:
             raise RuntimeError('Model not loaded. Call load() first.')
 
         return self._generate_local(
-            prompts,
-            width,
-            height,
-            num_inference_steps,
-            guidance_scale,
-            negative_prompt,
-            seed,
-            num_frames,
-            fps,
+            prompts, width, height, num_inference_steps,
+            guidance_scale, negative_prompt, seed,
+            num_frames, fps,
         )
 
     def _generate_api(
@@ -116,129 +92,37 @@ class Txt2VideoModel(AIGCModelBase):
         prompts: List[str],
         width: int,
         height: int,
-        num_inference_steps: int,
-        guidance_scale: float,
-        negative_prompt: str,
         seed: int,
         num_frames: int,
         fps: int,
         resolution: str,
         ratio: str,
     ) -> List[Dict[str, Any]]:
-        """Generate videos using OpenAI-compatible API."""
-        headers = {'Content-Type': 'application/json'}
-        if self.api_key:
-            headers['Authorization'] = f'Bearer {self.api_key}'
+        """Generate videos using the API adapter."""
+        tool = self.config.get('tool', 'txt2video')
+        results: List[Dict[str, Any]] = []
 
-        url = resolve_api_url(self.api_base or '', self.config.get('tool', 'txt2video'))
-        is_edgecloud = 'edgecloudapp.com' in (self.api_base or '')
-
-        duration = num_frames // fps if fps > 0 else 5
-
-        results = []
         for i, prompt in enumerate(prompts):
-            if is_edgecloud:
-                payload = {
-                    'model': self.model_name,
-                    'prompt': prompt,
-                    'size': f'{width}x{height}',
-                }
-                if duration >= 2:
-                    payload['seconds'] = max(duration, 4)
-            else:
-                payload = {
-                    'model': self.model_name,
-                    'prompt': prompt,
-                    'n': 1,
-                    'size': f'{width}x{height}',
-                }
-                if duration >= 2:
-                    payload['duration'] = duration
-                if resolution:
-                    payload['resolution'] = resolution
-                if ratio:
-                    payload['ratio'] = ratio
-
-            logger.info(
-                'API payload keys: %s, provider=%s, duration=%s, seconds=%s',
-                list(payload.keys()),
-                'edgecloud' if is_edgecloud else 'openai',
-                payload.get('duration'),
-                payload.get('seconds'),
+            video_bytes = self._adapter.generate(
+                prompt,
+                tool=tool,
+                width=width,
+                height=height,
+                seed=seed,
+                num_frames=num_frames,
+                fps=fps,
+                resolution=resolution,
+                ratio=ratio,
             )
-
-            # POST with retry: on size-related 400, fall back to resolution format
-            response = requests.post(url, json=payload, headers=headers, timeout=300)
-            if not response.ok and is_edgecloud and response.status_code == 400:
-                err_text = response.text.lower()
-                if any(kw in err_text for kw in ('size', 'resolution', 'invalid')):
-                    alt_size = _w_h_to_resolution(width, height)
-                    logger.info('Edgecloud: size=%s rejected, retrying with %s', payload['size'], alt_size)
-                    payload['size'] = alt_size
-                    response = requests.post(url, json=payload, headers=headers, timeout=300)
-
-            if not response.ok:
-                logger.error(f'API error {response.status_code}: {response.text}')
-            response.raise_for_status()
-
-            data = response.json()
-            logger.info(f'API response keys: {list(data.keys())}')
-
-            # Handle async video generation (task_id/id + status pattern)
-            if ('task_id' in data or 'id' in data) and 'status' in data:
-                data = self._poll_async_task(data, url, headers, i)
-
-            # Handle edgecloud async task-only response (no video URL available)
-            if 'task_id' in data and 'status' in data and 'url' not in data:
-                tid = data.get('task_id', 'unknown')
-                logger.warning('Edgecloud task %s: no video URL in response, skipping', tid)
-                results.append({'video_path': None, 'frames': []})
-                continue
-
-            # Handle different response formats
-            item = None
-            if 'b64_json' in data:
-                item = data  # Direct base64 response from edgecloud content endpoint
-            elif 'data' in data and isinstance(data['data'], list) and len(data['data']) > 0:
-                item = data['data'][0]
-            elif 'url' in data:
-                item = data  # Flat response with url field
-            elif 'video' in data:
-                item = {'url': data['video']}
-            elif 'result' in data:
-                result_data = data['result']
-                if isinstance(result_data, dict):
-                    item = result_data
-                elif isinstance(result_data, list) and len(result_data) > 0:
-                    item = result_data[0]
-            else:
-                raise ValueError(
-                    f'Unexpected API response format: keys={list(data.keys())}. '
-                    f'First 200 chars: {str(data)[:200]}'
-                )
-
-            video_path = None
-            frames: List[Image.Image] = []
-
-            if 'b64_json' in item:
-                video_data = base64.b64decode(item['b64_json'])
-                video_path = self._save_video_bytes(video_data, i)
-            elif 'url' in item:
-                video_url = item['url']
-                resp = requests.get(video_url, timeout=120)
-                resp.raise_for_status()
-                video_path = self._save_video_bytes(resp.content, i)
-            else:
-                raise ValueError(f'Unexpected API response: {list(item.keys())}')
-
-            # Extract frames for metrics
-            if video_path:
+            if video_bytes:
+                video_path = self._save_video_bytes(video_bytes, i)
                 frames = self._extract_frames(video_path, max_frames=num_frames)
-
-            results.append({
-                'video_path': str(video_path) if video_path else None,
-                'frames': frames,
-            })
+                results.append({
+                    'video_path': str(video_path),
+                    'frames': frames,
+                })
+            else:
+                results.append({'video_path': None, 'frames': []})
 
         return results
 
@@ -254,14 +138,16 @@ class Txt2VideoModel(AIGCModelBase):
         num_frames: int,
         fps: int,
     ) -> List[Dict[str, Any]]:
-        """Generate videos using local diffusers pipeline (placeholder)."""
+        """Generate videos using local diffusers pipeline."""
         import torch
+
+        assert self.pipe is not None, 'pipe must be loaded before _generate_local'
 
         generator = torch.Generator(device=self.device).manual_seed(seed)
         results = []
 
         for i, prompt in enumerate(prompts):
-            logger.debug(f'Generating video for: {prompt[:50]}...')
+            logger.debug('Generating video for: %s...', prompt[:50])
             output = self.pipe(
                 prompt,
                 width=width,
@@ -273,7 +159,6 @@ class Txt2VideoModel(AIGCModelBase):
                 generator=generator,
             )
 
-            # Extract frames from output
             frames: List[Image.Image] = []
             if hasattr(output, 'frames') and output.frames:
                 frames = output.frames[0] if isinstance(output.frames[0], list) else output.frames
@@ -281,105 +166,11 @@ class Txt2VideoModel(AIGCModelBase):
                 frames = [f if isinstance(f, Image.Image) else Image.fromarray(f) for f in output]
 
             results.append({
-                'video_path': None,  # Local mode: frames only, no video file saved
+                'video_path': None,
                 'frames': frames,
             })
 
         return results
-
-    def _poll_async_task(self, data: dict, api_base: str, headers: dict, index: int) -> dict:
-        """Poll async video generation task until complete.
-
-        Returns the completed response data.
-        """
-        import time as _time
-
-        task_id = data.get('task_id', data.get('id', ''))
-        status = data.get('status', '')
-        logger.info(f'Async video task {task_id}: status={status}')
-
-        if status in ('completed', 'succeeded', 'done'):
-            return data
-
-        # For edgecloud, poll /videos/{id} for status, then /videos/{id}/content for video
-        if 'edgecloudapp.com' in (self.api_base or ''):
-            base = api_base.rstrip('/')
-            status_url = f'{base}/videos/{task_id}'
-            content_url = f'{base}/videos/{task_id}/content'
-            logger.info('Edgecloud async task %s: polling %s', task_id, status_url)
-
-            max_attempts = 60  # 5 minutes max
-            for attempt in range(max_attempts):
-                _time.sleep(5)
-                resp = requests.get(status_url, headers=headers, timeout=30)
-                if not resp.ok:
-                    logger.warning('Edgecloud poll %d: HTTP %d', attempt + 1, resp.status_code)
-                    continue
-                data = resp.json()
-                status = data.get('status', '')
-                progress = data.get('progress', 0)
-                logger.info('Edgecloud task %s: status=%s, progress=%d%%', task_id, status, progress)
-
-                if status in ('completed', 'succeeded', 'done'):
-                    logger.info('Edgecloud task %s: downloading video from %s', task_id, content_url)
-                    dl = requests.get(content_url, headers=headers, timeout=120)
-                    if dl.status_code == 200 and len(dl.content) > 0:
-                        logger.info('Edgecloud task %s: video downloaded, size=%d', task_id, len(dl.content))
-                        return {'b64_json': base64.b64encode(dl.content).decode('utf-8')}
-                    logger.warning('Edgecloud task %s: download failed, HTTP %d', task_id, dl.status_code)
-                    return data  # Return status data as fallback
-
-                elif status in ('failed', 'error', 'cancelled'):
-                    raise RuntimeError(f'Edgecloud task {task_id} failed: {data}')
-
-            raise TimeoutError(f'Edgecloud task {task_id} did not complete within {max_attempts * 5}s')
-
-        # Non-edgecloud polling
-        base = api_base.rstrip('/')
-        poll_url = f'{base}/{task_id}'
-
-        max_attempts = 60  # 5 minutes max (5s intervals)
-        for attempt in range(max_attempts):
-            _time.sleep(5)
-            resp = requests.get(poll_url, headers=headers, timeout=30)
-            if not resp.ok:
-                logger.warning(f'Poll attempt {attempt + 1}: HTTP {resp.status_code}, body={resp.text[:300]}')
-                continue
-
-            raw = resp.json()
-            # Unwrap common API wrappers: {code, message, data}
-            data = raw.get('data', raw)
-            while isinstance(data, dict) and 'data' in data:
-                if isinstance(data['data'], dict) and 'status' in data['data']:
-                    data = data['data']
-                else:
-                    break
-            status = data.get('status', '')
-            progress = data.get('progress', 0)
-            logger.info(f'Video task {task_id}: status={status}, progress={progress}')
-
-            if status in ('completed', 'succeeded', 'done'):
-                logger.info(f'Video task {task_id} completed')
-                if 'url' in data or 'video_url' in data or 'b64_json' in data:
-                    return data
-                if 'content' in data:
-                    content = data['content']
-                    if isinstance(content, str):
-                        return {'url': content}
-                    if isinstance(content, dict) and 'url' in content:
-                        return {'url': content['url']}
-                    if isinstance(content, dict) and 'video_url' in content:
-                        return {'url': content['video_url']}
-                    return {'url': str(content)}
-                if 'result' in data:
-                    return {'url': data['result']}
-                if 'video' in data:
-                    return {'url': data['video']} if isinstance(data['video'], str) else data['video']
-                return data
-            elif status in ('failed', 'error', 'cancelled'):
-                raise RuntimeError(f'Video task {task_id} failed: {data}')
-
-        raise TimeoutError(f'Video task {task_id} did not complete within {max_attempts * 5}s')
 
     def _save_video_bytes(self, data: bytes, index: int) -> Path:
         """Save video bytes to a temporary file."""
@@ -390,12 +181,12 @@ class Txt2VideoModel(AIGCModelBase):
         return path
 
     def _extract_frames(self, video_path: Path, max_frames: int = 16) -> List[Image.Image]:
-        """Extract frames from a video file using ffmpeg or cv2."""
+        """Extract frames from a video file using cv2."""
         try:
             import cv2
             cap = cv2.VideoCapture(str(video_path))
             if not cap.isOpened():
-                logger.warning(f'Cannot open video: {video_path}')
+                logger.warning('Cannot open video: %s', video_path)
                 return []
 
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -403,7 +194,6 @@ class Txt2VideoModel(AIGCModelBase):
                 cap.release()
                 return []
 
-            # Sample evenly spaced frames
             indices = [int(i * total_frames / max_frames) for i in range(min(max_frames, total_frames))]
             frames = []
             for idx in indices:
@@ -418,6 +208,7 @@ class Txt2VideoModel(AIGCModelBase):
             return []
 
     def unload(self) -> None:
+        """Unload the model."""
         if self.pipe is not None:
             del self.pipe
             self.pipe = None
