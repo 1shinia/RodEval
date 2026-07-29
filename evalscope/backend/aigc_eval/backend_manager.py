@@ -251,8 +251,8 @@ class AIGCBackendManager(BackendManager):
                     seed=config.generate.seed + i,
                     num_frames=config.generate.num_frames,
                     fps=config.generate.fps,
-                    resolution=getattr(config.generate, 'resolution', '720p') or '720p',
-                    ratio=getattr(config.generate, 'ratio', '16:9') or '16:9',
+                    resolution=getattr(config.generate, 'resolution', '') or '',
+                    ratio=getattr(config.generate, 'ratio', '') or '',
                 )[0]
 
                 sample_result = {
