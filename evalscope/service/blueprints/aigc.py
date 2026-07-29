@@ -231,6 +231,11 @@ def list_aigc_reports():
             with open(results_file) as f:
                 results = json.load(f)
 
+            model_type = results.get('model_type', '')
+            # Only include AIGC reports (filter out audio/other)
+            if model_type not in ('txt2img', 'txt2video', 'img2img'):
+                continue
+
             # Extract summary info
             metrics = results.get('metrics', {})
             report = {

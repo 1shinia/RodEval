@@ -138,6 +138,7 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
 
   // Common
   const [limit, setLimit] = useState('')
+  const [randomSample, setRandomSample] = useState(false)
   const [evalBatchSize, setEvalBatchSize] = useState('1')
   const [showMore, setShowMore] = useState(false)
   const [repeats, setRepeats] = useState('1')
@@ -298,6 +299,7 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
       model_source: modelSource,
       model: isLocal ? (model || modelPath.split('/').pop() || 'local-model') : model,
       limit: limit ? Number(limit) : undefined,
+      random_sample: limit && randomSample ? true : undefined,
       eval_batch_size: evalBatchSize ? Number(evalBatchSize) : undefined,
     }
 
@@ -584,7 +586,15 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
         </FormField>
 
         <FormField label={t('eval.limit')} error={errors.limit}>
-          <input type="number" value={limit} onChange={(e) => { setLimit(e.target.value.replace(/[^0-9]/g, '')); if (errors.limit) setErrors((p) => ({ ...p, limit: '' })) }} className={inputClass(errors.limit)} placeholder={t('common.placeholderAllData')} />
+          <div className="flex items-center gap-3">
+            <input type="number" value={limit} onChange={(e) => { setLimit(e.target.value.replace(/[^0-9]/g, '')); if (errors.limit) setErrors((p) => ({ ...p, limit: '' })) }} className={inputClass(errors.limit) + ' flex-1'} placeholder={t('common.placeholderAllData')} />
+            <label className="flex items-center gap-1.5 text-sm text-[var(--text)] whitespace-nowrap cursor-pointer">
+              <input type="checkbox" checked={randomSample}
+                onChange={e => setRandomSample(e.target.checked)}
+                className="accent-[var(--accent)]" />
+              随机抽取
+            </label>
+          </div>
         </FormField>
 
         <FormField label={t('eval.batchSize')} error={errors.evalBatchSize}>

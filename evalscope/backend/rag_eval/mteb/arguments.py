@@ -22,7 +22,7 @@ class MTEBModelConfig(BaseArgument):
     prompt: Optional[str] = None
     prompts: Optional[Dict[str, str]] = None
     model_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    encode_kwargs: Dict[str, Any] = Field(default_factory=lambda: {'batch_size': 32})
+    encode_kwargs: Dict[str, Any] = Field(default_factory=lambda: {'batch_size': 1})
     hub: str = 'modelscope'
     # API model fields
     model_name: Optional[str] = None
@@ -56,6 +56,7 @@ class MTEBEvalConfig(BaseArgument):
     output_folder: str = 'outputs'
     overwrite_results: bool = True
     limits: Optional[int] = None
+    random_sample: bool = False
     hub: str = 'modelscope'
     top_k: int = 10
     splits: Optional[Dict[str, Any]] = None

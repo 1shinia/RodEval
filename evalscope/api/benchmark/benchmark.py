@@ -136,6 +136,11 @@ class DataAdapter(LLMJudgeMixin, SandboxMixin, ABC):
         return self._task_config.limit
 
     @property
+    def random_sample(self) -> bool:
+        """When True and limit is set, shuffle samples before taking the first N."""
+        return self._task_config.random_sample
+
+    @property
     def repeats(self) -> int:
         """
         Return the number of repeats for each sample in the benchmark.

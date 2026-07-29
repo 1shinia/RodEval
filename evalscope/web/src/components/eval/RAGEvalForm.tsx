@@ -86,6 +86,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
   const [ragTaskNames, setRagTaskNames] = useState('')
   const [ragLanguages, setRagLanguages] = useState('')
   const [ragLimit, setRagLimit] = useState('')
+  const [ragRandomSample, setRagRandomSample] = useState(false)
   const [ragDimension, setRagDimension] = useState('')
   const [ragMaxSeqLen, setRagMaxSeqLen] = useState('')
   const [ragBatchSize, setRagBatchSize] = useState('')
@@ -248,6 +249,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
     if (ragTaskNames) evalCfg.task_names = ragTaskNames.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
     if (ragLanguages) evalCfg.languages = ragLanguages.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
     if (ragLimit) evalCfg.limits = Number(ragLimit)
+    if (ragLimit && ragRandomSample) evalCfg.random_sample = true
     if (ragTopK) evalCfg.top_k = Number(ragTopK)
 
     onSubmit({
@@ -313,6 +315,11 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
                       className={FORM_INPUT_CLASS} placeholder="1024" />
                   </FormField>
                 )}
+                <FormField label={t('eval.ragBatchSize')}>
+                  <input type="number" value={ragBatchSize}
+                    onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
+                    className={FORM_INPUT_CLASS} placeholder="1" />
+                </FormField>
               </>
             )}
 
@@ -331,7 +338,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
                 <FormField label={t('eval.ragBatchSize')}>
                   <input type="number" value={ragBatchSize}
                     onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
-                    className={FORM_INPUT_CLASS} placeholder="32" />
+                    className={FORM_INPUT_CLASS} placeholder="1" />
                 </FormField>
                 {ragTool === 'embedding' && (
                   <FormField label={t('eval.ragPoolingMode')}>
@@ -425,9 +432,17 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
             </FormField>
 
             <FormField label={t('eval.ragLimit')}>
-              <input type="number" value={ragLimit}
-                onChange={e => setRagLimit(e.target.value.replace(/[^0-9]/g, ''))}
-                className={FORM_INPUT_CLASS} placeholder="全量" />
+              <div className="flex items-center gap-3">
+                <input type="number" value={ragLimit}
+                  onChange={e => setRagLimit(e.target.value.replace(/[^0-9]/g, ''))}
+                  className={FORM_INPUT_CLASS + ' flex-1'} placeholder="全量" />
+                <label className="flex items-center gap-1.5 text-sm text-[var(--text)] whitespace-nowrap cursor-pointer">
+                  <input type="checkbox" checked={ragRandomSample}
+                    onChange={e => setRagRandomSample(e.target.checked)}
+                    className="accent-[var(--accent)]" />
+                  随机抽取
+                </label>
+              </div>
             </FormField>
 
             {ragTool === 'reranker' && (

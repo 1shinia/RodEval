@@ -217,7 +217,8 @@ class DefaultDataAdapter(DataAdapter):
             limit = self.few_shot_num if is_fewshot else self.limit
             repeats = 1 if is_fewshot else self.repeats
             dataset_dict = DatasetDict.from_dataset(
-                dataset=subset_data, subset_list=self.subset_list, limit=limit, repeats=repeats
+                dataset=subset_data, subset_list=self.subset_list, limit=limit, repeats=repeats,
+                random_sample=self.random_sample,
             )
         else:
             # Load all specified subsets into separate entries

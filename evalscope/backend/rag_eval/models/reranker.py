@@ -177,12 +177,14 @@ class APIReranker(BaseReranker):
         self.batch_size = batch_size
         self.timeout = timeout
 
-        # Build the rerank URL (default /rerank, DashScope uses /reranks)
-        self.rerank_url = api_base.rstrip('/')
-        if not self.rerank_url.endswith(('/rerank', '/reranks')):
-            if 'dashscope.aliyuncs.com' in self.rerank_url:
-                self.rerank_url = f'{self.rerank_url}/reranks'
-            else:
+        # Build the rerank URL
+        self.is_dashscope = 'dashscope.aliyuncs.com' in api_base
+        if self.is_dashscope:
+            # DashScope native rerank endpoint
+            self.rerank_url = 'https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank'
+        else:
+            self.rerank_url = api_base.rstrip('/')
+            if not self.rerank_url.endswith('/rerank'):
                 self.rerank_url = f'{self.rerank_url}/rerank'
 
         # Set up headers
@@ -256,13 +258,22 @@ class APIReranker(BaseReranker):
             for i in range(0, len(pairs), batch_size):
                 batch_pairs = pairs[i:i + batch_size]
                 documents = [doc for _, doc in batch_pairs]
-                payload = {
-                    'model': self.model_name,
-                    'query': query,
-                    'documents': documents,
-                    'top_n': len(documents),
-                    'return_documents': False,
-                }
+
+                if self.is_dashscope:
+                    # DashScope native format: {model, input: {query, documents}, parameters: {top_n}}
+                    payload: Dict[str, Any] = {
+                        'model': self.model_name,
+                        'input': {'query': query, 'documents': documents},
+                        'parameters': {'top_n': len(documents), 'return_documents': False},
+                    }
+                else:
+                    payload = {
+                        'model': self.model_name,
+                        'query': query,
+                        'documents': documents,
+                        'top_n': len(documents),
+                        'return_documents': False,
+                    }
                 response = None
                 for attempt in range(max_retries):
                     try:
@@ -290,7 +301,12 @@ class APIReranker(BaseReranker):
                         time.sleep(wait_time)
                 response.raise_for_status()
                 data = response.json()
-                results = data.get('results')
+
+                if self.is_dashscope:
+                    # DashScope wraps results in output.results
+                    results = data.get('output', {}).get('results')
+                else:
+                    results = data.get('results')
                 if results is None:
                     raise ValueError(f'Invalid rerank response: {data}')
 

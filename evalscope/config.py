@@ -166,6 +166,9 @@ class TaskConfig(BaseArgument):
     limit: Optional[Union[int, float]] = None
     """Maximum number of samples to evaluate. Can be int (count) or float (fraction)."""
 
+    random_sample: bool = False
+    """When True and limit is set, shuffle samples before taking the first N."""
+
     eval_batch_size: int = 1
     """Batch size / concurrency for evaluation, applied across all stages:
     - Inference: concurrent requests (service mode) or batch size (checkpoint mode).

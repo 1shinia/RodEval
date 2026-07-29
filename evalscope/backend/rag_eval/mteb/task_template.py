@@ -92,7 +92,7 @@ def _is_retrieval_task(task) -> bool:
     return task_type in ('Retrieval', 'Reranking')
 
 
-def _apply_retrieval_limits(task, limits: int) -> None:
+def _apply_retrieval_limits(task, limits: int, random_sample: bool = False) -> None:
     """Apply query limits to a Retrieval task's queries/relevant_docs.
 
     MTEB 2.x stores retrieval data in task.dataset as a nested dict:
@@ -171,14 +171,14 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
                 task.data_loaded = False
                 task.load_data()
                 if _is_retrieval_task(task):
-                    _apply_retrieval_limits(task, eval_args.limits)
+                    _apply_retrieval_limits(task, eval_args.limits, eval_args.random_sample)
                 elif hasattr(task, 'dataset') and task.dataset is not None:
                     ds = task.dataset
+                    _limit_fn = (lambda d: d.shuffle(seed=42)) if eval_args.random_sample else (lambda d: d)
                     subset = DatasetDict({
-                        k: v.shuffle(seed=42).select(range(min(eval_args.limits, len(v))))
+                        k: _limit_fn(v).select(range(min(eval_args.limits, len(v))))
                         for k, v in ds.items()
-                    }) if isinstance(ds, DatasetDict) else ds.shuffle(seed=42
-                                                                      ).select(range(min(eval_args.limits, len(ds))))
+                    }) if isinstance(ds, DatasetDict) else _limit_fn(ds).select(range(min(eval_args.limits, len(ds))))
                     task.dataset = subset
             except Exception as e:
                 logger.warning(f'Failed to apply limits to {task.metadata.name}: {e}')

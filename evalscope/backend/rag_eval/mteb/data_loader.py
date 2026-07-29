@@ -15,7 +15,7 @@ from evalscope.utils.logger import get_logger
 logger = get_logger()
 
 
-def patch_tasks_for_modelscope(tasks: List, limits: Optional[int] = None) -> None:
+def patch_tasks_for_modelscope(tasks: List, limits: Optional[int] = None, random_sample: bool = False) -> None:
     """Patch a list of MTEB tasks to load data from ModelScope.
 
     Args:
@@ -23,9 +23,10 @@ def patch_tasks_for_modelscope(tasks: List, limits: Optional[int] = None) -> Non
         limits: Optional cap on the number of samples per split. For Retrieval
             tasks this caps the number of queries; for other task types it
             caps the number of rows per split.
+        random_sample: If True and limits is set, shuffle before selecting.
     """
     for task in tasks:
-        _patch_single_task(task, limits=limits)
+        _patch_single_task(task, limits=limits, random_sample=random_sample)
 
 
 def _is_retrieval_task(task) -> bool:
@@ -45,7 +46,7 @@ def _is_retrieval_task(task) -> bool:
         return False
 
 
-def _patch_single_task(task, limits: Optional[int] = None) -> None:
+def _patch_single_task(task, limits: Optional[int] = None, random_sample: bool = False) -> None:
     """Patch a single MTEB task's ``load_data`` method for ModelScope loading."""
     if _is_retrieval_task(task):
 
@@ -65,7 +66,7 @@ def _patch_single_task(task, limits: Optional[int] = None) -> None:
         task.load_data = types.MethodType(ms_load_data, task)
 
 
-def _load_generic_from_modelscope(task, limits: Optional[int] = None) -> None:
+def _load_generic_from_modelscope(task, limits: Optional[int] = None, random_sample: bool = False) -> None:
     """Load a generic (non-retrieval) MTEB dataset from ModelScope."""
     from modelscope import MsDataset
 
@@ -85,8 +86,9 @@ def _load_generic_from_modelscope(task, limits: Optional[int] = None) -> None:
 
     if limits is not None:
         try:
+            _limit_fn = (lambda d: d.shuffle(seed=42)) if random_sample else (lambda d: d)
             dataset = DatasetDict({
-                split: ds.shuffle(seed=42).select(range(min(limits, len(ds))))
+                split: _limit_fn(ds).select(range(min(limits, len(ds))))
                 for split, ds in dataset.items()
             })
         except Exception as e:

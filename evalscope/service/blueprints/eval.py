@@ -240,6 +240,7 @@ def _build_task_config_local(data: dict, launch_result: LaunchResult) -> TaskCon
         model=data.get('model') or os.path.basename(launch_result.model_path or data['model_path']),
         datasets=data.get('datasets', []),
         limit=data.get('limit'),
+        random_sample=data.get('random_sample', False),
         eval_batch_size=data.get('eval_batch_size', 1),
         dataset_hub=data.get('dataset_hub', 'modelscope'),
         dataset_dir=data.get('dataset_dir') or '',
