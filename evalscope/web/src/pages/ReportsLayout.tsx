@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { FileText, Image as ImageIcon, Mic } from 'lucide-react'
+import { FileText, Image as ImageIcon, Mic, BookOpen } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
@@ -30,6 +30,10 @@ export default function ReportsLayout() {
         <NavLink to="/reports/llm" className={tabClass}>
           <FileText size={16} />
           {t('reports.tabLLM')}
+        </NavLink>
+        <NavLink to="/reports/rag" className={tabClass}>
+          <BookOpen size={16} />
+          {t('reports.tabRAG')}
         </NavLink>
         <NavLink to="/reports/aigc" className={tabClass}>
           <ImageIcon size={16} />

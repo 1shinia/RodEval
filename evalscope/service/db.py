@@ -22,7 +22,7 @@ _db_path: str | None = None
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 2  # Bump when adding migrations below
+SCHEMA_VERSION = 3  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -83,6 +83,12 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         -- ALTER TABLE perf_tasks ADD COLUMN duration_seconds REAL DEFAULT 0;
         -- (No-op for now — placeholder showing the pattern)
         SELECT 1;
+    '''
+    ),
+    (
+        3, 'add eval_backend column', '''
+        ALTER TABLE eval_reports ADD COLUMN eval_backend TEXT DEFAULT '';
+        UPDATE eval_reports SET eval_backend = '' WHERE eval_backend IS NULL;
     '''
     ),
 ]
@@ -192,15 +198,17 @@ def upsert_eval_report(
     num_samples: int,
     timestamp: str,
     dataset_scores: dict | None = None,
+    eval_backend: str = '',
 ) -> None:
     conn = _get_conn()
     conn.execute(
         '''INSERT OR REPLACE INTO eval_reports
-           (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores)
-           VALUES (?, ?, ?, ?, ?, ?, ?)''',
+           (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores, eval_backend)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
         (
             task_id, model_name, dataset_name, score, num_samples, timestamp,
-            json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None
+            json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
+            eval_backend,
         ),
     )
     conn.commit()
@@ -216,6 +224,7 @@ def query_eval_reports(
     sort_order: str = 'desc',
     page: int = 1,
     page_size: int = 20,
+    backend: str = '',
 ) -> tuple[list[dict], int, list[str], list[str]]:
     """Return ``(items, total, available_models, available_datasets)``."""
     conn = _get_conn()
@@ -249,8 +258,11 @@ def query_eval_reports(
     if score_max is not None:
         where.append('score <= ?')
         params.append(score_max)
+    if backend:
+        where.append('eval_backend = ?')
+        params.append(backend)
 
-    where_sql = f'WHERE {" AND ".join(where)}' if where else ''
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ''
 
     sort_map = {
         'score': 'score',
@@ -600,14 +612,16 @@ def backfill(output_dir: str) -> None:
         raw_reports = scan_for_report_folders(output_dir)
         eval_count = 0
         eval_skipped = 0
-        # Pre-fetch existing task IDs to skip redundant processing
-        existing_eval = {r[0] for r in conn.execute('SELECT task_id FROM eval_reports').fetchall()}
+        # Pre-fetch existing task IDs that already have eval_backend set
+        existing_done = {
+            r[0] for r in conn.execute("SELECT task_id FROM eval_reports WHERE eval_backend != ''").fetchall()
+        }
         for rn in raw_reports:
             try:
                 # Extract task_id (prefix) from composite report_name
                 from evalscope.utils.data_utils import process_report_name
                 prefix, _, _ = process_report_name(rn)
-                if prefix in existing_eval:
+                if prefix in existing_done:
                     eval_skipped += 1
                     continue
                 report_list, datasets, _ = load_single_report(output_dir, rn)
@@ -645,6 +659,18 @@ def backfill(output_dir: str) -> None:
                         mtime = os.path.getmtime(dir_path)
                         timestamp = datetime.fromtimestamp(mtime).isoformat()
 
+                # Try to extract eval_backend from task config
+                eval_backend = ''
+                try:
+                    import yaml as _yaml
+                    config_path = os.path.join(output_dir, prefix, 'configs', 'task_config.yaml')
+                    if os.path.isfile(config_path):
+                        with open(config_path) as cf:
+                            cfg = _yaml.safe_load(cf) or {}
+                        eval_backend = cfg.get('eval_backend', '')
+                except Exception:
+                    pass
+
                 upsert_eval_report(
                     task_id=prefix,
                     model_name=first.model_name,
@@ -654,6 +680,7 @@ def backfill(output_dir: str) -> None:
                     num_samples=total_num,
                     timestamp=timestamp,
                     dataset_scores=dataset_scores,
+                    eval_backend=eval_backend,
                 )
                 eval_count += 1
             except Exception as e:

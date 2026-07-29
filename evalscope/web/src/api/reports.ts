@@ -21,8 +21,9 @@ export async function listReports(params: {
   sortOrder?: 'asc' | 'desc'
   page?: number
   pageSize?: number
+  backend?: string
 }): Promise<ListReportsResponse> {
-  return api<ListReportsResponse>(`${BASE}/list`, {
+  const query: Record<string, unknown> = {
     root_path: params.rootPath,
     search: params.search,
     models: params.models?.join(';'),
@@ -33,7 +34,9 @@ export async function listReports(params: {
     sort_order: params.sortOrder,
     page: params.page,
     page_size: params.pageSize,
-  })
+  }
+  if (params.backend) query.backend = params.backend
+  return api<ListReportsResponse>(`${BASE}/list`, query)
 }
 
 export async function scanReports(rootPath: string): Promise<string[]> {

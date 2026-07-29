@@ -91,7 +91,7 @@ export default function AudioReportsTab() {
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--bg-card2)] text-left">
                 <th className="px-4 py-3 font-medium text-[var(--text)]">任务 ID</th>
-                <th className="px-4 py-3 font-medium text-[var(--text)]">功能</th>
+                <th className="px-4 py-3 font-medium text-[var(--text)]">类型</th>
                 <th className="px-4 py-3 font-medium text-[var(--text)]">模型</th>
                 <th className="px-4 py-3 font-medium text-[var(--text)]">评估得分</th>
                 <th className="px-4 py-3 font-medium text-[var(--text)]">创建时间</th>

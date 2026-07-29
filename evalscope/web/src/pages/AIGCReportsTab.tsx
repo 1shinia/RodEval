@@ -85,8 +85,8 @@ export default function AIGCReportsTab() {
             <thead>
               <tr className="bg-[var(--bg-deep)] border-b border-[var(--border)]">
                 <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.taskId')}</th>
+                <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">类型</th>
                 <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelName')}</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelType')}</th>
                 <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.totalImages')}</th>
                 <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>
                 <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.createdAt')}</th>
@@ -97,8 +97,16 @@ export default function AIGCReportsTab() {
               {aigcReports.map((report) => (
                 <tr key={report.task_id} className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-card2)] transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{report.task_id}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      report.model_type === 'txt2img' ? 'bg-purple-500/10 text-purple-400' :
+                      report.model_type === 'txt2video' ? 'bg-blue-500/10 text-blue-400' :
+                      'bg-orange-500/10 text-orange-400'
+                    }`}>
+                      {report.model_type === 'txt2img' ? '文生图' : report.model_type === 'txt2video' ? '文生视频' : '图生图'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-[var(--text)]">{report.model_name}</td>
-                  <td className="px-4 py-3 text-[var(--text-muted)]">{report.model_type}</td>
                   <td className="px-4 py-3 text-right text-[var(--text)]">{report.total_images}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs">
                     <div className="flex flex-col gap-0.5 items-end">

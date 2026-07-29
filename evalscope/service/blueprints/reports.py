@@ -330,6 +330,7 @@ def list_reports():
         sort_order = request.args.get('sort_order', 'desc')
         page = max(1, request.args.get('page', 1, type=int))
         page_size = max(1, min(100, request.args.get('page_size', 20, type=int)))
+        backend = request.args.get('backend', '').strip()
 
         # --- Try SQLite first ---
         try:
@@ -344,6 +345,7 @@ def list_reports():
                 sort_order=sort_order,
                 page=page,
                 page_size=page_size,
+                backend=backend,
             )
             # Sanity: filter out reports whose directories no longer exist
             items = [it for it in items if _report_dir_exists(it['name'], root)]
@@ -359,6 +361,7 @@ def list_reports():
                     sort_order=sort_order,
                     page=1,
                     page_size=10000,
+                    backend=backend,
                 )[0]
                 all_filtered = [r for r in all_total if _report_dir_exists(r['name'], root)]
                 total = len(all_filtered)

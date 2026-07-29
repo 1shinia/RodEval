@@ -12,6 +12,7 @@ import LoadingSpinner from '@/components/common/LoadingSpinner'
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const ReportsLayout = lazy(() => import('@/pages/ReportsLayout'))
 const LLMReportsTab = lazy(() => import('@/pages/LLMReportsTab'))
+const RAGReportsTab = lazy(() => import('@/pages/RAGReportsTab'))
 const AIGCReportsTab = lazy(() => import('@/pages/AIGCReportsTab'))
 const AudioReportsTab = lazy(() => import('@/pages/AudioReportsTab'))
 const ReportDetailPage = lazy(() => import('@/pages/ReportDetailPage'))
@@ -37,6 +38,7 @@ function AppRoutes() {
           <Route path="/reports" element={<PageErrorBoundary pageName="reports"><ReportsLayout /></PageErrorBoundary>}>
             <Route index element={<Navigate to="/reports/llm" replace />} />
             <Route path="llm" element={<PageErrorBoundary pageName="reports"><LLMReportsTab /></PageErrorBoundary>} />
+            <Route path="rag" element={<PageErrorBoundary pageName="reports"><RAGReportsTab /></PageErrorBoundary>} />
             <Route path="aigc" element={<PageErrorBoundary pageName="reports"><AIGCReportsTab /></PageErrorBoundary>} />
             <Route path="audio" element={<PageErrorBoundary pageName="reports"><AudioReportsTab /></PageErrorBoundary>} />
           </Route>

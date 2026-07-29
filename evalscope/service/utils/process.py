@@ -417,6 +417,7 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
                     num_samples=total_num,
                     timestamp=datetime.now().isoformat(),
                     dataset_scores=dataset_scores,
+                    eval_backend=getattr(task_config, 'eval_backend', ''),
                 )
                 return
             except Exception as e:
