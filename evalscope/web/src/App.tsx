@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { LocaleProvider } from '@/contexts/LocaleContext'
 import { ReportsProvider } from '@/contexts/ReportsContext'
+import { CompareProvider } from '@/contexts/CompareContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import MainLayout from '@/layouts/MainLayout'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
@@ -71,8 +72,10 @@ export default function App() {
         <ThemeProvider>
           <LocaleProvider>
             <ReportsProvider>
+            <CompareProvider>
               <AppRoutes />
               <ToastContainer />
+            </CompareProvider>
             </ReportsProvider>
           </LocaleProvider>
         </ThemeProvider>

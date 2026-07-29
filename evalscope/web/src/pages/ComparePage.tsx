@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
+import { useCompare } from '@/contexts/CompareContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import { getPredictions, getChartUrl } from '@/api/reports'
 import { toast } from '@/components/common/Toast'
@@ -14,13 +15,10 @@ import FilterChip from '@/components/ui/FilterChip'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Skeleton from '@/components/ui/Skeleton'
-import Badge from '@/components/ui/Badge'
-import ScoreBadge from '@/components/ui/ScoreBadge'
-import Eyebrow from '@/components/ui/Eyebrow'
 import { cn } from '@/lib/utils'
 import PlotlyChart from '@/components/charts/PlotlyChart'
 import ChatView from '@/components/single/ChatView'
-import { Plus, ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX, X } from 'lucide-react'
 
 // ------------------------------------------------------------------ //
 // Types                                                               //
@@ -35,32 +33,20 @@ interface MergedPrediction {
 
 type PerModelFilter = 'any' | 'pass' | 'fail'
 
-// Distinct accent color palette for each model column (up to 3)
-// DESIGN.md §Compare Slots: only 3 brand-color slots exist.
-// Do NOT add a 4th entry to this palette — extra models must collapse to a
-// numbered legend instead. Iteration paths use `MODEL_PALETTE[idx] ?? MODEL_PALETTE[0]`
-// as a safety fallback in case slicing is bypassed upstream.
-const MODEL_PALETTE = [
-  {
-    dot: 'var(--compare-0-dot)',
-    border: 'var(--compare-0-border)',
-    bg: 'var(--compare-0-bg)',
-    headerBg: 'var(--compare-0-bg-header)',
-  },
-  {
-    dot: 'var(--compare-1-dot)',
-    border: 'var(--compare-1-border)',
-    bg: 'var(--compare-1-bg)',
-    headerBg: 'var(--compare-1-bg-header)',
-  },
-  {
-    dot: 'var(--compare-2-dot)',
-    border: 'var(--compare-2-border)',
-    bg: 'var(--compare-2-bg)',
-    headerBg: 'var(--compare-2-bg-header)',
-  },
+// Dynamic color palette — generates distinct hues for unlimited models
+const PALETTE_COLORS = [
+  '#816DF8', '#0F9C7E', '#f59e0b', '#ef4444', '#3b82f6',
+  '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4',
+  '#84cc16', '#d946ef', '#22c55e', '#64748b',
 ]
-const MAX_COMPARE_SLOTS = MODEL_PALETTE.length
+
+function modelColor(idx: number): string {
+  return PALETTE_COLORS[idx % PALETTE_COLORS.length]
+}
+
+function modelBg(idx: number): string {
+  return `${modelColor(idx)}15`
+}
 
 // ------------------------------------------------------------------ //
 // Main Component                                                      //
@@ -69,24 +55,19 @@ const MAX_COMPARE_SLOTS = MODEL_PALETTE.length
 export default function ComparePage() {
   const { t } = useLocale()
   const qp = useQueryParams()
+  const { selection, clearCompareSelection } = useCompare()
   const { rootPath: ctxRootPath, setRootPath, loadMultiReports, loading, reportCache } = useReports()
 
-  // URL params — limit to 3 models
-  // DESIGN.md §Compare Slots: only 3 brand-color slots exist. We hard-clamp here;
-  // do NOT invent a 4th brand color — extra reports are dropped from the comparison.
   const rootPath = qp.get('root_path') || ctxRootPath
-  const reportsParam = qp.get('reports') || ''
   const reportNames = useMemo(
-    () => reportsParam.split(';').filter(Boolean).slice(0, MAX_COMPARE_SLOTS),
-    [reportsParam],
+    () => selection?.reports || [],
+    [selection],
   )
 
   // State
   const [reports, setReports] = useState<ReportData[]>([])
   const [activeTab, setActiveTab] = useState<'score' | 'prediction'>('score')
   const [dataLoaded, setDataLoaded] = useState(false)
-  const [addInput, setAddInput] = useState('')
-  const [showAddInput, setShowAddInput] = useState(false)
 
   // Prediction tab state
   const [selectedDs, setSelectedDs] = useState('')
@@ -316,30 +297,9 @@ export default function ComparePage() {
             <FilterChip
               key={name}
               label={displayNames[name] ?? (parseReportName(name).model || name)}
-              onRemove={reportNames.length > 2 ? () => removeReport(name) : undefined}
             />
           ))}
-          {reportNames.length < 3 && (showAddInput ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={addInput}
-                onChange={(e) => setAddInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') addReport(); if (e.key === 'Escape') setShowAddInput(false) }}
-                placeholder="Report name..."
-                autoFocus
-                className="px-3 py-1.5 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)]"
-              />
-              <Button size="sm" onClick={addReport}>{t('compare.addModel')}</Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowAddInput(false)}>✕</Button>
-            </div>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => setShowAddInput(true)}>
-              <Plus size={14} />
-              {t('compare.addModel')}
-            </Button>
-          ))}
-          <span className="text-xs text-[var(--text-muted)] ml-auto">{t('compare.maxThreeHint')}</span>
+          <span className="text-xs text-[var(--text-muted)] ml-auto">共 {reportNames.length} 个模型</span>
         </div>
       </Card>
 
@@ -462,7 +422,7 @@ function ScoreTab({
                   <tr key={rk} className="hover:bg-[var(--bg-card2)] transition-colors">
                     <td className="px-3 py-2 text-xs font-medium whitespace-nowrap sticky left-0 bg-[var(--bg-card)] z-10 border-r border-[var(--border)] w-32">
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: MODEL_PALETTE[rkIdx]?.dot }} />
+                        <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: modelColor(rkIdx) }} />
                         <span className="text-[var(--text-muted)] truncate max-w-[110px]" title={displayNames[rk] ?? rk}>
                           {displayNames[rk] ?? rk}
                         </span>
@@ -649,7 +609,7 @@ function PredictionTab({
       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] p-4 flex flex-col gap-3">
         {/* Quick preset row */}
         <div className="flex items-center gap-3 flex-wrap">
-          <Eyebrow as="span">{t('compare.filterByModel')}</Eyebrow>
+          <span className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)] mb-1">{t('compare.filterByModel')}</span>
           <div className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border)] overflow-hidden">
             {presets.map(({ label, active, onClick }, idx, arr) => (
               <button
@@ -672,7 +632,8 @@ function PredictionTab({
         {/* Per-model tri-state chips */}
         <div className="flex flex-col gap-2.5">
           {reportNames.map((name, idx) => {
-            const palette = MODEL_PALETTE[idx] ?? MODEL_PALETTE[0]
+            const color = modelColor(idx)
+            const bg = modelBg(idx)
             const cur = perModelFilter[name] ?? 'any'
             const rate = passRates[name]
             const chips: { key: PerModelFilter; label: string; icon?: ReactNode; activeBg: string }[] = [
@@ -718,9 +679,11 @@ function PredictionTab({
 
                 {/* Pass rate badge */}
                 {rate !== undefined && mergedPredictions.length > 0 && (
-                  <Badge variant={rate >= 0.5 ? 'success' : 'warning'}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                    rate >= 0.5 ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'
+                  }`}>
                     {(rate * 100).toFixed(1)}%
-                  </Badge>
+                  </span>
                 )}
               </div>
             )
@@ -775,38 +738,43 @@ function PredictionTab({
           }}
         >
           {reportNames.map((name, idx) => {
-            const palette = MODEL_PALETTE[idx] ?? MODEL_PALETTE[0]
+            const color = modelColor(idx)
+            const bg = modelBg(idx)
             const modelRow = currentRow.models[name]
             if (!modelRow) return null
             return (
               <div
                 key={name}
                 className="flex flex-col rounded-[var(--radius)] border overflow-hidden"
-                style={{ borderColor: palette.border, background: palette.bg }}
+                style={{ borderColor: color, background: bg }}
               >
                 {/* Column Header */}
                 <div
                   className="flex items-center justify-between px-4 py-2.5 border-b shrink-0"
-                  style={{ borderColor: palette.border, background: palette.headerBg }}
+                  style={{ borderColor: color, background: bg }}
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <span
                       className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: palette.dot }}
+                      style={{ backgroundColor: color }}
                     />
                     <span
                       className="text-xs font-semibold truncate"
-                      style={{ color: palette.dot }}
+                      style={{ color }}
                       title={displayNames[name] ?? (parseReportName(name).model || name)}
                     >
                       {displayNames[name] ?? (parseReportName(name).model || name)}
                     </span>
                   </div>
-                  <ScoreBadge
-                    score={modelRow.NScore}
-                    threshold={threshold}
-                    className="ml-2 shrink-0 !font-mono"
-                  />
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-medium ${
+                      (modelRow.NScore ?? 0) >= threshold
+                        ? 'bg-green-500/10 text-green-500'
+                        : 'bg-red-500/10 text-red-500'
+                    }`}
+                  >
+                    {(modelRow.NScore * 100).toFixed(1)}%
+                  </span>
                 </div>
 
                 {/* ChatView */}

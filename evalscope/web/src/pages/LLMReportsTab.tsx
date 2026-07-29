@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, ScanSearch, Trash2 } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
@@ -9,6 +9,7 @@ import type { ReportSummary } from '@/api/types'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import ReportFiltersBar, { type ReportFilters } from '@/components/reports/ReportFilters'
+import CompareBar from '@/components/reports/CompareBar'
 import { EmptyState } from '@/pages/ReportsLayout'
 
 const PAGE_SIZE = 20
@@ -41,6 +42,11 @@ export default function LLMReportsTab() {
   const [availableDatasets, setAvailableDatasets] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Cross-page selection
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selectAllLoading, setSelectAllLoading] = useState(false)
+  const allPageNames = useMemo(() => reports.map((r) => r.name), [reports])
 
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -100,16 +106,81 @@ export default function LLMReportsTab() {
     try {
       await reportsApi.deleteReport(rootPath, name)
       toast.success(t('common.deleteSuccess'))
+      setSelected((prev) => { const next = new Set(prev); next.delete(name); return next })
       fetchReports()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('common.deleteFailed'))
     }
   }, [rootPath, fetchReports, t])
 
+  const toggleSelect = useCallback((name: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback(async () => {
+    if (selected.size >= total) {
+      setSelected(new Set())
+      return
+    }
+    // Fetch all report names to select everything
+    setSelectAllLoading(true)
+    try {
+      const res = await reportsApi.listReports({
+        rootPath,
+        page: 1,
+        pageSize: 10000,
+        sortBy: filters.sortBy,
+        sortOrder: filters.sortOrder,
+        backend: 'Native',
+      })
+      setSelected(new Set(res.reports.map((r: ReportSummary) => r.name)))
+    } catch {
+      setSelected((prev) => {
+        const next = new Set(prev)
+        for (const n of allPageNames) next.add(n)
+        return next
+      })
+    } finally {
+      setSelectAllLoading(false)
+    }
+  }, [selected.size, total, rootPath, filters.sortBy, filters.sortOrder, allPageNames])
+
+  const togglePageSelect = useCallback(() => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      const allSelected = allPageNames.every((n) => prev.has(n))
+      if (allSelected) {
+        for (const n of allPageNames) next.delete(n)
+      } else {
+        for (const n of allPageNames) next.add(n)
+      }
+      return next
+    })
+  }, [allPageNames])
+
+  const handleClear = useCallback(() => setSelected(new Set()), [])
+
+  const allPageSelected = allPageNames.length > 0 && allPageNames.every((n) => selected.has(n))
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <>
+      <CompareBar
+        selected={[...selected]}
+        totalCount={total}
+        rootPath={rootPath}
+        backend="Native"
+        onSelectAll={toggleSelectAll}
+        onClear={handleClear}
+        loading={selectAllLoading}
+      />
+
       <ReportFiltersBar filters={filters} availableModels={availableModels} availableDatasets={availableDatasets} onChange={setFilters} />
 
       {error && (
@@ -126,6 +197,14 @@ export default function LLMReportsTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[var(--bg-deep)] border-b border-[var(--border)]">
+                  <th className="w-10 px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={togglePageSelect}
+                      className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
+                    />
+                  </th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">任务 ID</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">模型</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">数据集</th>
@@ -137,7 +216,15 @@ export default function LLMReportsTab() {
               </thead>
               <tbody>
                 {reports.map((report) => (
-                  <tr key={report.name} className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-card2)] transition-colors">
+                  <tr key={report.name} className={`border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-card2)] transition-colors ${selected.has(report.name) ? 'bg-[var(--accent-dim)]' : ''}`}>
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(report.name)}
+                        onChange={() => toggleSelect(report.name)}
+                        className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{extractTaskId(report.name)}</td>
                     <td className="px-4 py-3 text-[var(--text)]">{report.model_name}</td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">{report.dataset_name}</td>

@@ -6,6 +6,7 @@ import { toast } from '@/components/common/Toast'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import ReportFiltersBar, { type ReportFilters } from '@/components/reports/ReportFilters'
+import CompareBar from '@/components/reports/CompareBar'
 import { EmptyState } from '@/pages/ReportsLayout'
 
 interface AIGCReportSummary {
@@ -46,6 +47,8 @@ export default function AIGCReportsTab() {
   const [filters, setFilters] = useState<ReportFilters>(defaultFilters)
   const [page, setPage] = useState(1)
 
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
   const fetchReports = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -70,6 +73,7 @@ export default function AIGCReportsTab() {
         throw new Error((data as any).error || `HTTP ${response.status}`)
       }
       toast.success('已删除')
+      setSelected((prev) => { const next = new Set(prev); next.delete(taskId); return next })
       fetchReports()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '删除失败')
@@ -120,8 +124,52 @@ export default function AIGCReportsTab() {
 
   useEffect(() => { setPage(1) }, [filters])
 
+  const allPageNames = useMemo(() => paged.map((r) => r.task_id), [paged])
+  const allPageSelected = allPageNames.length > 0 && allPageNames.every((n) => selected.has(n))
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    if (selected.size >= filtered.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(filtered.map((r) => r.task_id)))
+    }
+  }, [selected.size, filtered])
+
+  const togglePageSelect = useCallback(() => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      const allSelected = allPageNames.every((n) => prev.has(n))
+      if (allSelected) {
+        for (const n of allPageNames) next.delete(n)
+      } else {
+        for (const n of allPageNames) next.add(n)
+      }
+      return next
+    })
+  }, [allPageNames])
+
+  const handleClear = useCallback(() => setSelected(new Set()), [])
+
   return (
     <>
+      <CompareBar
+        selected={[...selected]}
+        totalCount={filtered.length}
+        rootPath=""
+        backend="AIGCEval"
+        onSelectAll={toggleSelectAll}
+        onClear={handleClear}
+      />
+
       {error && (
         <div className="px-4 py-3 rounded-[var(--radius)] bg-[var(--danger-bg)] border border-[var(--danger-border)] text-sm text-[var(--danger)]">{error}</div>
       )}
@@ -148,6 +196,14 @@ export default function AIGCReportsTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[var(--bg-deep)] border-b border-[var(--border)]">
+                  <th className="w-10 px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={togglePageSelect}
+                      className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
+                    />
+                  </th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.taskId')}</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">类型</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelName')}</th>
@@ -159,7 +215,15 @@ export default function AIGCReportsTab() {
               </thead>
               <tbody>
                 {paged.map((report) => (
-                  <tr key={report.task_id} className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-card2)] transition-colors">
+                  <tr key={report.task_id} className={`border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-card2)] transition-colors ${selected.has(report.task_id) ? 'bg-[var(--accent-dim)]' : ''}`}>
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(report.task_id)}
+                        onChange={() => toggleSelect(report.task_id)}
+                        className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{report.task_id}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${

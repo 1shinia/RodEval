@@ -4,7 +4,7 @@ import { useLocale } from '@/contexts/LocaleContext'
 import LocaleToggle from './LocaleToggle'
 import ThemeToggle from './ThemeToggle'
 import RunningTasksIndicator from './RunningTasksIndicator'
-import { LayoutDashboard, Sparkles, ClipboardCheck, Activity, BarChart4, Medal, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Sparkles, ClipboardCheck, GitCompareArrows, Activity, BarChart4, Medal, Menu, X } from 'lucide-react'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 px-3.5 py-2 rounded-lg text-base font-medium transition-all duration-200 ${
@@ -35,6 +35,7 @@ export default function TopNav() {
     { to: '/dashboard', icon: <LayoutDashboard size={18} />, label: t('nav.dashboard') },
     { to: '/eval', icon: <Sparkles size={18} />, label: t('nav.eval') },
     { to: '/reports', icon: <ClipboardCheck size={18} />, label: t('nav.evalReports') },
+    { to: '/compare', icon: <GitCompareArrows size={18} />, label: '模型对比' },
     { to: '/perf', icon: <Activity size={18} />, label: t('nav.perf') },
     { to: '/perf-reports', icon: <BarChart4 size={18} />, label: t('nav.perfReports') },
     { to: '/benchmarks', icon: <Medal size={18} />, label: t('nav.benchmarks') },
