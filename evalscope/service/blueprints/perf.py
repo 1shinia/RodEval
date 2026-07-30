@@ -998,9 +998,17 @@ def download_compare_report(report_id: int):
 
         # Generate chart data as JSON
         models_json = []
+        total_reqs = 0
+        total_succ = 0
+        total_latency = 0
+        total_output_tps = 0
         for t in tasks_data:
             s = t['summary']
             sr = (s.get('Success Requests', 0) / s.get('Total Requests', 1) * 100) if s.get('Total Requests') else 100
+            total_reqs += s.get('Total Requests', 0)
+            total_succ += s.get('Success Requests', 0)
+            total_latency += s.get('Avg Latency (s)', 0)
+            total_output_tps += s.get('Output Throughput (tok/s)', 0)
             models_json.append({
                 'name': t['model'],
                 'rpm': round(s.get('Req Throughput (req/s)', 0) * 60, 1),
@@ -1010,6 +1018,10 @@ def download_compare_report(report_id: int):
                 'tpot': round(s.get('TPOT (ms)', 0), 1),
                 'success_rate': round(sr, 1),
             })
+
+        avg_sr = (total_succ / total_reqs * 100) if total_reqs else 100
+        avg_lat = total_latency / len(tasks_data) if tasks_data else 0
+        avg_tps = total_output_tps / len(tasks_data) if tasks_data else 0
 
         html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1049,7 +1061,11 @@ footer {{ text-align:center; color:var(--muted); font-size:12px; margin-top:30px
 </header>
 
 <div class="kpis">
-  <div class="kpi"><div class="v">{len(tasks_data)}</div><div class="l">对比模型数</div></div>
+  <div class="kpi"><div class="v">{len(tasks_data)}</div><div class="l">已选任务</div></div>
+  <div class="kpi"><div class="v">{total_reqs}</div><div class="l">总请求数</div></div>
+  <div class="kpi"><div class="v">{avg_sr:.1f}%</div><div class="l">平均成功率</div></div>
+  <div class="kpi"><div class="v">{avg_lat:.2f}s</div><div class="l">平均延迟</div></div>
+  <div class="kpi"><div class="v">{avg_tps:.1f}</div><div class="l">平均输出 TPS</div></div>
 </div>
 
 <div class="section">
