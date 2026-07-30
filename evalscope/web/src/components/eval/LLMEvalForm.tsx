@@ -174,7 +174,7 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
   }, [initialDataset])
 
   useEffect(() => {
-    listBenchmarks()
+    listBenchmarks(undefined, true)
       .then((res) => {
         const all = [...(res.text ?? []), ...(res.multimodal ?? [])]
         const names: string[] = []

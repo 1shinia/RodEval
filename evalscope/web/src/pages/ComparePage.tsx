@@ -10,6 +10,25 @@ import { toast } from '@/components/common/Toast'
 import type { ReportData, PredictionRow } from '@/api/types'
 import { getDisplayNames, parseReportName } from '@/utils/reportParser'
 import Breadcrumb from '@/components/ui/Breadcrumb'
+
+// Module-level cache so benchmark descriptions survive component remounts
+// (e.g. navigating to /compare, opening in new tab, etc.)
+let _benchDescsCache: Record<string, string> | null = null
+let _benchDescsPromise: Promise<Record<string, string>> | null = null
+
+function loadBenchDescs(): Promise<Record<string, string>> {
+  if (_benchDescsCache) return Promise.resolve(_benchDescsCache)
+  if (_benchDescsPromise) return _benchDescsPromise
+  _benchDescsPromise = listBenchmarks(undefined, true).then((b) => {
+    const m: Record<string, string> = {}
+    for (const e of [...(b.text || []), ...(b.multimodal || []), ...(b.rag || [])]) {
+      m[e.name] = e.description?.zh?.full || e.description?.en?.full || ''
+    }
+    _benchDescsCache = m
+    return m
+  })
+  return _benchDescsPromise
+}
 import Card from '@/components/ui/Card'
 import Tabs from '@/components/ui/Tabs'
 import { scoreColor } from '@/utils/colorScale'
@@ -148,34 +167,38 @@ export default function ComparePage() {
     return { scoreTableData: rows, scoreTableColumns: columns, displayNames }
   }, [reports, reportNames, t])
 
-  // ── Benchmarks for dataset descriptions ──
-  const [benchDescs, setBenchDescs] = useState<Record<string, string>>({})
+  // ── Benchmarks for dataset descriptions (module-cached, survives remounts) ──
+  const [benchDescs, setBenchDescs] = useState<Record<string, string>>(() => _benchDescsCache || {})
   useEffect(() => {
-    listBenchmarks().then((b) => {
-      const m: Record<string, string> = {}
-      for (const e of [...(b.text || []), ...(b.multimodal || []), ...(b.rag || [])]) {
-        m[e.name] = e.description?.zh?.full || e.description?.en?.full || ''
-      }
-      setBenchDescs(m)
-    }).catch(() => {})
+    if (_benchDescsCache) return
+    loadBenchDescs().then(setBenchDescs).catch(() => {})
   }, [])
 
   const datasetNames = scoreTableData.filter((r) => r.dataset !== t('compare.average')).map((r) => r.dataset as string)
 
-  const datasetDescItems = datasetNames.map((ds) => ({
-    name: ds,
-    desc: benchDescs[ds] || Object.entries(benchDescs).find(([k]) => ds.includes(k) || k.includes(ds))?.[1] || '',
-  }))
+  const datasetDescItems = datasetNames.map((ds) => {
+    const dsLower = ds.toLowerCase()
+    let match = benchDescs[ds]
+    if (!match) {
+      for (const [k, v] of Object.entries(benchDescs)) {
+        if (dsLower === k.toLowerCase() || dsLower.includes(k.toLowerCase()) || k.toLowerCase().includes(dsLower)) {
+          match = v; break
+        }
+      }
+    }
+    return { name: ds, desc: match || '' }
+  })
 
   // Capability analysis
   const reportKeys = scoreTableColumns.slice(1).map((c) => c.key).sort()
   const dataRows = scoreTableData.filter((r) => r.dataset !== t('compare.average'))
   const CAP_DIMS: Record<string, string[]> = {
-    '综合知识': ['mmlu', 'ceval', 'cmmlu', 'MMLU', 'C-Eval', 'CMMLU'],
-    '数学推理': ['gsm8k', 'math', 'GSM8K', 'MATH'],
-    '代码能力': ['humaneval', 'mbpp', 'HumanEval', 'MBPP', 'livecodebench'],
-    '常识推理': ['hellaswag', 'piqa', 'winogrande', 'HellaSwag', 'PIQA', 'Winogrande'],
-    '逻辑推理': ['bbh', 'arc', 'BBH', 'ARC', 'ARC-Challenge'],
+    '综合知识': ['mmlu', 'ceval', 'cmmlu', 'gpqa', 'arc', 'commonsense_qa', 'race', 'sciq', 'siqa', 'qasc', 'logi_qa', 'real_world_qa', 'biomix_qa', 'mmlu_pro', 'hellaswag', 'truthful_qa', 'pubmedqa', 'med_mcqa', 'general_qa', 'simple_qa', 'trivia_qa', 'drop', 'winogrande'],
+    '数学推理': ['gsm8k', 'math', 'aime', 'mgsm', 'super_gpqa', 'competition_math', 'minerva_math', 'cmath', 'math_qa', 'hmmt'],
+    '代码能力': ['humaneval', 'mbpp', 'livecodebench', 'ifbench', 'multi_if', 'bigcodebench', 'swe_bench', 'scicode', 'multiple_humaneval', 'multiple_mbpp'],
+    '指令遵循': ['ifeval', 'alpaca_eval', 'arena_hard', 'eq_bench', 'general_arena'],
+    '综合推理': ['bbh', 'arc_challenge', 'musr', 'zebralogicbench'],
+    '视觉理解': ['general_vqa', 'ai2d', 'chartqa', 'mmmu', 'cmmmu', 'math_vista', 'math_vision', 'mm_bench', 'seed_bench', 'hallusion_bench', 'real_world_qa'],
   }
   const capScores: { dim: string; models: { name: string; score: number | null }[] }[] = []
   for (const [dim, keywords] of Object.entries(CAP_DIMS)) {
@@ -261,21 +284,30 @@ export default function ComparePage() {
       )}
 
       {/* Capability Analysis */}
-      {capScores.length > 0 && (
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
-          <div className="flex items-center border-b border-[var(--border)] px-5 py-3">
-            <h3 className="type-label-xs">能力分析</h3>
-          </div>
-          <div className="p-4 flex flex-col gap-3">
-            {capScores.map(({ dim, models }) => {
+      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
+        <div className="flex items-center border-b border-[var(--border)] px-5 py-3">
+          <h3 className="type-label-xs">能力分析</h3>
+        </div>
+        <div className="p-4 flex flex-col gap-3">
+          {capScores.length === 0 && (
+            <p className="text-sm text-[var(--text-muted)]">当前选取的数据集暂无能力维度覆盖</p>
+          )}
+          {capScores.length > 0 && capScores.map(({ dim, models }) => {
               const sorted = models.filter((m) => m.score != null).sort((a, b) => (b.score || 0) - (a.score || 0))
               if (!sorted.length) return null
-              const best = sorted[0]
-              const rest = sorted.slice(1)
+              const bestScore = sorted[0].score!
+              const tied = sorted.filter((m) => m.score === bestScore)
+              const rest = sorted.filter((m) => m.score !== bestScore)
               return (
                 <div key={dim} className="text-sm text-[var(--text)]">
                   在<span className="font-semibold">{dim}</span>方面，
-                  <span className="text-[var(--accent)] font-medium">{best.name}</span> 表现最优（<span className="font-mono text-[var(--accent)]">{best.score!.toFixed(4)}</span>）
+                  {tied.length === sorted.length ? (
+                    <span className="text-[var(--accent)] font-medium">{tied.map((m) => m.name).join(' 和 ')} 表现相当（<span className="font-mono">{bestScore.toFixed(4)}</span>）</span>
+                  ) : tied.length > 1 ? (
+                    <span><span className="text-[var(--accent)] font-medium">{tied.map((m) => m.name).join('、')}</span> 并列最优（<span className="font-mono text-[var(--accent)]">{bestScore.toFixed(4)}</span>）</span>
+                  ) : (
+                    <span><span className="text-[var(--accent)] font-medium">{tied[0].name}</span> 表现最优（<span className="font-mono text-[var(--accent)]">{bestScore.toFixed(4)}</span>）</span>
+                  )}
                   {rest.length > 0 && (
                     <span className="text-[var(--text-muted)]">，其次 {
                       rest.map((m, i) => (
@@ -288,7 +320,6 @@ export default function ComparePage() {
             })}
           </div>
         </div>
-      )}
 
       {/* Dataset Descriptions */}
       {datasetDescItems.length > 0 && (
@@ -297,6 +328,9 @@ export default function ComparePage() {
             <h3 className="type-label-xs">数据集说明</h3>
           </div>
           <div className="p-4 flex flex-col gap-2">
+            {Object.keys(benchDescs).length === 0 && (
+              <Skeleton height={16} lines={Math.min(datasetNames.length, 3)} className="mb-1" />
+            )}
             {datasetDescItems.map(({ name, desc }) => (
               <div key={name} className="text-sm">
                 <span className="font-medium text-[var(--accent)]">{name}</span>
