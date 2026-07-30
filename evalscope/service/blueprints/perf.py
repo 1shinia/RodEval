@@ -925,3 +925,193 @@ def delete_compare_report(report_id: int):
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] Failed to delete compare report: {e}', exc_info=True)
         return jsonify({'error': 'Failed to delete', 'error_id': error_id}), 500
+
+
+@bp_perf.route('/compare/saved/<int:report_id>/download', methods=['GET'])
+def download_compare_report(report_id: int):
+    """Download a saved compare report as a self-contained HTML file."""
+    try:
+        from .. import db as _db
+        reports = _db.list_compare_reports()
+        report = next((r for r in reports if r['id'] == report_id), None)
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+
+        task_ids = json.loads(report['task_ids'])
+        timestamp = report['created_at']
+
+        # Collect per-task summary data
+        tasks_data = []
+        for tid in task_ids:
+            task_dir = os.path.join(OUTPUT_DIR, tid)
+            perf_dir = os.path.join(task_dir, 'perf')
+            if not os.path.isdir(perf_dir):
+                continue
+            model_name = tid
+            found_summary = None
+            for sub in sorted(os.listdir(perf_dir)):
+                sub_dir = os.path.join(perf_dir, sub)
+                if not os.path.isdir(sub_dir):
+                    continue
+                args_file = os.path.join(sub_dir, 'benchmark_args.json')
+                if os.path.isfile(args_file):
+                    try:
+                        with open(args_file) as f:
+                            args = json.load(f)
+                        model_name = args.get('model', tid)
+                    except Exception:
+                        pass
+                summary_file = os.path.join(sub_dir, 'benchmark_summary.json')
+                if os.path.isfile(summary_file):
+                    try:
+                        with open(summary_file) as f:
+                            found_summary = json.load(f)
+                    except Exception:
+                        pass
+                if found_summary:
+                    tasks_data.append({'model': model_name, 'summary': found_summary})
+                    break
+
+        if not tasks_data:
+            return jsonify({'error': 'No valid task data found'}), 404
+
+        # Generate HTML
+        rows_html = ''
+        for t in tasks_data:
+            s = t['summary']
+            sr = (s.get('Success Requests', 0) / s.get('Total Requests', 1) * 100) if s.get('Total Requests') else 100
+            rows_html += f'''<tr>
+    <td>{t['model']}</td>
+    <td>{s.get('Concurrency', '-')}</td>
+    <td>{s.get('Total Requests', '-')}</td>
+    <td>{s.get('Success Requests', '-')}</td>
+    <td>{s.get('Failed Requests', 0)}</td>
+    <td>{sr:.1f}%</td>
+    <td>{(s.get('Req Throughput (req/s)', 0) * 60):.1f}</td>
+    <td>{(s.get('Output Throughput (tok/s)', 0) * 60):.0f}</td>
+    <td>{s.get('Avg Latency (s)', 0):.2f}s</td>
+    <td>{s.get('TTFT (ms)', 0):.0f}ms</td>
+    <td>{s.get('TPOT (ms)', 0):.1f}ms</td>
+    <td>{s.get('Output Throughput (tok/s)', 0):.1f}</td>
+    <td>{s.get('Total Throughput (tok/s)', 0):.1f}</td>
+</tr>'''
+
+        # Generate chart data as JSON
+        models_json = []
+        for t in tasks_data:
+            s = t['summary']
+            sr = (s.get('Success Requests', 0) / s.get('Total Requests', 1) * 100) if s.get('Total Requests') else 100
+            models_json.append({
+                'name': t['model'],
+                'rpm': round(s.get('Req Throughput (req/s)', 0) * 60, 1),
+                'tpm': round(s.get('Output Throughput (tok/s)', 0) * 60, 0),
+                'latency': round(s.get('Avg Latency (s)', 0), 2),
+                'ttft': round(s.get('TTFT (ms)', 0), 0),
+                'tpot': round(s.get('TPOT (ms)', 0), 1),
+                'success_rate': round(sr, 1),
+            })
+
+        html = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>压测对比报告 — {report['name']}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root {{ --bg:#f8f9fc; --card:#fff; --ink:#1a1a2e; --muted:#5a5a7a; --line:#e3e8ef; --accent:#5B3FD6; }}
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); line-height:1.6; font-size:14px; }}
+.wrap {{ max-width:1200px; margin:0 auto; padding:28px 20px 60px; }}
+header {{ background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; border-radius:12px; padding:20px 24px; margin-bottom:20px; }}
+header h1 {{ font-size:20px; margin-bottom:4px; }}
+header .sub {{ font-size:12px; opacity:.85; }}
+.kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }}
+.kpi {{ background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px; padding:12px 14px; }}
+.kpi .v {{ font-size:20px; font-weight:700; }}
+.kpi .l {{ font-size:11px; color:var(--muted); }}
+.section {{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 20px; margin-bottom:16px; }}
+.section h2 {{ font-size:15px; margin-bottom:12px; color:var(--ink); }}
+.charts {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:14px; margin-bottom:16px; }}
+.chart-box {{ position:relative; height:260px; }}
+table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+th,td {{ padding:8px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }}
+th {{ color:var(--muted); font-weight:600; border-bottom:2px solid var(--line); font-size:12px; }}
+tr:hover {{ background:#f0f4ff; }}
+footer {{ text-align:center; color:var(--muted); font-size:12px; margin-top:30px; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>压测对比报告</h1>
+  <div class="sub">{report['name']} · {len(tasks_data)} 个模型 · 生成时间 {timestamp}</div>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><div class="v">{len(tasks_data)}</div><div class="l">对比模型数</div></div>
+</div>
+
+<div class="section">
+  <h2>指标对比表</h2>
+  <div style="overflow-x:auto">
+  <table>
+    <thead><tr>
+      <th>模型</th><th>并发</th><th>请求数</th><th>成功</th><th>失败</th><th>成功率</th>
+      <th>RPM</th><th>TPM</th><th>Avg延迟</th><th>TTFT</th><th>TPOT</th><th>输出tok/s</th><th>总tok/s</th>
+    </tr></thead>
+    <tbody>{rows_html}</tbody>
+  </table>
+  </div>
+</div>
+
+<div class="charts">
+  <div class="section" style="margin-bottom:0"><h2>吞吐能力 (RPM)</h2><div class="chart-box"><canvas id="cRPM"></canvas></div></div>
+  <div class="section" style="margin-bottom:0"><h2>吞吐能力 (TPM)</h2><div class="chart-box"><canvas id="cTPM"></canvas></div></div>
+  <div class="section" style="margin-bottom:0"><h2>Avg 延迟 (s)</h2><div class="chart-box"><canvas id="cLatency"></canvas></div></div>
+  <div class="section" style="margin-bottom:0"><h2>TTFT 首字延迟 (ms)</h2><div class="chart-box"><canvas id="cTTFT"></canvas></div></div>
+  <div class="section" style="margin-bottom:0"><h2>TPOT 生成间隔 (ms)</h2><div class="chart-box"><canvas id="cTPOT"></canvas></div></div>
+  <div class="section" style="margin-bottom:0"><h2>成功率 (%)</h2><div class="chart-box"><canvas id="cSuccess"></canvas></div></div>
+</div>
+
+<footer>由 EvalPerf 生成 · {timestamp}</footer>
+</div>
+
+<script>
+var MODELS = {json.dumps(models_json, ensure_ascii=False)};
+var labels = MODELS.map(function(m){{ return m.name; }});
+var palette = ['#5B3FD6','#0F9C7E','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
+
+function mkBar(id, key, fmt, unit) {{
+  if(typeof Chart === 'undefined') return;
+  new Chart(document.getElementById(id), {{
+    type:'bar',
+    data:{{ labels:labels, datasets:[{{ label:key, data:MODELS.map(function(m){{ return m[key]; }}), backgroundColor:MODELS.map(function(_,i){{ return palette[i%palette.length]; }}) }}] }},
+    options:{{ responsive:true, maintainAspectRatio:false,
+      plugins:{{ tooltip:{{ callbacks:{{ label:function(c){{ return fmt ? fmt(c.raw) : c.raw+(unit||''); }} }} }} }},
+      scales:{{ y:{{ title:{{ display:!!unit, text:unit||'' }} }} }}
+    }}
+  }});
+}}
+
+mkBar('cRPM', 'rpm', null, 'req/min');
+mkBar('cTPM', 'tpm', null, 'tok/min');
+mkBar('cLatency', 'latency', null, 's');
+mkBar('cTTFT', 'ttft', null, 'ms');
+mkBar('cTPOT', 'tpot', null, 'ms');
+mkBar('cSuccess', 'success_rate', function(v){{ return v+'%'; }}, '%');
+</script>
+</body>
+</html>'''
+
+        from flask import Response
+        filename = f'perf_compare_{report_id}.html'
+        return Response(
+            html,
+            mimetype='text/html',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+    except Exception as e:
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to generate compare report: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to generate report', 'error_id': error_id}), 500

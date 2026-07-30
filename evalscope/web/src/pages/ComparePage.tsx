@@ -19,7 +19,7 @@ import Skeleton from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
 import PlotlyChart from '@/components/charts/PlotlyChart'
 import ChatView from '@/components/single/ChatView'
-import { ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX, ExternalLink, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX, ExternalLink, Trash2, Download, X } from 'lucide-react'
 import { BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 
 // ------------------------------------------------------------------ //
@@ -1171,9 +1171,17 @@ function SavedReportsList() {
                     <td className="py-2.5 px-3 text-[var(--text-muted)]">{r.task_count}</td>
                     <td className="py-2.5 px-3 text-xs text-[var(--text-dim)]">{r.created_at}</td>
                     <td className="py-2.5 px-3 text-right">
+                      <a
+                        href={`/api/v1/perf/compare/saved/${r.id}/download`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded text-[var(--accent)] hover:bg-[var(--accent-dim)] transition-colors"
+                        title="下载"
+                      >
+                        <Download size={14} />
+                      </a>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(r.id) }}
-                        className="p-1 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all"
+                        className="p-1 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all ml-1"
                         title="删除"
                       >
                         <Trash2 size={14} />
