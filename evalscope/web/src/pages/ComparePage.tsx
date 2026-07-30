@@ -5,6 +5,7 @@ import { useCompare } from '@/contexts/CompareContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import { getPredictions, getChartUrl } from '@/api/reports'
 import { comparePerfReports, type PerfCompareResponse, saveCompareReport, listSavedCompareReports, deleteCompareReport, type SavedCompareReport } from '@/api/perf'
+import { listBenchmarks } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
 import type { ReportData, PredictionRow } from '@/api/types'
 import { getDisplayNames, parseReportName } from '@/utils/reportParser'
@@ -147,6 +148,45 @@ export default function ComparePage() {
     return { scoreTableData: rows, scoreTableColumns: columns, displayNames }
   }, [reports, reportNames, t])
 
+  // ── Benchmarks for dataset descriptions ──
+  const [benchDescs, setBenchDescs] = useState<Record<string, string>>({})
+  useEffect(() => {
+    listBenchmarks().then((b) => {
+      const m: Record<string, string> = {}
+      for (const e of [...(b.text || []), ...(b.multimodal || []), ...(b.rag || [])]) {
+        m[e.name] = e.description?.zh?.full || e.description?.en?.full || ''
+      }
+      setBenchDescs(m)
+    }).catch(() => {})
+  }, [])
+
+  const datasetNames = scoreTableData.filter((r) => r.dataset !== t('compare.average')).map((r) => r.dataset as string)
+
+  const datasetDescItems = datasetNames.map((ds) => ({
+    name: ds,
+    desc: benchDescs[ds] || Object.entries(benchDescs).find(([k]) => ds.includes(k) || k.includes(ds))?.[1] || '',
+  }))
+
+  // Capability analysis
+  const reportKeys = scoreTableColumns.slice(1).map((c) => c.key).sort()
+  const dataRows = scoreTableData.filter((r) => r.dataset !== t('compare.average'))
+  const CAP_DIMS: Record<string, string[]> = {
+    '综合知识': ['mmlu', 'ceval', 'cmmlu', 'MMLU', 'C-Eval', 'CMMLU'],
+    '数学推理': ['gsm8k', 'math', 'GSM8K', 'MATH'],
+    '代码能力': ['humaneval', 'mbpp', 'HumanEval', 'MBPP', 'livecodebench'],
+    '常识推理': ['hellaswag', 'piqa', 'winogrande', 'HellaSwag', 'PIQA', 'Winogrande'],
+    '逻辑推理': ['bbh', 'arc', 'BBH', 'ARC', 'ARC-Challenge'],
+  }
+  const capScores: { dim: string; models: { name: string; score: number | null }[] }[] = []
+  for (const [dim, keywords] of Object.entries(CAP_DIMS)) {
+    const ms = reportKeys.map((rk) => {
+      const ds = dataRows.filter((r) => keywords.some((k) => (r.dataset as string).toLowerCase().includes(k)))
+      const s = ds.length ? ds.reduce((a, r) => a + ((r[rk] as number) || 0), 0) / ds.length : null
+      return { name: displayNames[rk] ?? rk, score: s }
+    })
+    if (ms.some((m) => m.score != null)) capScores.push({ dim, models: ms })
+  }
+
   // ── Early returns (all hooks called above) ──
   if (selection?.backend === 'Perf') {
     return <PerfCompareView taskIds={selection.reports} rootPath={rootPath} />
@@ -218,6 +258,53 @@ export default function ComparePage() {
           displayNames={displayNames}
           t={t}
         />
+      )}
+
+      {/* Capability Analysis */}
+      {capScores.length > 0 && (
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
+          <div className="flex items-center border-b border-[var(--border)] px-5 py-3">
+            <h3 className="type-label-xs">能力分析</h3>
+          </div>
+          <div className="p-4 flex flex-col gap-3">
+            {capScores.map(({ dim, models }) => {
+              const sorted = models.filter((m) => m.score != null).sort((a, b) => (b.score || 0) - (a.score || 0))
+              if (!sorted.length) return null
+              const best = sorted[0]
+              const rest = sorted.slice(1)
+              return (
+                <div key={dim} className="text-sm text-[var(--text)]">
+                  在<span className="font-semibold">{dim}</span>方面，
+                  <span className="text-[var(--accent)] font-medium">{best.name}</span> 表现最优（<span className="font-mono text-[var(--accent)]">{best.score!.toFixed(4)}</span>）
+                  {rest.length > 0 && (
+                    <span className="text-[var(--text-muted)]">，其次 {
+                      rest.map((m, i) => (
+                        <span key={m.name}>{i > 0 ? '、' : ''}{m.name}（<span className="font-mono">{m.score!.toFixed(4)}</span>）</span>
+                      ))
+                    }</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Dataset Descriptions */}
+      {datasetDescItems.length > 0 && (
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
+          <div className="flex items-center border-b border-[var(--border)] px-5 py-3">
+            <h3 className="type-label-xs">数据集说明</h3>
+          </div>
+          <div className="p-4 flex flex-col gap-2">
+            {datasetDescItems.map(({ name, desc }) => (
+              <div key={name} className="text-sm">
+                <span className="font-medium text-[var(--accent)]">{name}</span>
+                {desc && <span className="text-[var(--text-muted)] ml-2">— {desc.slice(0, desc.indexOf('。') > 0 ? desc.indexOf('。') + 1 : 80)}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
