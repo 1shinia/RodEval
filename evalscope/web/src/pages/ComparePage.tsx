@@ -60,29 +60,17 @@ export default function ComparePage() {
   const { selection, clearCompareSelection } = useCompare()
   const { rootPath: ctxRootPath, setRootPath, loadMultiReports, loading, reportCache } = useReports()
 
-  const rootPath = qp.get('root_path') || ctxRootPath
+  const rootPath = qp.get('root_path') || selection?.rootPath || ctxRootPath
 
-  // ── Perf comparison ──
-  if (selection?.backend === 'Perf') {
-    return <PerfCompareView taskIds={selection.reports} rootPath={rootPath} />
-  }
-
-  // ── No active selection → saved reports list ──
-  if (!selection || selection.reports.length === 0) {
-    return <SavedReportsList />
-  }
-
+  // ── LLM comparison state (must be before early returns for hook ordering) ──
   const reportNames = useMemo(
-    () => selection?.reports || [],
+    () => (selection?.backend !== 'Perf' ? selection?.reports || [] : []),
     [selection],
   )
 
-  // State
   const [reports, setReports] = useState<ReportData[]>([])
-  const [activeTab, setActiveTab] = useState<'score' | 'prediction'>('score')
   const [dataLoaded, setDataLoaded] = useState(false)
-
-  // Prediction tab state
+  const [activeTab, setActiveTab] = useState<'score' | 'prediction'>('score')
   const [selectedDs, setSelectedDs] = useState('')
   const [selectedSubset, setSelectedSubset] = useState('')
   const [mergedPredictions, setMergedPredictions] = useState<MergedPrediction[]>([])
@@ -91,18 +79,13 @@ export default function ComparePage() {
   const [page, setPage] = useState(1)
   const [predictionsLoading, setPredictionsLoading] = useState(false)
 
-  // Reset per-model filters when selected models change
   const reportNamesKey = reportNames.join(';')
-  useEffect(() => {
-    setPerModelFilter({})
-  }, [reportNamesKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPerModelFilter({}) }, [reportNamesKey])
 
-  // Sync root path
   useEffect(() => {
     if (rootPath && rootPath !== ctxRootPath) setRootPath(rootPath)
   }, [rootPath, ctxRootPath, setRootPath])
 
-  // Load score data and per-report cache (datasets/subsets) in one cache-aware pass
   useEffect(() => {
     if (reportNames.length < 2) return
     setDataLoaded(false)
@@ -113,10 +96,6 @@ export default function ComparePage() {
         setDataLoaded(true)
       })
   }, [reportNames, loadMultiReports])
-
-  // ------------------------------------------------------------------ //
-  // Score Tab Data                                                      //
-  // ------------------------------------------------------------------ //
 
   const { scoreTableData, scoreTableColumns, displayNames } = useMemo(() => {
     const displayNames = getDisplayNames(reportNames)
@@ -168,104 +147,14 @@ export default function ComparePage() {
     return { scoreTableData: rows, scoreTableColumns: columns, displayNames }
   }, [reports, reportNames, t])
 
-  // ------------------------------------------------------------------ //
-  // Prediction Tab Data                                                 //
-  // ------------------------------------------------------------------ //
+  // ── Early returns (all hooks called above) ──
+  if (selection?.backend === 'Perf') {
+    return <PerfCompareView taskIds={selection.reports} rootPath={rootPath} />
+  }
 
-  const predCommonDatasets = useMemo(() => {
-    if (reportNames.length < 2) return []
-    const dsLists = reportNames.map((name) => {
-      const cached = reportCache[name]
-      return cached ? new Set(cached.datasets) : new Set<string>()
-    })
-    if (dsLists.some((s) => s.size === 0)) return []
-    return [...dsLists.reduce((a, b) => new Set([...a].filter((x) => b.has(x))))]
-  }, [reportNames, reportCache])
-
-  useEffect(() => {
-    if (activeTab === 'prediction' && predCommonDatasets.length > 0 && !selectedDs) {
-      setSelectedDs(predCommonDatasets[0])
-    }
-  }, [activeTab, predCommonDatasets, selectedDs])
-
-  const subsets = useMemo(() => {
-    if (!selectedDs || reportNames.length < 1) return []
-    const cached = reportCache[reportNames[0]]
-    if (!cached) return []
-    const report = cached.report_list.find((r) => r.dataset_name === selectedDs)
-    if (!report) return []
-    const subs: string[] = []
-    for (const m of report.metrics) {
-      for (const c of m.categories) {
-        if (c.name.length && c.name.join('/') === '-') continue
-        for (const s of c.subsets) {
-          if (s.name !== 'overall_score' && !subs.includes(s.name)) subs.push(s.name)
-        }
-      }
-    }
-    return subs
-  }, [selectedDs, reportNames, reportCache])
-
-  useEffect(() => {
-    if (subsets.length > 0 && !selectedSubset) setSelectedSubset(subsets[0])
-  }, [subsets, selectedSubset])
-
-  const loadPredictions = useCallback(async () => {
-    if (!selectedDs || !selectedSubset || reportNames.length < 2) return
-    setPredictionsLoading(true)
-    try {
-      const results = await Promise.all(
-        reportNames.map((name) => getPredictions(rootPath, name, selectedDs, selectedSubset)),
-      )
-      const indexMap = new Map<string, MergedPrediction>()
-      results.forEach((res, i) => {
-        const modelName = reportNames[i]
-        for (const p of res.predictions) {
-          if (!indexMap.has(p.Index)) {
-            indexMap.set(p.Index, { Index: p.Index, Input: p.Input, Gold: p.Gold, models: {} })
-          }
-          indexMap.get(p.Index)!.models[modelName] = p
-        }
-      })
-      const merged = [...indexMap.values()].filter((row) =>
-        reportNames.every((m) => row.models[m]),
-      )
-      setMergedPredictions(merged)
-      setPage(1)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('common.loadFailed'))
-    } finally {
-      setPredictionsLoading(false)
-    }
-  }, [rootPath, reportNames, selectedDs, selectedSubset])
-
-  useEffect(() => { loadPredictions() }, [loadPredictions])
-
-  // Filtered predictions using per-model constraints
-  const filtered = useMemo(() => {
-    return mergedPredictions.filter((row) =>
-      reportNames.every((name) => {
-        const f = perModelFilter[name] ?? 'any'
-        if (f === 'any') return true
-        const pass = (row.models[name]?.NScore ?? 0) >= threshold
-        return f === 'pass' ? pass : !pass
-      }),
-    )
-  }, [mergedPredictions, perModelFilter, threshold, reportNames])
-
-  // Pass rates per model (based on full set)
-  const passRates = useMemo(() => {
-    if (!mergedPredictions.length) return {} as Record<string, number>
-    const rates: Record<string, number> = {}
-    for (const name of reportNames) {
-      const pass = mergedPredictions.filter((r) => (r.models[name]?.NScore ?? 0) >= threshold).length
-      rates[name] = pass / mergedPredictions.length
-    }
-    return rates
-  }, [mergedPredictions, reportNames, threshold])
-
-  const totalPages = filtered.length
-  const currentRow = filtered.length > 0 ? filtered[Math.min(page - 1, filtered.length - 1)] : null
+  if (!selection || selection.reports.length === 0) {
+    return <SavedReportsList />
+  }
 
   // ------------------------------------------------------------------ //
   // Render                                                              //
@@ -287,6 +176,19 @@ export default function ComparePage() {
   return (
     <div className="page-enter flex flex-col gap-6">
       <Breadcrumb items={[{ label: t('reports.title'), href: '/reports' }, { label: t('compare.title') }]} />
+
+      <div className="flex items-center justify-between">
+        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => clearCompareSelection()}>← 返回列表</Button>
+        <Button size="md" onClick={async () => {
+          const name = reportNames.map((n) => parseReportName(n).model || n).join(' vs ').slice(0, 80)
+          try {
+            await saveCompareReport(name, reportNames, 'LLM', rootPath)
+            toast.success('报告已保存')
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : '保存失败')
+          }
+        }}>保存报告</Button>
+      </div>
 
       {/* Selected Models */}
       <Card title={t('compare.selectedModels')}>
@@ -882,7 +784,7 @@ function PerfCompareView({ taskIds, rootPath }: { taskIds: string[]; rootPath: s
       <Breadcrumb items={[{ label: '压测报告' }, { label: '对比' }]} />
 
       <div className="flex items-center justify-between">
-        <Button variant="ghost" size="md" onClick={() => clearCompareSelection()}>← 返回列表</Button>
+        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => clearCompareSelection()}>← 返回列表</Button>
         <Button size="md" onClick={async () => {
           const name = `${valid.map((m) => m.label).join(' vs ')}`.slice(0, 80)
           try {
@@ -1072,6 +974,7 @@ function PerfCompareView({ taskIds, rootPath }: { taskIds: string[]; rootPath: s
 function SavedReportsList() {
   const [reports, setReports] = useState<SavedCompareReport[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<string>('all')
   const { setCompareSelection } = useCompare()
 
   const load = useCallback(() => {
@@ -1097,42 +1000,58 @@ function SavedReportsList() {
 
   const handleOpen = (r: SavedCompareReport) => {
     const ids = JSON.parse(r.task_ids) as string[]
-    setCompareSelection({ reports: ids, rootPath: '', backend: 'Perf' })
+    setCompareSelection({ reports: ids, rootPath: r.root_path || '', backend: r.backend === 'LLM' ? 'Native' : 'Perf' })
   }
+
+  const filtered = filter === 'all' ? reports : reports.filter((r) => r.backend === filter)
 
   return (
     <div className="page-enter flex flex-col gap-6">
-      <Breadcrumb items={[{ label: '压测报告' }, { label: '对比报告列表' }]} />
+      <Breadcrumb items={[{ label: '对比报告列表' }]} />
 
-      <p className="text-sm text-[var(--text-muted)]">
-        在压测报告页选中多个任务后点「对比」，进入对比页面后点击「保存报告」即可保存到此列表。
-      </p>
+      <Tabs
+        tabs={[
+          { key: 'all', label: `全部 (${reports.length})` },
+          { key: 'Perf', label: `性能压测 (${reports.filter((r) => r.backend === 'Perf').length})` },
+          { key: 'LLM', label: `模型评估 (${reports.filter((r) => r.backend === 'LLM').length})` },
+        ]}
+        activeKey={filter}
+        onChange={(k) => setFilter(k as string)}
+      />
 
       {loading ? (
         <div className="flex flex-col gap-2">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} height={60} />)}
         </div>
-      ) : reports.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-[var(--text-dim)]">
           <AlertCircle size={36} />
           <p className="text-sm">暂无保存的对比报告</p>
         </div>
       ) : (
-        <Card title={`已保存 ${reports.length} 份对比报告`}>
+        <Card title={`已保存 ${filtered.length} 份对比报告`}>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b-2 border-[var(--border)]">
                   <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">名称</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">类型</th>
                   <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">任务数</th>
                   <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">创建时间</th>
                   <th className="text-right py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">操作</th>
                 </tr>
               </thead>
               <tbody>
-                {reports.map((r) => (
+                {filtered.map((r) => (
                   <tr key={r.id} className="border-b border-[var(--border)] hover:bg-[var(--bg-card2)] transition-colors cursor-pointer" onClick={() => handleOpen(r)}>
                     <td className="py-2.5 px-3 text-[var(--text)]">{r.name}</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
+                        r.backend === 'LLM' ? 'bg-[var(--accent-dim)] text-[var(--accent)]' : 'bg-[var(--green-dim)] text-[var(--green)]'
+                      }`}>
+                        {r.backend === 'LLM' ? '模型评估' : '性能压测'}
+                      </span>
+                    </td>
                     <td className="py-2.5 px-3 text-[var(--text-muted)]">{r.task_count}</td>
                     <td className="py-2.5 px-3 text-xs text-[var(--text-dim)]">{r.created_at}</td>
                     <td className="py-2.5 px-3 text-right">
