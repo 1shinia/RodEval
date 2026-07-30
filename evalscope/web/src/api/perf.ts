@@ -106,10 +106,17 @@ export interface SavedCompareReport {
   task_ids: string
   created_at: string
   task_count: number
+  backend: string
+  root_path: string
 }
 
-export async function saveCompareReport(name: string, taskIds: string[]) {
-  return apiPost<{ id: number }>('/api/v1/perf/compare/save', { name, task_ids: taskIds })
+export async function saveCompareReport(name: string, taskIds: string[], backend?: string, rootPath?: string) {
+  return apiPost<{ id: number }>('/api/v1/perf/compare/save', {
+    name,
+    task_ids: taskIds,
+    backend: backend || 'Perf',
+    root_path: rootPath || '',
+  })
 }
 
 export async function listSavedCompareReports() {

@@ -875,7 +875,7 @@ def compare_perf_reports():
 def save_compare_report():
     """Save a compare report (task IDs snapshot).
 
-    JSON body: {"name": "...", "task_ids": ["perf_xxx", ...]}
+    JSON body: {"name": "...", "task_ids": ["..."], "backend": "LLM"|"Perf", "root_path": "..."}
     """
     data = request.get_json()
     if not data or not data.get('task_ids'):
@@ -883,6 +883,8 @@ def save_compare_report():
 
     name = data.get('name', '').strip()
     task_ids = data['task_ids']
+    backend_type = data.get('backend', 'Perf')
+    root_path = data.get('root_path', '')
     if not isinstance(task_ids, list) or len(task_ids) < 2:
         return jsonify({'error': 'task_ids must be a list of at least 2'}), 400
 
@@ -891,7 +893,7 @@ def save_compare_report():
 
     try:
         from .. import db as _db
-        report_id = _db.save_compare_report(name, json.dumps(task_ids), len(task_ids))
+        report_id = _db.save_compare_report(name, json.dumps(task_ids), len(task_ids), backend_type, root_path)
         return jsonify({'id': report_id, 'name': name, 'task_count': len(task_ids)}), 201
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
@@ -927,6 +929,90 @@ def delete_compare_report(report_id: int):
         return jsonify({'error': 'Failed to delete', 'error_id': error_id}), 500
 
 
+def _download_llm_compare(report: dict, task_ids: list, timestamp: str):
+    """Generate LLM comparison HTML download."""
+    from .. import db as _db
+
+    # Fetch scores from eval_reports DB
+    conn = _db._get_conn()
+    rows = []
+    for name in task_ids:
+        row = conn.execute(
+            'SELECT model_name, dataset_name, score, num_samples, timestamp FROM eval_reports WHERE task_id = ?',
+            (name,)
+        ).fetchone()
+        if row:
+            rows.append({
+                'model': row[0],
+                'dataset': row[1],
+                'score': row[2],
+                'samples': row[3],
+                'ts': row[4] or '',
+            })
+        else:
+            rows.append({
+                'model': name, 'dataset': '-', 'score': None, 'samples': 0, 'ts': ''
+            })
+
+    rows_html = ''
+    for r in rows:
+        score_val = r.get('score')
+        s = f'{score_val:.4f}' if score_val is not None else '-'
+        rows_html += f'<tr><td>{r["model"]}</td><td>{r["dataset"]}</td><td>{r["samples"]}</td><td>{s}</td><td>{r["ts"]}</td></tr>\n'
+
+    html = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型评估对比报告 — {report['name']}</title>
+<style>
+:root {{ --bg:#f8f9fc; --card:#fff; --ink:#1a1a2e; --muted:#5a5a7a; --line:#e3e8ef; --accent:#5B3FD6; }}
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); line-height:1.6; font-size:14px; }}
+.wrap {{ max-width:900px; margin:0 auto; padding:28px 20px 60px; }}
+header {{ background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; border-radius:12px; padding:20px 24px; margin-bottom:20px; }}
+header h1 {{ font-size:20px; margin-bottom:4px; }}
+header .sub {{ font-size:12px; opacity:.85; }}
+.kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:20px; }}
+.kpi {{ background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px; padding:12px 14px; }}
+.kpi .v {{ font-size:20px; font-weight:700; }}
+.kpi .l {{ font-size:11px; color:var(--muted); }}
+.section {{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 20px; margin-bottom:16px; }}
+.section h2 {{ font-size:15px; margin-bottom:12px; }}
+table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+th,td {{ padding:8px 10px; text-align:left; border-bottom:1px solid var(--line); }}
+th {{ color:var(--muted); font-weight:600; border-bottom:2px solid var(--line); font-size:12px; }}
+tr:hover {{ background:#f0f4ff; }}
+footer {{ text-align:center; color:var(--muted); font-size:12px; margin-top:30px; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>模型评估对比报告</h1>
+  <div class="sub">{report['name']} · {len(rows)} 个模型 · {timestamp}</div>
+</header>
+<div class="kpis">
+  <div class="kpi"><div class="v">{len(rows)}</div><div class="l">评估模型数</div></div>
+</div>
+<div class="section">
+  <h2>评估得分对比</h2>
+  <table>
+    <thead><tr><th>模型</th><th>数据集</th><th>样本数</th><th>得分</th><th>创建时间</th></tr></thead>
+    <tbody>{rows_html}</tbody>
+  </table>
+</div>
+<footer>由 EvalPerf 生成 · {timestamp}</footer>
+</div>
+</body>
+</html>'''
+
+    from flask import Response
+    report_id = report['id']
+    return Response(html, mimetype='text/html', headers={'Content-Disposition': f'attachment; filename=llm_compare_{report_id}.html'})
+
+
 @bp_perf.route('/compare/saved/<int:report_id>/download', methods=['GET'])
 def download_compare_report(report_id: int):
     """Download a saved compare report as a self-contained HTML file."""
@@ -939,8 +1025,12 @@ def download_compare_report(report_id: int):
 
         task_ids = json.loads(report['task_ids'])
         timestamp = report['created_at']
+        backend_type = report.get('backend', 'Perf')
 
-        # Collect per-task summary data
+        if backend_type == 'LLM':
+            return _download_llm_compare(report, task_ids, timestamp)
+
+        # Collect per-task summary data (Perf)
         tasks_data = []
         for tid in task_ids:
             task_dir = os.path.join(OUTPUT_DIR, tid)

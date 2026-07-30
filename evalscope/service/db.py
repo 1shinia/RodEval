@@ -22,7 +22,7 @@ _db_path: str | None = None
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 4  # Bump when adding migrations below
+SCHEMA_VERSION = 5  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -100,6 +100,14 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
             created_at  TEXT NOT NULL,
             task_count  INTEGER DEFAULT 0
         );
+    '''
+    ),
+    (
+        5, 'add backend and root_path to compare_reports', '''
+        ALTER TABLE compare_reports ADD COLUMN backend TEXT DEFAULT 'Perf';
+        ALTER TABLE compare_reports ADD COLUMN root_path TEXT DEFAULT '';
+        UPDATE compare_reports SET backend = 'Perf' WHERE backend IS NULL;
+        UPDATE compare_reports SET root_path = '' WHERE root_path IS NULL;
     '''
     ),
 ]
@@ -817,15 +825,15 @@ def backfill(output_dir: str) -> None:
 # Compare reports CRUD                                                        #
 # --------------------------------------------------------------------------- #
 
-def save_compare_report(name: str, task_ids_json: str, task_count: int) -> int:
+def save_compare_report(name: str, task_ids_json: str, task_count: int, backend: str = 'Perf', root_path: str = '') -> int:
     """Save a compare report and return its ID."""
     from datetime import datetime
 
     conn = _get_conn()
     created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn.execute(
-        'INSERT INTO compare_reports (name, task_ids, created_at, task_count) VALUES (?, ?, ?, ?)',
-        (name, task_ids_json, created_at, task_count),
+        'INSERT INTO compare_reports (name, task_ids, created_at, task_count, backend, root_path) VALUES (?, ?, ?, ?, ?, ?)',
+        (name, task_ids_json, created_at, task_count, backend, root_path),
     )
     conn.commit()
     return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -835,7 +843,7 @@ def list_compare_reports() -> list[dict]:
     """Return all saved compare reports, newest first."""
     conn = _get_conn()
     rows = conn.execute(
-        'SELECT id, name, task_ids, created_at, task_count FROM compare_reports ORDER BY created_at DESC'
+        'SELECT id, name, task_ids, created_at, task_count, backend, root_path FROM compare_reports ORDER BY created_at DESC'
     ).fetchall()
     return [
         {
@@ -844,6 +852,8 @@ def list_compare_reports() -> list[dict]:
             'task_ids': r[2],
             'created_at': r[3],
             'task_count': r[4],
+            'backend': r[5] or 'Perf',
+            'root_path': r[6] or '',
         }
         for r in rows
     ]

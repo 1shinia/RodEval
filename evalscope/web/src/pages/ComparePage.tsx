@@ -268,21 +268,6 @@ export default function ComparePage() {
   const currentRow = filtered.length > 0 ? filtered[Math.min(page - 1, filtered.length - 1)] : null
 
   // ------------------------------------------------------------------ //
-  // URL manipulation                                                    //
-  // ------------------------------------------------------------------ //
-
-  const removeReport = useCallback((name: string) => {
-    qp.set('reports', reportNames.filter((n) => n !== name).join(';'))
-  }, [reportNames, qp])
-
-  const addReport = useCallback(() => {
-    if (!addInput.trim() || reportNames.length >= 3) return
-    qp.set('reports', [...reportNames, addInput.trim()].join(';'))
-    setAddInput('')
-    setShowAddInput(false)
-  }, [addInput, reportNames, qp])
-
-  // ------------------------------------------------------------------ //
   // Render                                                              //
   // ------------------------------------------------------------------ //
 
@@ -316,53 +301,19 @@ export default function ComparePage() {
         </div>
       </Card>
 
-      {/* Tab Switch */}
-      <Tabs
-        tabs={[
-          { key: 'score', label: t('compare.scoreComparison') },
-          { key: 'prediction', label: t('compare.predictionComparison') },
-        ]}
-        activeKey={activeTab}
-        onChange={(k) => setActiveTab(k as 'score' | 'prediction')}
-      />
-
-      {/* Content */}
+      {/* Score Content */}
       {loading && !dataLoaded ? (
         <div className="flex flex-col gap-4">
           <Skeleton height={450} />
           <Skeleton height={300} />
         </div>
-      ) : activeTab === 'score' ? (
+      ) : (
         <ScoreTab
           rootPath={rootPath}
           reportNames={reportNames}
           scoreTableColumns={scoreTableColumns}
           scoreTableData={scoreTableData}
           displayNames={displayNames}
-          t={t}
-        />
-      ) : (
-        <PredictionTab
-          reportNames={reportNames}
-          displayNames={displayNames}
-          predCommonDatasets={predCommonDatasets}
-          selectedDs={selectedDs}
-          setSelectedDs={setSelectedDs}
-          subsets={subsets}
-          selectedSubset={selectedSubset}
-          setSelectedSubset={setSelectedSubset}
-          perModelFilter={perModelFilter}
-          setPerModelFilter={setPerModelFilter}
-          threshold={threshold}
-          setThreshold={setThreshold}
-          passRates={passRates}
-          mergedPredictions={mergedPredictions}
-          filtered={filtered}
-          currentRow={currentRow}
-          page={page}
-          setPage={setPage}
-          totalPages={totalPages}
-          predictionsLoading={predictionsLoading}
           t={t}
         />
       )}
@@ -389,24 +340,17 @@ function ScoreTab({
   displayNames: Record<string, string>
   t: (p: string) => string
 }) {
-  const reportKeys = scoreTableColumns.slice(1).map((c) => c.key)
+  const reportKeys = scoreTableColumns.slice(1).map((c) => c.key).sort()
   const dataRows = scoreTableData.filter((r) => r.dataset !== t('compare.average'))
   const avgRow = scoreTableData.find((r) => r.dataset === t('compare.average')) ?? null
   const datasetNames = dataRows.map((r) => r.dataset as string)
 
   return (
     <div className="flex flex-col gap-6">
-      <PlotlyChart
-        src={getChartUrl(rootPath, 'radar', { reportNames })}
-        height={450}
-        title={t('multi.modelRadar')}
-      />
-
       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden shadow-[var(--shadow-sm)]">
         <div className="flex items-center border-b border-[var(--border)] px-5 py-3">
           <h3 className="type-label-xs">{t('multi.modelScores')}</h3>
         </div>
-
         {scoreTableData.length === 0 ? (
           // text-dim allowed: non-essential ≥14px metadata (DESIGN.md §Text)
           <div className="py-12 text-center text-sm text-[var(--text-dim)]">{t('common.noData')}</div>
@@ -433,10 +377,10 @@ function ScoreTab({
               <tbody>
                 {reportKeys.map((rk, rkIdx) => (
                   <tr key={rk} className="hover:bg-[var(--bg-card2)] transition-colors">
-                    <td className="px-3 py-2 text-xs font-medium whitespace-nowrap sticky left-0 bg-[var(--bg-card)] z-10 border-r border-[var(--border)] w-32">
+                    <td className="px-3 py-2 text-xs font-medium whitespace-nowrap sticky left-0 bg-[var(--bg-card)] z-10 border-r border-[var(--border)] min-w-[160px]">
                       <div className="flex items-center gap-1.5">
                         <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: modelColor(rkIdx) }} />
-                        <span className="text-[var(--text-muted)] truncate max-w-[110px]" title={displayNames[rk] ?? rk}>
+                        <span className="text-[var(--text-muted)]" title={displayNames[rk] ?? rk}>
                           {displayNames[rk] ?? rk}
                         </span>
                       </div>
@@ -450,7 +394,7 @@ function ScoreTab({
                           {score != null ? (
                             <div className="w-full py-1.5 px-2 rounded-[var(--radius-xs)] text-xs font-mono font-medium text-center text-white" style={{ backgroundColor: scoreColor(score) }}>
                               {isBest && <span className="inline-block w-1.5 h-1.5 rounded-full bg-white mr-1 align-middle opacity-80" />}
-                              {(score * 100).toFixed(1)}%
+                              {(score).toFixed(4)}
                             </div>
                           ) : (
                             // text-dim allowed: em-dash placeholder, decorative non-essential glyph (DESIGN.md §Text)
@@ -466,7 +410,7 @@ function ScoreTab({
                         <td className="px-1 py-1 border-l border-[var(--border)] w-[100px]">
                           <div className="w-full py-1.5 px-2 rounded-[var(--radius-xs)] text-xs font-mono font-semibold text-center text-white" style={{ backgroundColor: scoreColor(score) }}>
                             {isBest && <span className="inline-block w-1.5 h-1.5 rounded-full bg-white mr-1 align-middle opacity-80" />}
-                            {(score * 100).toFixed(1)}%
+                            {score.toFixed(4)}
                           </div>
                         </td>
                       )
@@ -478,6 +422,27 @@ function ScoreTab({
           </div>
         )}
       </div>
+
+      <Card title="得分对比">
+        <ResponsiveContainer width="100%" height={320}>
+          <RBarChart
+            data={dataRows.map((row) => {
+              const entry: Record<string, unknown> = { name: row.dataset }
+              reportKeys.forEach((k) => { entry[displayNames[k] ?? k] = row[k] })
+              return entry
+            })}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+            <YAxis domain={[0, 1]} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} tickFormatter={(v) => v.toFixed(2)} />
+            <Tooltip formatter={(v: unknown) => Number(v).toFixed(4)} />
+            <Legend wrapperStyle={{ fontSize: 12 }} layout="vertical" align="right" verticalAlign="top" />
+            {reportKeys.map((rk, i) => (
+              <Bar key={rk} dataKey={displayNames[rk] ?? rk} fill={modelColor(i)} radius={[4, 4, 0, 0]} maxBarSize={32} />
+            ))}
+          </RBarChart>
+        </ResponsiveContainer>
+      </Card>
     </div>
   )
 }
