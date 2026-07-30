@@ -67,3 +67,55 @@ export async function resumePerfTask(taskId: string, apiKey?: string): Promise<E
 export async function deletePerfTask(taskId: string): Promise<{ ok: boolean }> {
   return apiDelete<{ ok: boolean }>('/api/v1/perf/delete', { task_id: taskId })
 }
+
+// Perf compare types
+export interface PerfRunSummary {
+  [key: string]: number
+}
+
+export interface PerfTaskCompare {
+  task_id: string
+  model: string
+  dataset: string
+  api: string
+  runs: {
+    run_name: string
+    summary: Record<string, number>
+    percentiles: Record<string, number>[]
+    throughput: Record<string, unknown>
+  }[]
+}
+
+export interface PerfCompareResponse {
+  meta: {
+    generated_at: string
+    task_count: number
+  }
+  tasks: PerfTaskCompare[]
+}
+
+export async function comparePerfReports(taskIds: string[]): Promise<PerfCompareResponse> {
+  return api<PerfCompareResponse>('/api/v1/perf/compare', {
+    task_ids: taskIds.join(','),
+  })
+}
+
+export interface SavedCompareReport {
+  id: number
+  name: string
+  task_ids: string
+  created_at: string
+  task_count: number
+}
+
+export async function saveCompareReport(name: string, taskIds: string[]) {
+  return apiPost<{ id: number }>('/api/v1/perf/compare/save', { name, task_ids: taskIds })
+}
+
+export async function listSavedCompareReports() {
+  return api<{ reports: SavedCompareReport[] }>('/api/v1/perf/compare/saved')
+}
+
+export async function deleteCompareReport(id: number) {
+  return apiDelete<{ ok: boolean }>('/api/v1/perf/compare/saved/' + id)
+}

@@ -4,6 +4,7 @@ import { useReports } from '@/contexts/ReportsContext'
 import { useCompare } from '@/contexts/CompareContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import { getPredictions, getChartUrl } from '@/api/reports'
+import { comparePerfReports, type PerfCompareResponse, saveCompareReport, listSavedCompareReports, deleteCompareReport, type SavedCompareReport } from '@/api/perf'
 import { toast } from '@/components/common/Toast'
 import type { ReportData, PredictionRow } from '@/api/types'
 import { getDisplayNames, parseReportName } from '@/utils/reportParser'
@@ -18,7 +19,8 @@ import Skeleton from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
 import PlotlyChart from '@/components/charts/PlotlyChart'
 import ChatView from '@/components/single/ChatView'
-import { ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX, ExternalLink, Trash2, X } from 'lucide-react'
+import { BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 
 // ------------------------------------------------------------------ //
 // Types                                                               //
@@ -59,6 +61,17 @@ export default function ComparePage() {
   const { rootPath: ctxRootPath, setRootPath, loadMultiReports, loading, reportCache } = useReports()
 
   const rootPath = qp.get('root_path') || ctxRootPath
+
+  // ── Perf comparison ──
+  if (selection?.backend === 'Perf') {
+    return <PerfCompareView taskIds={selection.reports} rootPath={rootPath} />
+  }
+
+  // ── No active selection → saved reports list ──
+  if (!selection || selection.reports.length === 0) {
+    return <SavedReportsList />
+  }
+
   const reportNames = useMemo(
     () => selection?.reports || [],
     [selection],
@@ -795,6 +808,382 @@ function PredictionTab({
         <Card>
           {/* text-dim allowed: non-essential ≥14px metadata (DESIGN.md §Text) */}
           <div className="text-center py-8 text-[var(--text-dim)]">{t('common.noData')}</div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ //
+// Perf Comparison View                                                //
+// ------------------------------------------------------------------ //
+
+function PerfCompareView({ taskIds, rootPath }: { taskIds: string[]; rootPath: string }) {
+  const { t } = useLocale()
+  const { clearCompareSelection } = useCompare()
+  const [data, setData] = useState<PerfCompareResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (taskIds.length < 2) {
+      setError('选择至少 2 个压测任务进行对比')
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    comparePerfReports(taskIds)
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : '加载失败'))
+      .finally(() => setLoading(false))
+  }, [taskIds])
+
+  if (loading) {
+    return (
+      <div className="page-enter flex flex-col gap-6">
+        <Breadcrumb items={[{ label: '压测报告' }, { label: '对比' }]} />
+        <div className="flex flex-col gap-4">
+          <Skeleton height={120} />
+          <Skeleton height={400} />
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !data || data.tasks.length < 2) {
+    return (
+      <div className="page-enter">
+        <Breadcrumb items={[{ label: '压测报告' }, { label: '对比' }]} />
+        <div className="flex flex-col items-center justify-center gap-4 py-20">
+          <AlertCircle size={48} className="text-[var(--text-dim)]" />
+          <p className="text-[var(--text-muted)] text-lg">{error || '选择至少 2 个压测任务进行对比'}</p>
+        </div>
+      </div>
+    )
+  }
+
+  const models = data.tasks.map((t) => ({
+    label: t.model,
+    data: t.runs[0]?.summary || {},
+    percentiles: t.runs[0]?.percentiles || [],
+    errMsg: (t as any).error as string | undefined,
+  }))
+
+  const valid = models.filter((m) => Object.keys(m.data).length > 0)
+  const missing = models.filter((m) => Object.keys(m.data).length === 0)
+
+  const totalReqs = valid.reduce((s, m) => s + (m.data['Total Requests'] || 0), 0)
+  const totalSucc = valid.reduce((s, m) => s + (m.data['Success Requests'] || 0), 0)
+  const avgSuccess = totalReqs ? ((totalSucc / totalReqs) * 100).toFixed(1) : '0'
+  const avgLatency = valid.length
+    ? (valid.reduce((s, m) => s + (m.data['Avg Latency (s)'] || 0), 0) / valid.length).toFixed(2)
+    : '0'
+  const avgOutputTps = valid.length
+    ? (valid.reduce((s, m) => s + (m.data['Output Throughput (tok/s)'] || 0), 0) / valid.length).toFixed(1)
+    : '0'
+
+  const kpis = [
+    ['已选任务', models.length],
+    ['有效数据', valid.length],
+    ['总请求数', totalReqs],
+    ['平均成功率', `${avgSuccess}%`],
+    ['平均延迟', `${avgLatency}s`],
+    ['平均输出 TPS', avgOutputTps],
+  ]
+
+  const columns = [
+    { key: 'model', label: '模型', render: (m: typeof valid[0]) => m.label },
+    { key: 'concurrency', label: '并发', render: (m: typeof valid[0]) => m.data['Concurrency'] ?? '-' },
+    { key: 'total', label: '请求数', render: (m: typeof valid[0]) => m.data['Total Requests'] ?? '-' },
+    { key: 'success', label: '成功', render: (m: typeof valid[0]) => m.data['Success Requests'] ?? '-' },
+    { key: 'failed', label: '失败', render: (m: typeof valid[0]) => m.data['Failed Requests'] ?? '0' },
+    { key: 'rate', label: '成功率', render: (m: typeof valid[0]) => {
+      const sr = m.data['Success Requests'] && m.data['Total Requests']
+        ? m.data['Success Requests'] / m.data['Total Requests'] : 1
+      return `${(sr * 100).toFixed(1)}%`
+    }},
+    { key: 'rps', label: 'RPS', render: (m: typeof valid[0]) => (m.data['Req Throughput (req/s)'] ?? 0).toFixed(4) },
+    { key: 'rpm', label: 'RPM', render: (m: typeof valid[0]) => `${((m.data['Req Throughput (req/s)'] ?? 0) * 60).toFixed(1)}` },
+    { key: 'tpm', label: 'TPM', render: (m: typeof valid[0]) => `${((m.data['Output Throughput (tok/s)'] ?? 0) * 60).toFixed(0)}` },
+    { key: 'latency_avg', label: '延迟 Avg(s)', render: (m: typeof valid[0]) => (m.data['Avg Latency (s)'] ?? 0).toFixed(2) },
+    { key: 'ttft', label: 'TTFT Avg(ms)', render: (m: typeof valid[0]) => (m.data['TTFT (ms)'] ?? 0).toFixed(1) },
+    { key: 'tpot', label: 'TPOT Avg(ms)', render: (m: typeof valid[0]) => (m.data['TPOT (ms)'] ?? 0).toFixed(1) },
+    { key: 'output_tps', label: '输出 tok/s', render: (m: typeof valid[0]) => (m.data['Output Throughput (tok/s)'] ?? 0).toFixed(1) },
+    { key: 'total_tps', label: '总 tok/s', render: (m: typeof valid[0]) => (m.data['Total Throughput (tok/s)'] ?? 0).toFixed(1) },
+  ]
+
+  return (
+    <div className="page-enter flex flex-col gap-6">
+      <Breadcrumb items={[{ label: '压测报告' }, { label: '对比' }]} />
+
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="md" onClick={() => clearCompareSelection()}>← 返回列表</Button>
+        <Button size="md" onClick={async () => {
+          const name = `${valid.map((m) => m.label).join(' vs ')}`.slice(0, 80)
+          try {
+            await saveCompareReport(name, taskIds)
+            toast.success('报告已保存')
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : '保存失败')
+          }
+        }}>保存报告</Button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        {kpis.map(([label, value]) => (
+          <div key={label} className="px-4 py-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] border-l-[3px] border-l-[var(--accent)]">
+            <div className="text-lg font-bold text-[var(--text)]">{value}</div>
+            <div className="text-xs text-[var(--text-muted)] mt-0.5">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {missing.length > 0 && (
+        <div className="px-4 py-3 rounded-[var(--radius)] bg-[var(--accent-dim)] border border-[var(--accent)] text-sm text-[var(--text)]">
+          以下 {missing.length} 个任务缺少压测数据，已排除在图表和对比表之外：
+          <span className="text-[var(--text-muted)] ml-2">
+            {missing.map((m) => m.label).join('、')}
+          </span>
+        </div>
+      )}
+
+      <Card title="压测指标对比">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b-2 border-[var(--border)]">
+                {columns.map((c) => (
+                  <th key={c.key} className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium whitespace-nowrap">
+                    {c.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {valid.map((m, i) => (
+                <tr key={i} className="border-b border-[var(--border)] hover:bg-[var(--bg-card2)] transition-colors">
+                  {columns.map((c) => (
+                    <td key={c.key} className="py-2 px-3 text-[var(--text)] whitespace-nowrap">
+                      {c.render(m)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {missing.map((m, i) => (
+                <tr key={`miss-${i}`} className="border-b border-[var(--border)] bg-[var(--bg-deep)] opacity-60">
+                  <td className="py-2 px-3 text-[var(--text-muted)] whitespace-nowrap">{m.label}</td>
+                  <td colSpan={columns.length - 1} className="py-2 px-3 text-xs text-[var(--text-dim)]">无数据</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+        <Card title="吞吐能力 (RPM)">
+          <ResponsiveContainer width="100%" height={280}>
+            <RBarChart data={valid.map((m) => ({
+              name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
+              'RPM': (m.data['Req Throughput (req/s)'] || 0) * 60,
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <Tooltip formatter={(v: unknown) => Number(v).toFixed(1)} />
+              <Bar dataKey="RPM" radius={[4, 4, 0, 0]}>
+                {valid.map((_, i) => <Cell key={i} fill={modelColor(i)} />)}
+              </Bar>
+            </RBarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card title="吞吐能力 (TPM)">
+          <ResponsiveContainer width="100%" height={280}>
+            <RBarChart data={valid.map((m) => ({
+              name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
+              'TPM': (m.data['Output Throughput (tok/s)'] || 0) * 60,
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <Tooltip formatter={(v: unknown) => Number(v).toFixed(0)} />
+              <Bar dataKey="TPM" radius={[4, 4, 0, 0]}>
+                {valid.map((_, i) => <Cell key={i} fill={modelColor(i)} />)}
+              </Bar>
+            </RBarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card title="Avg 延迟 (s)">
+          <ResponsiveContainer width="100%" height={280}>
+            <RBarChart data={valid.map((m) => ({
+              name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
+              '延迟': (m.data['Avg Latency (s)'] || 0),
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} unit="s" />
+              <Tooltip formatter={(v: unknown) => `${Number(v).toFixed(2)}s`} />
+              <Bar dataKey="延迟" radius={[4, 4, 0, 0]}>
+                {valid.map((_, i) => <Cell key={i} fill={modelColor(i)} />)}
+              </Bar>
+            </RBarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card title="TTFT 首字延迟 (ms)">
+          <ResponsiveContainer width="100%" height={280}>
+            <RBarChart data={valid.map((m) => ({
+              name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
+              'TTFT': (m.data['TTFT (ms)'] || 0),
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} unit="ms" />
+              <Tooltip formatter={(v: unknown) => `${Number(v).toFixed(0)}ms`} />
+              <Bar dataKey="TTFT" radius={[4, 4, 0, 0]}>
+                {valid.map((_, i) => <Cell key={i} fill={modelColor(i)} />)}
+              </Bar>
+            </RBarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card title="TPOT 生成间隔 (ms)">
+          <ResponsiveContainer width="100%" height={280}>
+            <RBarChart data={valid.map((m) => ({
+              name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
+              'TPOT': (m.data['TPOT (ms)'] || 0),
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} unit="ms" />
+              <Tooltip formatter={(v: unknown) => `${Number(v).toFixed(1)}ms`} />
+              <Bar dataKey="TPOT" radius={[4, 4, 0, 0]}>
+                {valid.map((_, i) => <Cell key={i} fill={modelColor(i)} />)}
+              </Bar>
+            </RBarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card title="成功率 (%)">
+          <ResponsiveContainer width="100%" height={280}>
+            <RBarChart data={valid.map((m) => {
+              const sr = m.data['Success Requests'] && m.data['Total Requests']
+                ? (m.data['Success Requests'] / m.data['Total Requests']) * 100 : 100
+              return { name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label, '成功率': sr }
+            })}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <Tooltip formatter={(v: unknown) => `${Number(v).toFixed(1)}%`} />
+              <Bar dataKey="成功率" radius={[4, 4, 0, 0]}>
+                {valid.map((_, i) => <Cell key={i} fill={modelColor(i)} />)}
+              </Bar>
+            </RBarChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+
+      <Card title="原始报告">
+        <div className="flex flex-wrap gap-2">
+          {data.tasks.map((t) => (
+            <a
+              key={t.task_id}
+              href={`/api/v1/perf/report?task_id=${encodeURIComponent(t.task_id)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-sm text-[var(--accent)] hover:bg-[var(--accent-dim)] transition-colors"
+            >
+              {t.model}
+              <ExternalLink size={12} />
+            </a>
+          ))}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ //
+// Saved Reports List                                                   //
+// ------------------------------------------------------------------ //
+
+function SavedReportsList() {
+  const [reports, setReports] = useState<SavedCompareReport[]>([])
+  const [loading, setLoading] = useState(true)
+  const { setCompareSelection } = useCompare()
+
+  const load = useCallback(() => {
+    setLoading(true)
+    listSavedCompareReports()
+      .then((r) => setReports(r.reports || []))
+      .catch(() => toast.error('加载报告列表失败'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('确定删除该对比报告？')) return
+    try {
+      await deleteCompareReport(id)
+      toast.success('已删除')
+      load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '删除失败')
+    }
+  }
+
+  const handleOpen = (r: SavedCompareReport) => {
+    const ids = JSON.parse(r.task_ids) as string[]
+    setCompareSelection({ reports: ids, rootPath: '', backend: 'Perf' })
+  }
+
+  return (
+    <div className="page-enter flex flex-col gap-6">
+      <Breadcrumb items={[{ label: '压测报告' }, { label: '对比报告列表' }]} />
+
+      <p className="text-sm text-[var(--text-muted)]">
+        在压测报告页选中多个任务后点「对比」，进入对比页面后点击「保存报告」即可保存到此列表。
+      </p>
+
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} height={60} />)}
+        </div>
+      ) : reports.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-[var(--text-dim)]">
+          <AlertCircle size={36} />
+          <p className="text-sm">暂无保存的对比报告</p>
+        </div>
+      ) : (
+        <Card title={`已保存 ${reports.length} 份对比报告`}>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b-2 border-[var(--border)]">
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">名称</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">任务数</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">创建时间</th>
+                  <th className="text-right py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reports.map((r) => (
+                  <tr key={r.id} className="border-b border-[var(--border)] hover:bg-[var(--bg-card2)] transition-colors cursor-pointer" onClick={() => handleOpen(r)}>
+                    <td className="py-2.5 px-3 text-[var(--text)]">{r.name}</td>
+                    <td className="py-2.5 px-3 text-[var(--text-muted)]">{r.task_count}</td>
+                    <td className="py-2.5 px-3 text-xs text-[var(--text-dim)]">{r.created_at}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(r.id) }}
+                        className="p-1 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all"
+                        title="删除"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
     </div>

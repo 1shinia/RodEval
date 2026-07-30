@@ -90,6 +90,9 @@ def list_perf_tasks():
     # --- Try SQLite first ---
     try:
         from .. import db as _db
+        removed = _db.cleanup_perf_tasks(root)
+        if removed:
+            logger.info(f'Cleaned up {removed} stale perf task(s) from DB')
         items, total, available_models, available_datasets = _db.query_perf_tasks(
             search=search,
             filter_model=filter_model,
@@ -733,3 +736,192 @@ def stream_performance_progress():
 
     from flask import Response
     return Response(generate(), mimetype='text/event-stream')
+
+
+@bp_perf.route('/compare', methods=['GET'])
+def compare_perf_reports():
+    """Get combined perf metrics for side-by-side comparison.
+
+    Query params:
+        task_ids (str): comma-separated task IDs
+    """
+    task_ids_str = request.args.get('task_ids', '')
+    if not task_ids_str:
+        return jsonify({'error': 'task_ids is required'}), 400
+
+    task_ids = [t.strip() for t in task_ids_str.split(',') if t.strip()]
+    if not task_ids:
+        return jsonify({'error': 'task_ids is required'}), 400
+
+    from datetime import datetime
+
+    tasks_data = []
+    for tid in task_ids:
+        try:
+            validate_task_id(tid)
+        except ValueError:
+            continue
+
+        task_dir = os.path.join(OUTPUT_DIR, tid)
+        perf_dir = os.path.join(task_dir, 'perf')
+        if not os.path.isdir(perf_dir):
+            tasks_data.append({
+                'task_id': tid,
+                'model': os.path.basename(task_dir) if os.path.isdir(task_dir) else tid,
+                'dataset': 'N/A',
+                'api': 'N/A',
+                'runs': [],
+                'error': '无压测数据 (perf 目录不存在)',
+            })
+            continue
+
+        model_name = 'N/A'
+        dataset_name = 'N/A'
+        api_type = 'N/A'
+        for sub in sorted(os.listdir(perf_dir)):
+            sub_dir = os.path.join(perf_dir, sub)
+            if not os.path.isdir(sub_dir):
+                continue
+            args_file = os.path.join(sub_dir, 'benchmark_args.json')
+            if os.path.isfile(args_file):
+                try:
+                    with open(args_file) as f:
+                        args = json.load(f)
+                    model_name = args.get('model', 'N/A')
+                    dataset_name = args.get('dataset_label') or args.get('dataset', 'N/A')
+                    api_type = args.get('api', 'N/A')
+                except Exception:
+                    pass
+                break
+
+        runs = []
+        for sub in sorted(os.listdir(perf_dir)):
+            sub_dir = os.path.join(perf_dir, sub)
+            if not os.path.isdir(sub_dir):
+                continue
+
+            summary_file = os.path.join(sub_dir, 'benchmark_summary.json')
+            if not os.path.isfile(summary_file):
+                continue
+
+            try:
+                with open(summary_file) as f:
+                    summary = json.load(f)
+            except Exception:
+                summary = {}
+
+            percentiles = []
+            percentile_file = os.path.join(sub_dir, 'benchmark_percentile.json')
+            if os.path.isfile(percentile_file):
+                try:
+                    with open(percentile_file) as f:
+                        percentiles = json.load(f)
+                except Exception:
+                    pass
+
+            throughput = {}
+            throughput_file = os.path.join(sub_dir, 'workload_throughput.json')
+            if os.path.isfile(throughput_file):
+                try:
+                    with open(throughput_file) as f:
+                        throughput = json.load(f)
+                except Exception:
+                    pass
+
+            runs.append({
+                'run_name': sub,
+                'summary': summary,
+                'percentiles': percentiles,
+                'throughput': throughput,
+            })
+
+        if not runs:
+            # Include task even without benchmark data, so user sees all selected
+            tasks_data.append({
+                'task_id': tid,
+                'model': model_name,
+                'dataset': dataset_name,
+                'api': api_type,
+                'runs': [],
+                'error': '无压测数据 (benchmark_summary.json 不存在)',
+            })
+            continue
+
+        tasks_data.append({
+            'task_id': tid,
+            'model': model_name,
+            'dataset': dataset_name,
+            'api': api_type,
+            'runs': runs,
+        })
+
+    if not tasks_data:
+        return jsonify({'error': 'No valid perf reports found'}), 404
+
+    return jsonify({
+        'meta': {
+            'generated_at': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+            'task_count': len(tasks_data),
+        },
+        'tasks': tasks_data,
+    }), 200
+
+
+# --------------------------------------------------------------------------- #
+# Compare report save / list / delete                                          #
+# --------------------------------------------------------------------------- #
+
+@bp_perf.route('/compare/save', methods=['POST'])
+def save_compare_report():
+    """Save a compare report (task IDs snapshot).
+
+    JSON body: {"name": "...", "task_ids": ["perf_xxx", ...]}
+    """
+    data = request.get_json()
+    if not data or not data.get('task_ids'):
+        return jsonify({'error': 'task_ids is required'}), 400
+
+    name = data.get('name', '').strip()
+    task_ids = data['task_ids']
+    if not isinstance(task_ids, list) or len(task_ids) < 2:
+        return jsonify({'error': 'task_ids must be a list of at least 2'}), 400
+
+    if not name:
+        name = f'对比报告 ({len(task_ids)} 个模型)'
+
+    try:
+        from .. import db as _db
+        report_id = _db.save_compare_report(name, json.dumps(task_ids), len(task_ids))
+        return jsonify({'id': report_id, 'name': name, 'task_count': len(task_ids)}), 201
+    except Exception as e:
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to save compare report: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to save', 'error_id': error_id}), 500
+
+
+@bp_perf.route('/compare/saved', methods=['GET'])
+def list_compare_reports():
+    """List all saved compare reports."""
+    try:
+        from .. import db as _db
+        reports = _db.list_compare_reports()
+        return jsonify({'reports': reports}), 200
+    except Exception as e:
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to list compare reports: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to list', 'error_id': error_id}), 500
+
+
+@bp_perf.route('/compare/saved/<int:report_id>', methods=['DELETE'])
+def delete_compare_report(report_id: int):
+    """Delete a saved compare report."""
+    try:
+        from .. import db as _db
+        deleted = _db.delete_compare_report(report_id)
+        if deleted:
+            return jsonify({'ok': True}), 200
+        return jsonify({'error': 'Report not found'}), 404
+    except Exception as e:
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to delete compare report: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to delete', 'error_id': error_id}), 500

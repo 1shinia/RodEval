@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { listPerfTasks, deletePerfTask, getPerfReportUrl, type PerfTaskMeta } from '@/api/perf'
 import { toast } from '@/components/common/Toast'
@@ -6,8 +6,9 @@ import { api } from '@/api/client'
 import Breadcrumb from '@/components/ui/Breadcrumb'
 import Card from '@/components/ui/Card'
 import ServerBadge from '@/components/ui/ServerBadge'
-import { ExternalLink, FolderOpen, History, Search, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import CompareBar from '@/components/reports/CompareBar'
+import { ExternalLink, History, Search, Trash2 } from 'lucide-react'
+import Button from '@/components/ui/Button'
 
 const PAGE_SIZE = 20
 
@@ -30,6 +31,11 @@ export default function PerfReportsPage() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  // Selection (compare)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selectAllLoading, setSelectAllLoading] = useState(false)
+  const allPageIds = useMemo(() => history.map((item) => item.task_id), [history])
 
   useEffect(() => {
     searchTimer.current = setTimeout(() => {
@@ -83,9 +89,62 @@ export default function PerfReportsPage() {
 
   const handleDelete = useCallback(async (tid: string) => {
     if (!window.confirm(t('perf.confirmDelete'))) return
-    try { await deletePerfTask(tid); toast.success(t('common.deleteSuccess')); loadHistory(page) }
+    try {
+      await deletePerfTask(tid)
+      toast.success(t('common.deleteSuccess'))
+      setSelected((prev) => { const next = new Set(prev); next.delete(tid); return next })
+      loadHistory(page)
+    }
     catch (e) { toast.error(e instanceof Error ? e.message : t('common.deleteFailed')) }
   }, [loadHistory, page, t])
+
+  // ---- Selection helpers ----
+  const toggleSelect = useCallback((taskId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId)
+      return next
+    })
+  }, [])
+
+  const togglePageSelect = useCallback(() => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      const allSelected = allPageIds.every((id) => prev.has(id))
+      if (allSelected) {
+        for (const id of allPageIds) next.delete(id)
+      } else {
+        for (const id of allPageIds) next.add(id)
+      }
+      return next
+    })
+  }, [allPageIds])
+
+  const toggleSelectAll = useCallback(async () => {
+    if (selected.size >= total) {
+      setSelected(new Set())
+      return
+    }
+    setSelectAllLoading(true)
+    try {
+      const params: Record<string, string> = { page: '1', page_size: '10000' }
+      if (rootPath) params.root_path = rootPath
+      const res = await listPerfTasks(params)
+      setSelected(new Set((res.tasks || []).map((t) => t.task_id)))
+    } catch {
+      setSelected((prev) => {
+        const next = new Set(prev)
+        for (const id of allPageIds) next.add(id)
+        return next
+      })
+    } finally {
+      setSelectAllLoading(false)
+    }
+  }, [selected.size, total, rootPath, allPageIds])
+
+  const handleClear = useCallback(() => setSelected(new Set()), [])
+
+  const allPageSelected = allPageIds.length > 0 && allPageIds.every((id) => selected.has(id))
 
   return (
     <div className="page-enter flex flex-col gap-5">
@@ -94,12 +153,18 @@ export default function PerfReportsPage() {
         <Breadcrumb items={[{ label: t('nav.perfReports') }]} />
         <ServerBadge address={serverAddress} />
       </div>
-      <div className="flex items-center gap-2">
-        <FolderOpen size={16} className="text-[var(--text-muted)] shrink-0" />
-        <input type="text" value={rootPath} onChange={(e) => setRootPath(e.target.value)}
-          className="flex-1 px-3 py-2 text-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)] transition-all duration-[var(--transition)]"
-          placeholder={t('perf.outputDir')} />
-      </div>
+
+      {/* Compare bar */}
+      <CompareBar
+        selected={[...selected]}
+        totalCount={total}
+        rootPath={rootPath}
+        backend="Perf"
+        onSelectAll={toggleSelectAll}
+        onClear={handleClear}
+        loading={selectAllLoading}
+        compareUrl={`/compare?root_path=${encodeURIComponent(rootPath)}`}
+      />
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
@@ -142,6 +207,14 @@ export default function PerfReportsPage() {
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)]">
+                  <th className="w-10 py-2.5 px-3">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={togglePageSelect}
+                      className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
+                    />
+                  </th>
                   <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.taskId')}</th>
                   <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.model')}</th>
                   <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.datasetLabel')}</th>
@@ -153,7 +226,15 @@ export default function PerfReportsPage() {
               </thead>
               <tbody>
                 {history.map((item) => (
-                  <tr key={item.task_id} className="border-b border-[var(--border)] hover:bg-[var(--bg-card2)] transition-colors">
+                  <tr key={item.task_id} className={`border-b border-[var(--border)] hover:bg-[var(--bg-card2)] transition-colors ${selected.has(item.task_id) ? 'bg-[var(--accent-dim)]' : ''}`}>
+                    <td className="py-2.5 px-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(item.task_id)}
+                        onChange={() => toggleSelect(item.task_id)}
+                        className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
+                      />
+                    </td>
                     <td className="py-2.5 px-3 font-mono text-xs text-[var(--text-muted)] max-w-[180px] truncate" title={item.task_id}>{item.task_id.replace('perf_', '')}</td>
                     <td className="py-2.5 px-3 font-medium text-[var(--text)] max-w-[280px] truncate" title={item.model}>{item.model}</td>
                     <td className="py-2.5 px-3 text-[var(--text-muted)] max-w-[150px] truncate" title={item.dataset}>{item.dataset}</td>
@@ -180,33 +261,23 @@ export default function PerfReportsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-3 pb-1">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className={cn(
-                  'p-1.5 rounded-[var(--radius-sm)] border border-[var(--border)] transition-colors',
-                  page <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[var(--bg-card2)] cursor-pointer',
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>←</Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((item, idx) =>
+                  item === 'ellipsis' ? (
+                    <span key={`e${idx}`} className="px-1 text-[var(--text-dim)]">...</span>
+                  ) : (
+                    <Button key={item} variant={item === page ? 'primary' : 'ghost'} size="sm" onClick={() => setPage(item as number)} className="!min-w-[32px]">{item}</Button>
+                  ),
                 )}
-                aria-label="Previous page"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="type-body-sm text-[var(--text-muted)] tabular-nums">
-                {page} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className={cn(
-                  'p-1.5 rounded-[var(--radius-sm)] border border-[var(--border)] transition-colors',
-                  page >= totalPages ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[var(--bg-card2)] cursor-pointer',
-                )}
-                aria-label="Next page"
-              >
-                <ChevronRight size={16} />
-              </button>
-              <span className="type-body-xs text-[var(--text-dim)] ml-2">{t('perf.totalCount', { n: total })}</span>
+              <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>→</Button>
             </div>
           )}
         </Card>

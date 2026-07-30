@@ -22,7 +22,7 @@ _db_path: str | None = None
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 3  # Bump when adding migrations below
+SCHEMA_VERSION = 4  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -89,6 +89,17 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         3, 'add eval_backend column', '''
         ALTER TABLE eval_reports ADD COLUMN eval_backend TEXT DEFAULT '';
         UPDATE eval_reports SET eval_backend = '' WHERE eval_backend IS NULL;
+    '''
+    ),
+    (
+        4, 'add compare_reports table', '''
+        CREATE TABLE IF NOT EXISTS compare_reports (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL,
+            task_ids    TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            task_count  INTEGER DEFAULT 0
+        );
     '''
     ),
 ]
@@ -364,6 +375,23 @@ def upsert_perf_task(
         (task_id, model, api, dataset, runs, int(has_report), timestamp),
     )
     conn.commit()
+
+
+def cleanup_perf_tasks(output_dir: str) -> int:
+    """Remove perf_tasks rows whose directories no longer exist on disk.
+
+    Returns the number of rows removed.
+    """
+    conn = _get_conn()
+    rows = conn.execute('SELECT task_id FROM perf_tasks').fetchall()
+    stale: list[str] = []
+    for (tid,) in rows:
+        if not os.path.isdir(os.path.join(output_dir, tid)):
+            stale.append(tid)
+    if stale:
+        conn.executemany('DELETE FROM perf_tasks WHERE task_id = ?', [(t,) for t in stale])
+        conn.commit()
+    return len(stale)
 
 
 def query_perf_tasks(
@@ -783,3 +811,47 @@ def backfill(output_dir: str) -> None:
     # Update query planner statistics after bulk insert
     conn.execute('PRAGMA optimize')
     logger.debug('DB statistics optimized')
+
+
+# --------------------------------------------------------------------------- #
+# Compare reports CRUD                                                        #
+# --------------------------------------------------------------------------- #
+
+def save_compare_report(name: str, task_ids_json: str, task_count: int) -> int:
+    """Save a compare report and return its ID."""
+    from datetime import datetime
+
+    conn = _get_conn()
+    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute(
+        'INSERT INTO compare_reports (name, task_ids, created_at, task_count) VALUES (?, ?, ?, ?)',
+        (name, task_ids_json, created_at, task_count),
+    )
+    conn.commit()
+    return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+
+def list_compare_reports() -> list[dict]:
+    """Return all saved compare reports, newest first."""
+    conn = _get_conn()
+    rows = conn.execute(
+        'SELECT id, name, task_ids, created_at, task_count FROM compare_reports ORDER BY created_at DESC'
+    ).fetchall()
+    return [
+        {
+            'id': r[0],
+            'name': r[1],
+            'task_ids': r[2],
+            'created_at': r[3],
+            'task_count': r[4],
+        }
+        for r in rows
+    ]
+
+
+def delete_compare_report(report_id: int) -> bool:
+    """Delete a compare report by ID. Returns True if deleted."""
+    conn = _get_conn()
+    cur = conn.execute('DELETE FROM compare_reports WHERE id = ?', (report_id,))
+    conn.commit()
+    return cur.rowcount > 0

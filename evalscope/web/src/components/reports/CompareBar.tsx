@@ -10,6 +10,7 @@ interface CompareBarProps {
   onSelectAll: () => Promise<void> | void
   onClear: () => void
   loading?: boolean
+  compareUrl?: string
 }
 
 export default function CompareBar({
@@ -20,12 +21,13 @@ export default function CompareBar({
   onSelectAll,
   onClear,
   loading,
+  compareUrl,
 }: CompareBarProps) {
   const { setCompareSelection } = useCompare()
 
   const handleCompare = () => {
     setCompareSelection({ reports: selected, rootPath, backend })
-    window.location.href = `/compare?root_path=${encodeURIComponent(rootPath)}`
+    window.open(compareUrl || `/compare?root_path=${encodeURIComponent(rootPath)}`, '_blank')
   }
 
   const hasSelection = selected.length > 0
