@@ -402,6 +402,89 @@ def cleanup_perf_tasks(output_dir: str) -> int:
     return len(stale)
 
 
+def cleanup_eval_reports(output_dir: str) -> int:
+    """Remove eval_reports rows whose directories no longer exist on disk.
+
+    Returns the number of rows removed.
+    """
+    conn = _get_conn()
+    rows = conn.execute('SELECT task_id FROM eval_reports').fetchall()
+    stale: list[str] = []
+    for (tid,) in rows:
+        if not os.path.isdir(os.path.join(output_dir, tid)):
+            stale.append(tid)
+    if stale:
+        conn.executemany('DELETE FROM eval_reports WHERE task_id = ?', [(t,) for t in stale])
+        conn.commit()
+    return len(stale)
+
+
+def upsert_aigc_audio_report(output_dir: str, task_id: str) -> bool:
+    """Read AIGC/Audio results.json and upsert into eval_reports.
+
+    Returns True if a report was upserted, False if skipped.
+    """
+    results_file = os.path.join(output_dir, task_id, 'results.json')
+    if not os.path.isfile(results_file):
+        return False
+    try:
+        with open(results_file, encoding='utf-8') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return False
+
+    model_type = data.get('model_type', '')
+    tool = data.get('tool', '')
+    model_name = data.get('model', 'unknown')
+    num_samples = data.get('num_samples', 0)
+    metrics = data.get('metrics', {})
+    if not isinstance(metrics, dict):
+        metrics = {}
+
+    # Determine backend
+    if model_type in ('txt2img', 'txt2video', 'img2img'):
+        eval_backend = 'AIGC_EVAL'
+    elif tool in ('asr', 'tts'):
+        eval_backend = 'AudioEval'
+    else:
+        return False  # Not AIGC/Audio
+
+    # Determine primary score
+    score = 0.0
+    if eval_backend == 'AIGC_EVAL':
+        score = metrics.get('clip_score_mean') or 0.0
+    elif tool == 'asr':
+        wer = metrics.get('wer')
+        score = (1.0 - wer) if wer is not None else 0.0
+    elif tool == 'tts':
+        wer = metrics.get('wer_avg')
+        score = (1.0 - wer) if wer is not None else 0.0
+
+    # Timestamp
+    ts = data.get('timestamp')
+    if ts:
+        timestamp = datetime.fromtimestamp(float(ts)).isoformat()
+    else:
+        try:
+            timestamp = datetime.fromtimestamp(os.path.getmtime(results_file)).isoformat()
+        except OSError:
+            timestamp = ''
+
+    dataset_name = model_type or tool or 'unknown'
+
+    upsert_eval_report(
+        task_id=task_id,
+        model_name=model_name,
+        dataset_name=dataset_name,
+        score=round(score, 4),
+        num_samples=num_samples,
+        timestamp=timestamp,
+        dataset_scores=None,
+        eval_backend=eval_backend,
+    )
+    return True
+
+
 def query_perf_tasks(
     search: str = '',
     filter_model: str = '',
@@ -730,6 +813,26 @@ def backfill(output_dir: str) -> None:
             logger.info(f'Backfill: indexed {eval_count} eval reports ({eval_skipped} already in DB)')
     except Exception as e:
         logger.warning(f'Backfill: eval reports failed: {e}')
+
+    # --- Backfill AIGC / Audio reports from results.json ---
+    try:
+        aigc_audio_count = 0
+        aigc_audio_skipped = 0
+        existing_eval = {r[0] for r in conn.execute('SELECT task_id FROM eval_reports').fetchall()}
+        for entry in sorted(os.listdir(output_dir)):
+            if entry in existing_eval:
+                continue
+            task_dir = os.path.join(output_dir, entry)
+            if not os.path.isdir(task_dir):
+                continue
+            if upsert_aigc_audio_report(output_dir, entry):
+                aigc_audio_count += 1
+            elif os.path.isfile(os.path.join(task_dir, 'results.json')):
+                aigc_audio_skipped += 1
+        if aigc_audio_count:
+            logger.info(f'Backfill: indexed {aigc_audio_count} AIGC/Audio reports ({aigc_audio_skipped} already in DB)')
+    except Exception as e:
+        logger.warning(f'Backfill: AIGC/Audio reports failed: {e}')
 
     # --- Backfill perf tasks ---
     try:

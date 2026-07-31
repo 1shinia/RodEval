@@ -48,6 +48,13 @@ def run_aigc_evaluation():
             # Execute evaluation
             result = _execute_aigc_task(task_id, config)
 
+            # Sync to SQLite
+            try:
+                from .. import db as _db
+                _db.upsert_aigc_audio_report(str(OUTPUT_DIR), task_id)
+            except Exception:
+                pass
+
             return jsonify({
                 'task_id': task_id,
                 'status': 'completed',
@@ -455,4 +462,10 @@ def delete_aigc_report(task_id: str):
         return jsonify({'error': 'Report not found'}), 404
     shutil.rmtree(str(task_dir))
     logger.info(f'Deleted AIGC report: {task_dir}')
+    # Sync SQLite
+    try:
+        from .. import db as _db
+        _db.delete_eval_report(task_id)
+    except Exception as e:
+        logger.warning(f'Failed to delete AIGC task {task_id} from SQLite: {e}')
     return jsonify({'success': True})

@@ -335,6 +335,9 @@ def list_reports():
         # --- Try SQLite first ---
         try:
             from .. import db as _db
+            removed = _db.cleanup_eval_reports(root)
+            if removed:
+                logger.info(f'Cleaned up {removed} stale eval report(s) from DB')
             items, total, available_models, available_datasets = _db.query_eval_reports(
                 search=search,
                 models=models_filter,
@@ -349,22 +352,21 @@ def list_reports():
             )
             # Sanity: filter out reports whose directories no longer exist
             items = [it for it in items if _report_dir_exists(it['name'], root)]
-            # If filesystem check pruned items, re-count total
-            if len(items) < page_size:
-                all_total = _db.query_eval_reports(
-                    search=search,
-                    models=models_filter,
-                    datasets=datasets_filter,
-                    score_min=score_min,
-                    score_max=score_max,
-                    sort_by=sort_by,
-                    sort_order=sort_order,
-                    page=1,
-                    page_size=10000,
-                    backend=backend,
-                )[0]
-                all_filtered = [r for r in all_total if _report_dir_exists(r['name'], root)]
-                total = len(all_filtered)
+            # Always re-count total after filesystem pruning
+            all_total = _db.query_eval_reports(
+                search=search,
+                models=models_filter,
+                datasets=datasets_filter,
+                score_min=score_min,
+                score_max=score_max,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                page=1,
+                page_size=10000,
+                backend=backend,
+            )[0]
+            all_filtered = [r for r in all_total if _report_dir_exists(r['name'], root)]
+            total = len(all_filtered)
             return jsonify({
                 'reports': items,
                 'total': total,

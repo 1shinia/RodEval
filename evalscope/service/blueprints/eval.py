@@ -354,6 +354,7 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                             num_samples=total_num,
                             timestamp=datetime.now().isoformat(),
                             dataset_scores=dataset_scores,
+                            eval_backend=task_config.eval_backend or '',
                         )
                         break
                     except Exception as e:
@@ -363,6 +364,9 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                         _time.sleep(1 + attempt * 2)
                 else:
                     raise last_err  # type: ignore[misc]
+            elif task_config.eval_backend in (EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
+                # AIGC/Audio don't produce reports/ dir — read from results.json
+                _db.upsert_aigc_audio_report(task_config.work_dir, task_id)
         except Exception as e:
             logger.warning(f'Failed to write eval to SQLite (non-fatal): {e}')
 
