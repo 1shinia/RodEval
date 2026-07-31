@@ -28,7 +28,7 @@ const defaultFilters: ReportFilters = {
   models: [],
   datasets: [],
   scoreMin: 0,
-  scoreMax: 1,
+  scoreMax: 100,
   sortBy: 'time',
   sortOrder: 'desc',
 }

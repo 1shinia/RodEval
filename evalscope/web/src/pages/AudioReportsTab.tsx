@@ -195,7 +195,7 @@ export default function AudioReportsTab() {
           <div className="rounded-[var(--radius)] border border-[var(--border)] overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[var(--border)] bg-[var(--bg-card2)] text-left">
+                <tr className="bg-[var(--bg-deep)] border-b border-[var(--border)]">
                   <th className="w-10 px-3 py-3">
                     <input
                       type="checkbox"
@@ -204,17 +204,17 @@ export default function AudioReportsTab() {
                       className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
                     />
                   </th>
-                  <th className="px-4 py-3 font-medium text-[var(--text)]">任务 ID</th>
-                  <th className="px-4 py-3 font-medium text-[var(--text)]">类型</th>
-                  <th className="px-4 py-3 font-medium text-[var(--text)]">模型</th>
-                  <th className="px-4 py-3 font-medium text-[var(--text)]">评估得分</th>
-                  <th className="px-4 py-3 font-medium text-[var(--text)]">创建时间</th>
-                  <th className="px-4 py-3 font-medium text-[var(--text)] w-20">操作</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">任务 ID</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">类型</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">模型</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">创建时间</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {paged.map((r) => (
-                  <tr key={r.task_id} className={`border-b border-[var(--border)] hover:bg-[var(--bg-card2)] ${selected.has(r.task_id) ? 'bg-[var(--accent-dim)]' : ''}`}>
+                  <tr key={r.task_id} className={`border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-card2)] transition-colors ${selected.has(r.task_id) ? 'bg-[var(--accent-dim)]' : ''}`}>
                     <td className="px-3 py-3">
                       <input
                         type="checkbox"
@@ -223,9 +223,7 @@ export default function AudioReportsTab() {
                         className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
                       />
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)] max-w-[180px] truncate" title={r.task_id}>
-                      {r.task_id.length > 24 ? r.task_id.slice(0, 24) + '...' : r.task_id}
-                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{r.task_id}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${r.tool === 'asr' ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'}`}>
                         {r.tool === 'asr' ? 'ASR' : 'TTS'}
@@ -240,10 +238,10 @@ export default function AudioReportsTab() {
                         {r.wer == null && r.cer == null && r.num_samples == null && <span className="text-[var(--text-dim)]">-</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)]">{r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => navigate(`/reports/audio/${encodeURIComponent(r.task_id)}`)}>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/reports/audio/${encodeURIComponent(r.task_id)}`)}>
                           <Eye size={14} className="mr-1" />查看
                         </Button>
                         <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(r.task_id) }} className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title="删除">

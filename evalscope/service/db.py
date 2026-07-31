@@ -436,6 +436,14 @@ def upsert_aigc_audio_report(output_dir: str, task_id: str) -> bool:
     model_type = data.get('model_type', '')
     tool = data.get('tool', '')
     model_name = data.get('model', 'unknown')
+    # Defensive: cap model_name length to prevent log-corruption spills
+    MAX_MODEL_NAME = 200
+    if isinstance(model_name, str) and len(model_name) > MAX_MODEL_NAME:
+        logger.warning(
+            f'Model name too long ({len(model_name)} chars) for {task_id}, '
+            f'truncating to {MAX_MODEL_NAME} chars'
+        )
+        model_name = model_name[:MAX_MODEL_NAME]
     num_samples = data.get('num_samples', 0)
     metrics = data.get('metrics', {})
     if not isinstance(metrics, dict):

@@ -11,6 +11,19 @@ from .arguments import AIGCToolConfig
 
 logger = get_logger()
 
+MAX_MODEL_NAME_LENGTH = 200
+
+
+def _safe_model_name(name: str, tool: str = 'unknown') -> str:
+    """Truncate model name if it exceeds the max length (defensive against log corruption)."""
+    if isinstance(name, str) and len(name) > MAX_MODEL_NAME_LENGTH:
+        logger.warning(
+            f'Model name too long ({len(name)} chars) for {tool}, '
+            f'truncating to {MAX_MODEL_NAME_LENGTH} chars'
+        )
+        return name[:MAX_MODEL_NAME_LENGTH]
+    return name
+
 
 class AIGCBackendManager(BackendManager):
     """Backend manager for AIGC evaluation tasks."""
@@ -173,7 +186,7 @@ class AIGCBackendManager(BackendManager):
 
             # Save results
             results = {
-                'model': config.model.model_name_or_path,
+                'model': _safe_model_name(config.model.model_name_or_path, 'txt2img'),
                 'model_type': 'txt2img',
                 'num_samples': len(prompts),
                 'metrics': metrics,
@@ -326,7 +339,7 @@ class AIGCBackendManager(BackendManager):
 
             # Save results
             results = {
-                'model': config.model.model_name_or_path,
+                'model': _safe_model_name(config.model.model_name_or_path, 'txt2video'),
                 'model_type': 'txt2video',
                 'num_samples': len(prompts),
                 'metrics': metrics,
@@ -490,7 +503,7 @@ class AIGCBackendManager(BackendManager):
                     logger.info(f'LPIPS (vs reference): mean={metrics["lpips_mean"]:.4f}')
 
             results = {
-                'model': config.model.model_name_or_path,
+                'model': _safe_model_name(config.model.model_name_or_path, 'img2img'),
                 'model_type': 'img2img',
                 'num_samples': len(prompts),
                 'metrics': metrics,

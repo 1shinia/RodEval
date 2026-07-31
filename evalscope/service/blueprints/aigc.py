@@ -51,9 +51,11 @@ def run_aigc_evaluation():
             # Sync to SQLite
             try:
                 from .. import db as _db
-                _db.upsert_aigc_audio_report(str(OUTPUT_DIR), task_id)
-            except Exception:
-                pass
+                logger.info(f'AIGC task {task_id} completed, syncing to SQLite...')
+                ok = _db.upsert_aigc_audio_report(str(OUTPUT_DIR), task_id)
+                logger.info(f'AIGC SQLite sync result: {ok}')
+            except Exception as e:
+                logger.warning(f'Failed to sync AIGC report to SQLite: {e}', exc_info=True)
 
             return jsonify({
                 'task_id': task_id,

@@ -11,6 +11,19 @@ from .arguments import AudioToolConfig
 
 logger = get_logger()
 
+MAX_MODEL_NAME_LENGTH = 200
+
+
+def _safe_model_name(name: str, tool: str = 'unknown') -> str:
+    """Truncate model name if it exceeds the max length (defensive against log corruption)."""
+    if isinstance(name, str) and len(name) > MAX_MODEL_NAME_LENGTH:
+        logger.warning(
+            f'Model name too long ({len(name)} chars) for {tool}, '
+            f'truncating to {MAX_MODEL_NAME_LENGTH} chars'
+        )
+        return name[:MAX_MODEL_NAME_LENGTH]
+    return name
+
 
 class AudioBackendManager(BackendManager):
     """Backend manager for Audio evaluation tasks (ASR/TTS)."""
@@ -204,7 +217,7 @@ class AudioBackendManager(BackendManager):
 
         results = {
             'tool': 'asr',
-            'model': config.model.model_name_or_path,
+            'model': _safe_model_name(config.model.model_name_or_path, 'asr'),
             'metrics': metrics_result,
             'per_sample': per_sample,
             'elapsed_seconds': round(elapsed, 2),
@@ -378,7 +391,7 @@ class AudioBackendManager(BackendManager):
 
         results = {
             'tool': 'tts',
-            'model': config.model.model_name_or_path,
+            'model': _safe_model_name(config.model.model_name_or_path, 'tts'),
             'num_samples': len(prompts),
             'total_elapsed_seconds': round(total_elapsed, 2),
             'per_sample': per_sample_results,
