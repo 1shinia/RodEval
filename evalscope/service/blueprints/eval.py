@@ -966,3 +966,284 @@ def list_benchmarks():
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] Failed to list benchmarks: {e}', exc_info=True)
         return jsonify({'error': 'Failed to list benchmarks', 'error_id': error_id}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Batch evaluation — CSV upload / launch / status / stop
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import csv as _csv_mod
+import threading
+from datetime import datetime
+
+from flask import current_app
+
+EVAL_BATCH_CSV_TEMPLATE = os.path.join(os.path.dirname(OUTPUT_DIR), 'data', 'eval_model_list.csv')
+EVAL_BATCH_UPLOAD_DIR = os.path.join(OUTPUT_DIR, '_eval_batch_uploads')
+
+_eval_batch_state: dict = {}
+
+
+@bp_eval.route('/batch/template', methods=['GET'])
+def download_eval_batch_template():
+    """Download the eval model list CSV template."""
+    if not os.path.isfile(EVAL_BATCH_CSV_TEMPLATE):
+        return jsonify({'error': 'Template file not found'}), 404
+    return send_file(
+        EVAL_BATCH_CSV_TEMPLATE,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name='eval_model_list_template.csv',
+    )
+
+
+@bp_eval.route('/batch/upload', methods=['POST'])
+def upload_eval_batch_csv():
+    """Upload a model list CSV for batch evaluation. Returns parsed preview."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    f = request.files['file']
+    if not f.filename or not f.filename.lower().endswith('.csv'):
+        return jsonify({'error': 'Only .csv files are accepted'}), 400
+
+    content = f.read().decode('utf-8-sig')
+    reader = _csv_mod.DictReader(content.splitlines())
+
+    rows = []
+    for row in reader:
+        if not row.get('model'):
+            continue
+        rows.append({
+            'name': row['model'].strip(),
+            'model': row['model'].strip(),
+            'base_url': (row.get('base_url') or '').strip(),
+            'api_key': (row.get('api_key') or '').strip(),
+            'api': (row.get('api') or 'openai').strip(),
+        })
+
+    if not rows:
+        return jsonify({'error': 'CSV 中没有有效的模型行'}), 400
+
+    os.makedirs(EVAL_BATCH_UPLOAD_DIR, exist_ok=True)
+    batch_id = uuid.uuid4().hex[:12]
+    saved_path = os.path.join(EVAL_BATCH_UPLOAD_DIR, f'{batch_id}.csv')
+    with open(saved_path, 'w', encoding='utf-8') as outf:
+        outf.write(content)
+
+    return jsonify({
+        'batch_id': batch_id,
+        'model_count': len(rows),
+        'models': [r['name'] for r in rows],
+        'preview': rows[:10],
+    }), 200
+
+
+@bp_eval.route('/batch/launch', methods=['POST'])
+def launch_eval_batch():
+    """Launch batch evaluations in background."""
+    data = request.get_json()
+    if not data or not data.get('batch_id'):
+        return jsonify({'error': 'batch_id is required'}), 400
+
+    batch_id = data['batch_id']
+    csv_path = os.path.join(EVAL_BATCH_UPLOAD_DIR, f'{batch_id}.csv')
+    if not os.path.isfile(csv_path):
+        return jsonify({'error': f'Batch file not found: {batch_id}'}), 404
+
+    if batch_id in _eval_batch_state and _eval_batch_state[batch_id].get('status') == 'running':
+        return jsonify({'error': 'Batch already running'}), 409
+
+    with open(csv_path, 'r', encoding='utf-8-sig') as f:
+        reader = _csv_mod.DictReader(f)
+        model_rows = [r for r in reader if (r.get('model') or '').strip()]
+
+    total = len(model_rows)
+
+    state = {
+        'batch_id': batch_id,
+        'status': 'running',
+        'total': total,
+        'completed': 0,
+        'errors': 0,
+        'current_model': '',
+        'current_task_id': '',
+        'results': [],
+        'error_details': [],
+        'cancel_requested': False,
+    }
+    _eval_batch_state[batch_id] = state
+
+    shared_config = {
+        'eval_backend': data.get('eval_backend', ''),
+        'datasets': data.get('datasets', []),
+        'limit': data.get('limit'),
+        'eval_batch_size': data.get('eval_batch_size', 1),
+        'repeats': data.get('repeats', 1),
+        'timeout': data.get('timeout', 300),
+        'stream': data.get('stream', False),
+        'temperature': data.get('temperature'),
+        'top_p': data.get('top_p'),
+        'max_tokens': data.get('max_tokens'),
+        'top_k': data.get('top_k'),
+        'seed': data.get('seed', 42),
+        'judge_strategy': data.get('judge_strategy', 'auto'),
+        'judge_model': data.get('judge_model'),
+        'judge_api_url': data.get('judge_api_url'),
+        'judge_api_key': data.get('judge_api_key'),
+        'ignore_errors': data.get('ignore_errors', False),
+        'dataset_args': data.get('dataset_args'),
+        'system_prompt': data.get('system_prompt'),
+        'thinking_mode': data.get('thinking_mode'),
+        'eval_config': data.get('eval_config'),
+    }
+
+    # Capture Flask app for pushing context in background thread
+    app = current_app._get_current_object()
+
+    def _run_eval_batch():
+        s = _eval_batch_state.get(batch_id)
+        if not s:
+            return
+        try:
+            for row in model_rows:
+                if s['cancel_requested']:
+                    s['status'] = 'cancelled'
+                    break
+
+                model_name = (row.get('model') or '').strip()
+                if not model_name:
+                    continue
+
+                s['current_model'] = model_name
+                task_id = f'eval_{int(datetime.now().timestamp() * 1000)}'
+                s['current_task_id'] = task_id
+                eval_backend = shared_config.get('eval_backend', '')
+
+                if not try_reserve_slot(task_id, 'eval', model=model_name):
+                    s['errors'] += 1
+                    s['error_details'].append({'name': model_name, 'model': model_name, 'error': '并发已满'})
+                    continue
+
+                logger.info(f'[eval-batch:{batch_id}] Running {eval_backend} for {model_name}')
+
+                try:
+                    csv_api = (row.get('api') or 'openai').strip()
+                    api_eval_type = {'openai': 'openai_api', 'anthropic': 'anthropic_api', 'dashscope': 'dashscope'}.get(csv_api, 'openai_api')
+                    eval_data = {
+                        'model': model_name,
+                        'api_url': (row.get('base_url') or '').strip(),
+                        'api_key': (row.get('api_key') or '').strip(),
+                        'eval_type': api_eval_type,
+                    }
+                    if eval_backend:
+                        eval_data['eval_backend'] = eval_backend
+
+                    # Merge shared config
+                    for key in ('datasets', 'limit', 'eval_batch_size', 'repeats',
+                                'timeout', 'stream', 'temperature', 'top_p', 'max_tokens',
+                                'top_k', 'seed', 'judge_strategy', 'judge_model',
+                                'judge_api_url', 'judge_api_key', 'ignore_errors',
+                                'dataset_args', 'system_prompt', 'thinking_mode'):
+                        val = shared_config.get(key)
+                        if val is not None:
+                            eval_data[key] = val
+
+                    if eval_backend in ('rag_eval', 'aigc_eval', 'audio_eval'):
+                        ec = shared_config.get('eval_config')
+                        if ec:
+                            eval_data['eval_config'] = ec
+
+                    # Build TaskConfig and execute
+                    if eval_backend == EvalBackend.RAG_EVAL:
+                        ec = eval_data.get('eval_config', {})
+                        task_config = TaskConfig(
+                            eval_backend=EvalBackend.RAG_EVAL,
+                            eval_config=ec,
+                            work_dir=os.path.join(OUTPUT_DIR, task_id),
+                            no_timestamp=True,
+                            enable_progress_tracker=True,
+                        )
+                    elif eval_backend in (EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
+                        ec = eval_data.get('eval_config', {})
+                        task_config = TaskConfig(
+                            eval_backend=eval_backend,
+                            eval_config=ec,
+                            work_dir=os.path.join(OUTPUT_DIR, task_id),
+                            no_timestamp=True,
+                            enable_progress_tracker=True,
+                        )
+                    else:
+                        task_config = _build_task_config_openai(eval_data)
+
+                    task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+                    os.makedirs(task_config.work_dir, exist_ok=True)
+
+                    create_log_file(task_id, 'eval.log')
+
+                    with app.app_context():
+                        _execute_task(task_id, task_config, label='Batch Eval')
+
+                    s['completed'] += 1
+                    s['results'].append({
+                        'task_id': task_id,
+                        'name': model_name,
+                        'model': model_name,
+                        'eval_backend': eval_backend,
+                        'status': 'completed',
+                    })
+                    logger.info(f'[eval-batch:{batch_id}] [{task_id}] {model_name} completed ({s["completed"]}/{total})')
+
+                except Exception as e:
+                    error_id = uuid.uuid4().hex[:8]
+                    logger.error(f'[eval-batch:{batch_id}] [{task_id}] {model_name} failed: {e}', exc_info=True)
+                    s['errors'] += 1
+                    s['error_details'].append({
+                        'name': model_name,
+                        'model': model_name,
+                        'error': str(e),
+                    })
+                finally:
+                    unregister_process(task_id)
+                    s['current_model'] = ''
+                    s['current_task_id'] = ''
+
+            if s['status'] == 'running':
+                s['status'] = 'completed'
+        except Exception as e:
+            s['status'] = 'error'
+            logger.error(f'[eval-batch:{batch_id}] Fatal: {e}', exc_info=True)
+
+    thread = threading.Thread(target=_run_eval_batch, daemon=True)
+    thread.start()
+
+    return jsonify({'batch_id': batch_id, 'total': total, 'status': 'launched'}), 200
+
+
+@bp_eval.route('/batch/status/<batch_id>', methods=['GET'])
+def get_eval_batch_status(batch_id: str):
+    """Get the current status of a running eval batch."""
+    s = _eval_batch_state.get(batch_id)
+    if not s:
+        return jsonify({'error': 'Batch not found'}), 404
+    return jsonify({
+        'batch_id': batch_id,
+        'status': s['status'],
+        'total': s['total'],
+        'completed': s['completed'],
+        'errors': s['errors'],
+        'current_model': s['current_model'],
+        'current_task_id': s.get('current_task_id', ''),
+        'results': s.get('results', []),
+        'error_details': s.get('error_details', []),
+    }), 200
+
+
+@bp_eval.route('/batch/stop/<batch_id>', methods=['POST'])
+def stop_eval_batch(batch_id: str):
+    """Request cancellation of a running eval batch."""
+    s = _eval_batch_state.get(batch_id)
+    if not s:
+        return jsonify({'error': 'Batch not found'}), 404
+    s['cancel_requested'] = True
+    return jsonify({'batch_id': batch_id, 'status': 'cancelling'}), 200

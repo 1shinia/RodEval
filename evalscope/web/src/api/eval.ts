@@ -41,3 +41,62 @@ export async function listBenchmarks(type?: 'text' | 'multimodal', all?: boolean
   if (all) params.all = 'true'
   return api<BenchmarksResponse>('/api/v1/eval/benchmarks', params)
 }
+
+// ── Batch evaluation ──
+
+export interface EvalBatchUploadResponse {
+  batch_id: string
+  model_count: number
+  models: string[]
+  preview: {
+    name: string
+    model: string
+    base_url: string
+    api_key: string
+    api: string
+  }[]
+}
+
+export interface EvalBatchStatus {
+  batch_id: string
+  status: string
+  total: number
+  completed: number
+  errors: number
+  current_model: string
+  current_task_id: string
+  results: { task_id: string; name: string; model: string; eval_backend: string; status: string; error?: string }[]
+  error_details: { name: string; model: string; error: string }[]
+}
+
+export function getEvalTemplateDownloadUrl(): string {
+  return '/api/v1/eval/batch/template'
+}
+
+export async function uploadEvalBatchCsv(file: File): Promise<EvalBatchUploadResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/v1/eval/batch/upload', { method: 'POST', body: form })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(body.error || res.statusText)
+  }
+  return res.json()
+}
+
+export async function launchEvalBatch(
+  batchId: string,
+  sharedConfig: Record<string, unknown>,
+): Promise<{ batch_id: string; total: number; status: string }> {
+  return apiPost<{ batch_id: string; total: number; status: string }>(
+    '/api/v1/eval/batch/launch', { batch_id: batchId, ...sharedConfig },
+  )
+}
+
+export async function getEvalBatchStatus(batchId: string): Promise<EvalBatchStatus> {
+  return api<EvalBatchStatus>(`/api/v1/eval/batch/status/${batchId}`)
+}
+
+export async function stopEvalBatch(batchId: string): Promise<{ batch_id: string; status: string }> {
+  return apiPost<{ batch_id: string; status: string }>(`/api/v1/eval/batch/stop/${batchId}`, {})
+}

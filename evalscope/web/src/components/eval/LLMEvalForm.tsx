@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
-import { listBenchmarks } from '@/api/eval'
+import { listBenchmarks, getEvalTemplateDownloadUrl } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import FormField from '@/components/ui/FormField'
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS, inputClass } from '@/components/ui/formStyles'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import type { EvalTabContext } from '@/pages/EvalLayout'
 
 interface Props {
-  onSubmit: (config: Record<string, unknown>) => void
-  disabled?: boolean
-  initialDataset?: string
-  onApiKeyChange?: (apiKey: string) => void
+  context: EvalTabContext
 }
 
 interface ParamDef {
@@ -92,8 +90,30 @@ const LOCAL_TYPE_LABEL: Record<string, string> = {
   data_collection: 'eval.datasetLocalTypeDataCollection',
 }
 
-export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiKeyChange }: Props) {
+export default function LLMEvalForm({ context }: Props) {
   const { t } = useLocale()
+  const { onSubmit, disabled, initialDataset, onApiKeyChange, isBatch, batchRunning, batchState,
+    batchInfo, batchError, batchUploading, selectedTaskId, onSelectTask,
+    onBatchSubmit, onBatchStop, onBatchUpload, setBatchMode } = context
+
+  // Batch file state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [batchFile, setBatchFile] = useState<File | null>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (f) { setBatchFile(f) }
+    e.target.value = ''
+  }
+
+  const handleBatchUpload = async () => {
+    if (!batchFile) return
+    try {
+      await onBatchUpload(batchFile)
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   // Model source
   const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
@@ -234,6 +254,36 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
+
+    // Batch mode: delegate to onBatchSubmit
+    if (isBatch) {
+      if (!batchInfo?.batch_id) { toast.error('请先上传模型列表文件'); return }
+      const shared: Record<string, unknown> = {
+        eval_backend: context.evalMode === 'rag' ? 'RAGEval' : context.evalMode === 'aigc' ? 'AIGCEval' : context.evalMode === 'audio' ? 'AudioEval' : '',
+        datasets: datasets ? datasets.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+        limit: limit ? Number(limit) : undefined,
+        eval_batch_size: evalBatchSize ? Number(evalBatchSize) : 1,
+        repeats: repeats ? Number(repeats) : 1,
+        timeout: timeout ? Number(timeout) : 300,
+        stream,
+        temperature: temperature || undefined,
+        top_p: topP || undefined,
+        max_tokens: maxTokens || undefined,
+        top_k: topK || undefined,
+        seed: seed || undefined,
+        judge_strategy: judgeStrategy,
+        judge_model: judgeModel || undefined,
+        judge_api_url: judgeApiUrl || undefined,
+        judge_api_key: judgeApiKey || undefined,
+        ignore_errors: ignoreErrors,
+        dataset_args: datasetArgs || undefined,
+        system_prompt: systemPrompt || undefined,
+        thinking_mode: thinkingMode,
+      }
+      onBatchSubmit(batchInfo.batch_id, shared)
+      return
+    }
+
     const newErrors: Record<string, string> = {}
 
     if (!isLocal && !model.trim()) newErrors.model = 'Required'
@@ -392,7 +442,49 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* ── 测试模式切换 ── */}
+      <div className="flex items-center gap-6">
+        <label className={`${FORM_LABEL_CLASS} !mb-0`}>测试模式</label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="batch" checked={!isBatch}
+            onChange={() => setBatchMode(false)} className="accent-[var(--accent)]" />
+          <span className="text-sm text-[var(--text)]">单模型</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="batch" checked={isBatch}
+            onChange={() => setBatchMode(true)} className="accent-[var(--accent)]" />
+          <span className="text-sm text-[var(--text)]">批量测试</span>
+        </label>
+      </div>
+
+      {/* ── Batch CSV upload ── */}
+      {isBatch && (
+        <div className="space-y-3 p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
+          <div className="flex items-center gap-3 flex-wrap">
+            <a href={getEvalTemplateDownloadUrl()} download="eval_model_list_template.csv"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-dim)]/10 transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              下载模板
+            </a>
+            <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={disabled || batchRunning}>
+              选择文件
+            </Button>
+            {batchFile && (
+              <Button type="button" variant="primary" onClick={handleBatchUpload} disabled={disabled || batchUploading || batchRunning}>
+                {batchUploading ? '上传中...' : '上传文件'}
+              </Button>
+            )}
+          </div>
+          {batchError && <p className="text-xs text-[var(--danger)]">{batchError}</p>}
+          {batchInfo && (
+            <p className="text-xs text-[var(--green)]">✓ 上传成功，共 {batchInfo.model_count} 个模型：{batchInfo.models.join(', ')}</p>
+          )}
+        </div>
+      )}
+
       {/* Model Source */}
+      {!isBatch && (<>
       <div className="flex items-center gap-6">
         <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
         <label className="flex items-center gap-2 cursor-pointer">
@@ -526,7 +618,11 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
           </FormField>
         </>)}
 
-        {/* Dataset Source */}
+      </div>
+      </>)}
+
+      {/* Dataset Source */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <FormField label={t('eval.datasetHub')}>
           <select value={datasetHub} onChange={(e) => setDatasetHub(e.target.value)} className={FORM_INPUT_CLASS}>
             <option value="modelscope">{t('eval.datasetHubModelScope')}</option>
@@ -750,8 +846,65 @@ export default function LLMEvalForm({ onSubmit, disabled, initialDataset, onApiK
       )}
 
       <Button type="submit" variant="primary" disabled={disabled} className="btn-glow">
-        {t('eval.startEval')}
+        {isBatch ? '开始批量评估' : t('eval.startEval')}
       </Button>
+
+      {/* ── Batch progress (during running) ── */}
+      {batchRunning && batchState && batchState.status === 'running' && (
+        <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium">批量评估中：{batchState.completed}/{batchState.total}</h3>
+            <button type="button" onClick={onBatchStop}
+              className="px-2 py-1 text-xs rounded border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger)]/10">停止</button>
+          </div>
+          <div className="w-full bg-[var(--bg)] rounded-full h-2 mb-2">
+            <div className="bg-[var(--accent)] h-2 rounded-full transition-all" style={{ width: `${batchState.total > 0 ? (batchState.completed / batchState.total) * 100 : 0}%` }} />
+          </div>
+          {batchState.current_model && <p className="text-xs text-[var(--text-muted)]">当前: {batchState.current_model}</p>}
+          {batchState.errors > 0 && <p className="text-xs text-[var(--danger)] mt-1">{batchState.errors} 个失败</p>}
+        </div>
+      )}
+
+      {/* ── Batch result (after completion) ── */}
+      {batchState && batchState.status !== 'running' && (
+        <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
+          <h3 className="text-sm font-medium mb-2">
+            {batchState.status === 'completed' ? '批量评估完成' : '已取消'}：
+            {batchState.completed} 成功
+            {batchState.errors > 0 && <span className="text-[var(--danger)]">，{batchState.errors} 失败</span>}
+          </h3>
+          <p className="text-xs text-[var(--text-muted)] mb-2">点击模型查看对应日志</p>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {batchState.results.map((r) => (
+              <div key={r.task_id}
+                onClick={() => onSelectTask(r.task_id)}
+                className={`flex items-center gap-2 text-xs rounded px-1.5 py-0.5 -mx-1.5 cursor-pointer transition-colors ${
+                  r.task_id === selectedTaskId ? 'bg-[var(--accent)]/10 ring-1 ring-[var(--accent-dim)]' : 'hover:bg-[var(--bg)]'
+                }`}>
+                {r.status === 'error' ? (
+                  <span className="text-[var(--danger)]">✗</span>
+                ) : (
+                  <span className="text-[var(--green)]">✓</span>
+                )}
+                <span className="text-[var(--text)]">{r.name}</span>
+                <span className="text-[var(--text-muted)]">({r.model})</span>
+                {r.status === 'error' && r.error && (
+                  <span className="text-[var(--danger)] truncate max-w-48" title={r.error}>{r.error}</span>
+                )}
+                <span className="text-[var(--text-dim)] ml-auto">{r.task_id}</span>
+              </div>
+            ))}
+            {batchState.error_details.filter((e) => !batchState.results.some((r2) => r2.name === e.name)).map((e, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className="text-[var(--danger)]">✗</span>
+                <span className="text-[var(--text)]">{e.name}</span>
+                <span className="text-[var(--text-muted)]">({e.model})</span>
+                <span className="text-[var(--danger)] ml-auto">{e.error}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </form>
   )
 }

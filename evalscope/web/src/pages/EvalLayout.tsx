@@ -1,10 +1,13 @@
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, NavLink, useLocation, Navigate } from 'react-router-dom'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
-import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask } from '@/api/eval'
+import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask,
+  launchEvalBatch, getEvalBatchStatus, stopEvalBatch, uploadEvalBatchCsv } from '@/api/eval'
+import type { EvalBatchStatus } from '@/api/eval'
+import { toast } from '@/components/common/Toast'
 
 type EvalMode = 'llm' | 'rag' | 'aigc' | 'audio'
 
@@ -13,6 +16,20 @@ export interface EvalTabContext {
   disabled: boolean
   onApiKeyChange: (key: string) => void
   initialDataset: string | null
+  evalMode: EvalMode
+  // Batch
+  isBatch: boolean
+  batchRunning: boolean
+  batchState: EvalBatchStatus | null
+  batchInfo: { batch_id: string; model_count: number; models: string[] } | null
+  batchError: string
+  batchUploading: boolean
+  selectedTaskId: string
+  onSelectTask: (taskId: string) => void
+  onBatchSubmit: (batchId: string, sharedConfig: Record<string, unknown>) => void
+  onBatchStop: () => void
+  onBatchUpload: (file: File) => Promise<void>
+  setBatchMode: (v: boolean) => void
 }
 
 const MODES: { mode: EvalMode; label: string }[] = [
@@ -29,7 +46,6 @@ export default function EvalLayout() {
   const initialDataset = queryParams.get('dataset')
   const apiKeyRef = useRef('')
 
-  // Derive current mode from URL path
   const segments = location.pathname.split('/')
   const evalMode = (segments[segments.length - 1] || 'llm') as EvalMode
 
@@ -65,27 +81,144 @@ export default function EvalLayout() {
     sseState,
   } = useTaskRunner({ api, taskPrefix: 'eval' })
 
-  const onApiKeyChange = useCallback((key: string) => {
-    apiKeyRef.current = key
+  const onApiKeyChange = useCallback((key: string) => { apiKeyRef.current = key }, [])
+  const handleResume = useCallback((id: string) => { rawResume(id, apiKeyRef.current || undefined) }, [rawResume])
+
+  // ── Batch state ──
+  const [isBatch, setIsBatch] = useState(false)
+  const [batchRunning, setBatchRunning] = useState(false)
+  const [batchState, setBatchState] = useState<EvalBatchStatus | null>(null)
+  const [batchLogText, setBatchLogText] = useState('')
+  const [selectedTaskId, setSelectedTaskId] = useState('')
+  const [selectedTaskLog, setSelectedTaskLog] = useState('')
+  const batchIdRef = useRef<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastLogTaskIdRef = useRef<string>('')
+  const batchFileRef = useRef<File | null>(null)
+  const [batchInfo, setBatchInfo] = useState<{ batch_id: string; model_count: number; models: string[] } | null>(null)
+  const [batchError, setBatchError] = useState('')
+  const [batchUploading, setBatchUploading] = useState(false)
+
+  const clearBatchPoll = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }, [])
 
-  const handleResume = useCallback(
-    (id: string) => {
-      rawResume(id, apiKeyRef.current || undefined)
-    },
-    [rawResume],
-  )
+  useEffect(() => () => clearBatchPoll(), [clearBatchPoll])
 
-  // If at /eval without a mode, redirect to /eval/llm
+  const fetchTaskLog = useCallback(async (tid: string) => {
+    try {
+      const log = await getEvalLog(tid)
+      setSelectedTaskLog(log.text || '')
+    } catch { setSelectedTaskLog('') }
+  }, [])
+
+  const copyBatchLog = useCallback(async () => {
+    const text = batchRunning ? batchLogText : selectedTaskLog
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+      }
+      toast.success('日志已复制')
+    } catch { toast.error('复制失败') }
+  }, [batchLogText, selectedTaskLog, batchRunning])
+
+  const handleBatchUpload = useCallback(async (file: File) => {
+    batchFileRef.current = file
+    setBatchUploading(true)
+    setBatchError('')
+    try {
+      const info = await uploadEvalBatchCsv(file)
+      setBatchInfo({ batch_id: info.batch_id, model_count: info.model_count, models: info.models })
+    } catch (e) {
+      setBatchError(String(e))
+      setBatchInfo(null)
+    } finally {
+      setBatchUploading(false)
+    }
+  }, [])
+
+  const onBatchSubmit = useCallback(async (batchId: string, sharedConfig: Record<string, unknown>) => {
+    setBatchRunning(true)
+    setBatchState(null)
+    setBatchLogText('')
+    setSelectedTaskId('')
+    setSelectedTaskLog('')
+    batchIdRef.current = batchId
+    clearBatchPoll()
+
+    try {
+      const launched = await launchEvalBatch(batchId, sharedConfig)
+      toast.info(`批量评估已启动，共 ${launched.total} 个模型`)
+
+      pollRef.current = setInterval(async () => {
+        try {
+          const st = await getEvalBatchStatus(batchId)
+          setBatchState(st)
+          if (st.current_task_id && st.current_task_id !== lastLogTaskIdRef.current) {
+            lastLogTaskIdRef.current = st.current_task_id
+            setBatchLogText('')
+          }
+          if (st.current_task_id) {
+            try { const log = await getEvalLog(st.current_task_id); setBatchLogText(log.text || '') } catch { /* */ }
+          }
+          if (st.status !== 'running') {
+            clearBatchPoll(); setBatchRunning(false)
+            const results = st.results || []
+            if (results.length > 0) {
+              setSelectedTaskId(results[results.length - 1].task_id)
+              fetchTaskLog(results[results.length - 1].task_id)
+            }
+            if (st.status === 'completed') {
+              if (st.errors > 0) toast.warning(`批量评估完成：${st.completed} 成功，${st.errors} 失败`)
+              else toast.success(`批量评估完成：${st.completed} 个模型全部成功`)
+            } else if (st.status === 'cancelled') toast.info(`批量评估已取消：${st.completed} 完成`)
+          }
+        } catch { /* */ }
+      }, 3000)
+    } catch (e) {
+      toast.error(String(e)); setBatchRunning(false)
+    }
+  }, [clearBatchPoll, fetchTaskLog])
+
+  const handleSelectTask = useCallback((tid: string) => {
+    setSelectedTaskId(tid)
+    fetchTaskLog(tid)
+  }, [fetchTaskLog])
+
+  const onBatchStop = useCallback(async () => {
+    const bid = batchIdRef.current
+    if (!bid) return
+    try { await stopEvalBatch(bid); toast.info('正在停止批量评估...') } catch (e) { toast.error(String(e)) }
+  }, [])
+
+  const setBatchMode = useCallback((v: boolean) => setIsBatch(v), [])
+
   if (location.pathname === '/eval') {
     return <Navigate to="/eval/llm" replace />
   }
 
   const context: EvalTabContext = {
     onSubmit: handleSubmit,
-    disabled: running,
+    disabled: running || batchRunning,
     onApiKeyChange,
     initialDataset,
+    evalMode,
+    isBatch,
+    batchRunning,
+    batchState,
+    batchInfo,
+    batchError,
+    batchUploading,
+    selectedTaskId,
+    onSelectTask: handleSelectTask,
+    onBatchSubmit,
+    onBatchStop,
+    onBatchUpload: handleBatchUpload,
+    setBatchMode,
   }
 
   return (
@@ -94,19 +227,18 @@ export default function EvalLayout() {
       configTitle={t('eval.config')}
       statusTitle={t('eval.status')}
       readyLabel={t('eval.ready')}
-      running={running}
-      progress={progress}
+      running={running || batchRunning}
+      progress={running ? progress : 0}
       result={result}
-      logText={logText}
+      logText={running ? logText : (batchRunning ? batchLogText : selectedTaskLog)}
       reportUrl={reportUrl}
       copied={copied}
-      onCopy={copyLog}
-      onStop={handleStop}
+      onCopy={running ? copyLog : copyBatchLog}
+      onStop={running ? handleStop : onBatchStop}
       onResume={handleResume}
       taskId={taskId}
       sseState={sseState}
     >
-      {/* Eval Mode Selector */}
       <div className="flex items-center gap-4 mb-4 pb-4 border-b border-[var(--border-md)]">
         <span className="text-sm font-medium text-[var(--text)]">{t('eval.evalMode')}</span>
         <div className="flex gap-1 rounded-lg bg-[var(--bg-card2)] p-1">

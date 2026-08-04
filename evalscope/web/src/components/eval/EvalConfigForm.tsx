@@ -1,20 +1,13 @@
 import { useLocale } from '@/contexts/LocaleContext'
 import LLMEvalForm from './LLMEvalForm'
+import type { EvalTabContext } from '@/pages/EvalLayout'
 
 interface Props {
-  onSubmit: (config: Record<string, unknown>) => void
-  disabled?: boolean
-  initialDataset?: string
-  onApiKeyChange?: (apiKey: string) => void
+  context: EvalTabContext
 }
 
-export default function EvalConfigForm({ onSubmit, disabled, initialDataset, onApiKeyChange }: Props) {
+export default function EvalConfigForm({ context }: Props) {
   return (
-    <LLMEvalForm
-      onSubmit={onSubmit}
-      disabled={disabled}
-      initialDataset={initialDataset}
-      onApiKeyChange={onApiKeyChange}
-    />
+    <LLMEvalForm context={context} />
   )
 }
