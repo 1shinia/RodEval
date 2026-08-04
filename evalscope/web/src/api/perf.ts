@@ -142,7 +142,8 @@ export interface BatchUploadResponse {
     api_key: string
     api: string
     model: string
-    concurrency: number
+    concurrency: string
+    number: string
     max_tokens: number
     stream: boolean
     prompt: string

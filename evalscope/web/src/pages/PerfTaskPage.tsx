@@ -169,7 +169,7 @@ export default function PerfTaskPage() {
                 <span className="text-[var(--text-dim)] ml-auto">{r.task_id}</span>
               </div>
             ))}
-            {batchState.error_details.map((e, i) => (
+            {batchState.error_details.filter((e) => !batchState.results.some((r) => r.name === e.name)).map((e, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
                 <span className="text-[var(--danger)]">✗</span>
                 <span className="text-[var(--text)]">{e.name}</span>

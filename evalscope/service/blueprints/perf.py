@@ -103,8 +103,9 @@ def upload_batch_csv():
             'api_key': (row.get('api_key') or '').strip(),
             'api': (row.get('api') or 'openai').strip(),
             'model': row['model'].strip(),
-            'concurrency': int(row.get('concurrency', 5)) if row.get('concurrency', '').strip() else 5,
-            'max_tokens': int(row.get('max_tokens', 200)) if row.get('max_tokens', '').strip() else 200,
+            'concurrency': (row.get('concurrency') or '').strip(),
+            'number': (row.get('number') or '').strip(),
+            'max_tokens': int(row['max_tokens']) if row.get('max_tokens', '').strip() else 0,
             'stream': (row.get('stream', 'TRUE') or 'TRUE').strip().upper() == 'TRUE',
             'prompt': (row.get('prompt') or '').strip(),
         })
@@ -147,7 +148,7 @@ def launch_batch_perf():
     if not os.path.isfile(csv_path):
         return jsonify({'error': f'Batch file not found: {batch_id}. Please re-upload.'}), 404
 
-    if batch_id in _batch_state:
+    if batch_id in _batch_state and _batch_state[batch_id].get('status') == 'running':
         return jsonify({'error': 'Batch already running'}), 409
 
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
@@ -206,8 +207,34 @@ def launch_batch_perf():
 
                 state['current_model'] = model_name
                 task_id = f'perf_{int(datetime.now().timestamp() * 1000)}'
-                concurrency = int(row['concurrency']) if row.get('concurrency', '').strip() else 5
-                max_tok = int(row['max_tokens']) if row.get('max_tokens', '').strip() else 200
+
+                # Parse CSV concurrency: comma-separated like "1,2,4"
+                csv_concurrency = (row.get('concurrency') or '').strip()
+                if csv_concurrency:
+                    parallel = [int(x.strip()) for x in csv_concurrency.replace('，', ',').split(',') if x.strip()]
+                else:
+                    parallel = shared_config.get('parallel', [1])
+                if not parallel:
+                    parallel = [1]
+
+                # Parse CSV number: comma-separated, fallback to shared_config
+                csv_number = (row.get('number') or '').strip()
+                if csv_number:
+                    number = [int(x.strip()) for x in csv_number.replace('，', ',').split(',') if x.strip()]
+                else:
+                    number = shared_config.get('number', [10])
+                if not number:
+                    number = [10]
+
+                # max_tokens: CSV overrides, fallback to shared_config
+                csv_max_tokens = (row.get('max_tokens') or '').strip()
+                if csv_max_tokens:
+                    max_tok = int(csv_max_tokens)
+                elif shared_config.get('max_tokens'):
+                    max_tok = int(shared_config['max_tokens'])
+                else:
+                    max_tok = 200
+
                 stream = (row.get('stream', 'TRUE') or 'TRUE').strip().upper() == 'TRUE'
 
                 perf_data = {
@@ -215,8 +242,8 @@ def launch_batch_perf():
                     'api': (row.get('api') or 'openai').strip(),
                     'url': (row.get('base_url') or '').strip(),
                     'api_key': (row.get('api_key') or '').strip(),
-                    'parallel': [concurrency],
-                    'number': shared_config['number'],
+                    'parallel': parallel,
+                    'number': number,
                     'max_tokens': max_tok,
                     'stream': stream,
                     'dataset': shared_config['dataset'],
