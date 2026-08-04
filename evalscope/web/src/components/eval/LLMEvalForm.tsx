@@ -448,7 +448,7 @@ export default function LLMEvalForm({ context }: Props) {
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="radio" name="batch" checked={!isBatch}
             onChange={() => setBatchMode(false)} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">单模型</span>
+          <span className="text-sm text-[var(--text)]">单模型测试</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="radio" name="batch" checked={isBatch}
