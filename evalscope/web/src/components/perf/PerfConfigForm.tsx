@@ -92,14 +92,16 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     }
   }, [api]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [errors, setErrors] = useState<Record<string, string>>({})
-
-  // Auto-fill model name from path for local models
-  useEffect(() => {
-    if (!isLocal || !modelPath || modelManualRef.current) return
-    const name = modelPath.split('/').pop() || ''
-    if (name) setModel(name)
-  }, [modelPath, isLocal])
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (f) {
+      setBatchFile(f)
+      setBatchInfo(null)
+      setBatchError('')
+    }
+    // Reset so same file can be re-selected
+    e.target.value = ''
+  }
 
   const handleBatchUpload = async () => {
     if (!batchFile) return
@@ -113,17 +115,19 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       setBatchInfo(null)
     } finally {
       setBatchUploading(false)
+      // Reset file input so re-upload works for same file
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (f) {
-      setBatchFile(f)
-      setBatchInfo(null)
-      setBatchError('')
-    }
-  }
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Auto-fill model name from path for local models
+  useEffect(() => {
+    if (!isLocal || !modelPath || modelManualRef.current) return
+    const name = modelPath.split('/').pop() || ''
+    if (name) setModel(name)
+  }, [modelPath, isLocal])
 
   const buildSharedConfig = (): Record<string, unknown> => {
     const config: Record<string, unknown> = {

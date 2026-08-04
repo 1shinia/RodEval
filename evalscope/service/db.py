@@ -376,13 +376,22 @@ def upsert_perf_task(
     timestamp: str,
 ) -> None:
     conn = _get_conn()
-    conn.execute(
-        '''INSERT OR REPLACE INTO perf_tasks
-           (task_id, model, api, dataset, runs, has_report, timestamp)
-           VALUES (?, ?, ?, ?, ?, ?, ?)''',
-        (task_id, model, api, dataset, runs, int(has_report), timestamp),
-    )
-    conn.commit()
+    for attempt in range(5):
+        try:
+            conn.execute(
+                '''INSERT OR REPLACE INTO perf_tasks
+                   (task_id, model, api, dataset, runs, has_report, timestamp)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (task_id, model, api, dataset, runs, int(has_report), timestamp),
+            )
+            conn.commit()
+            return
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e) and attempt < 4:
+                import time
+                time.sleep(0.1 * (attempt + 1))
+                continue
+            raise
 
 
 def cleanup_perf_tasks(output_dir: str) -> int:
