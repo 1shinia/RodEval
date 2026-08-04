@@ -267,6 +267,8 @@ def launch_batch_perf():
                     perf_data['dataset_path'] = shared_config['dataset_path']
                 if shared_config['extra_args']:
                     perf_data['extra_args'] = shared_config['extra_args']
+                if shared_config.get('read_timeout'):
+                    perf_data['read_timeout'] = shared_config['read_timeout']
 
                 if not try_reserve_slot(task_id, 'perf', model=model_name):
                     state['errors'] += 1
@@ -282,6 +284,9 @@ def launch_batch_perf():
                     perf_args.name = 'perf'
                     perf_args.enable_progress_tracker = True
                     perf_args.no_test_connection = True
+                    # Default read timeout: prevent hanging on stalled streams
+                    if perf_args.read_timeout is None:
+                        perf_args.read_timeout = 300
 
                     os.makedirs(perf_args.outputs_dir, exist_ok=True)
                     save_data = {k: v for k, v in perf_data.items() if k != 'api_key'}
@@ -642,6 +647,9 @@ def run_performance_test():
         perf_args.name = 'perf'
         perf_args.enable_progress_tracker = True
         perf_args.no_test_connection = True
+        # Default read timeout: prevent hanging on stalled streams
+        if perf_args.read_timeout is None:
+            perf_args.read_timeout = 300
 
         # Save task config for resume capability (strip api_key for security)
         os.makedirs(perf_args.outputs_dir, exist_ok=True)

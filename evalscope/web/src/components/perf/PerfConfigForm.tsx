@@ -71,6 +71,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   const [prefixLength, setPrefixLength] = useState('')
   const [thinkingMode, setThinkingMode] = useState('auto')
   const [extraArgs, setExtraArgs] = useState('')
+  const [readTimeout, setReadTimeout] = useState('')
 
   // Batch state
   const [batchFile, setBatchFile] = useState<File | null>(null)
@@ -151,6 +152,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       try { config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), ...JSON.parse(extraArgs) } }
       catch { /* handled in validation */ }
     }
+    if (readTimeout) config.read_timeout = Number(readTimeout)
     return config
   }
 
@@ -498,6 +500,12 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
           <input type="number" value={minPromptLen}
             onChange={(e) => { setMinPromptLen(e.target.value.replace(/[^0-9]/g, '')); if (errors.minPromptLen) setErrors((p) => ({ ...p, minPromptLen: '' })) }}
             className={inputClass(errors.minPromptLen)} placeholder={t('perf.placeholderDefaultVal', { v: '0' })} />
+        </FormField>
+
+        <FormField label="请求超时（秒）" error={errors.readTimeout}>
+          <input type="number" value={readTimeout}
+            onChange={(e) => { setReadTimeout(e.target.value.replace(/[^0-9]/g, '')); if (errors.readTimeout) setErrors((p) => ({ ...p, readTimeout: '' })) }}
+            className={inputClass(errors.readTimeout)} placeholder="默认 300" />
         </FormField>
 
       </div>
