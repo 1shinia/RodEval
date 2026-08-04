@@ -207,6 +207,7 @@ def launch_batch_perf():
 
                 state['current_model'] = model_name
                 task_id = f'perf_{int(datetime.now().timestamp() * 1000)}'
+                state['current_task_id'] = task_id
 
                 # Parse CSV concurrency: comma-separated like "1,2,4"
                 csv_concurrency = (row.get('concurrency') or '').strip()
@@ -306,7 +307,8 @@ def launch_batch_perf():
                             with open(summary_path, 'r') as sf:
                                 summary = json.load(sf)
                             failed = summary.get('Failed Requests', 0)
-                            if failed > 0:
+                            success = summary.get('Success Requests', 0)
+                            if failed > 0 and success == 0:
                                 perf_success = False
                                 # Extract error from benchmark log
                                 log_path = os.path.join(perf_dir, 'benchmark.log')
@@ -373,6 +375,7 @@ def launch_batch_perf():
                 finally:
                     unregister_process(task_id)
                     state['current_model'] = ''
+                    state['current_task_id'] = ''
 
             if state['status'] == 'running':
                 state['status'] = 'completed'
@@ -399,6 +402,7 @@ def get_batch_status(batch_id: str):
         'completed': state['completed'],
         'errors': state['errors'],
         'current_model': state['current_model'],
+        'current_task_id': state.get('current_task_id', ''),
         'results': state.get('results', []),
         'error_details': state.get('error_details', []),
     }), 200

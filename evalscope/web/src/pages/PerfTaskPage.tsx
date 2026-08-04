@@ -30,12 +30,51 @@ export default function PerfTaskPage() {
   // Batch state
   const [batchRunning, setBatchRunning] = useState(false)
   const [batchState, setBatchState] = useState<BatchStatus | null>(null)
+  const [batchLogText, setBatchLogText] = useState('')
+  const [selectedTaskId, setSelectedTaskId] = useState('')
+  const [selectedTaskLog, setSelectedTaskLog] = useState('')
   const batchIdRef = useRef<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastLogTaskIdRef = useRef<string>('')
 
   const clearBatchPoll = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }, [])
+
+  const fetchTaskLog = useCallback(async (tid: string) => {
+    try {
+      const log = await getPerfLog(tid)
+      setSelectedTaskLog(log.text || '')
+    } catch {
+      setSelectedTaskLog('')
+    }
+  }, [])
+
+  const copyBatchLog = useCallback(async () => {
+    const text = batchRunning ? batchLogText : selectedTaskLog
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      toast.success('日志已复制')
+    } catch {
+      toast.error('复制失败')
+    }
+  }, [batchLogText, selectedTaskLog, batchRunning])
+
+  const handleSelectTask = useCallback((tid: string) => {
+    setSelectedTaskId(tid)
+    fetchTaskLog(tid)
+  }, [fetchTaskLog])
 
   const handleBatchStop = useCallback(async () => {
     const bid = batchIdRef.current
@@ -51,6 +90,9 @@ export default function PerfTaskPage() {
   const handleBatchSubmit = useCallback(async (batchId: string, sharedConfig: Record<string, unknown>) => {
     setBatchRunning(true)
     setBatchState(null)
+    setBatchLogText('')
+    setSelectedTaskId('')
+    setSelectedTaskLog('')
     batchIdRef.current = batchId
     clearBatchPoll()
 
@@ -58,14 +100,35 @@ export default function PerfTaskPage() {
       const launched = await launchBatchPerf(batchId, sharedConfig)
       toast.info(`批量测试已启动，共 ${launched.total} 个模型`)
 
-      // Start polling
       pollRef.current = setInterval(async () => {
         try {
           const st = await getBatchStatus(batchId)
           setBatchState(st)
+
+          // Fetch log for current task (only during running)
+          if (st.current_task_id && st.current_task_id !== lastLogTaskIdRef.current) {
+            lastLogTaskIdRef.current = st.current_task_id
+            setBatchLogText('')
+          }
+          if (st.current_task_id) {
+            try {
+              const log = await getPerfLog(st.current_task_id)
+              setBatchLogText(log.text || '')
+            } catch { /* ignore */ }
+          }
+
           if (st.status !== 'running') {
             clearBatchPoll()
             setBatchRunning(false)
+
+            // Auto-select last result and load its log
+            const results = st.results || []
+            if (results.length > 0) {
+              const last = results[results.length - 1]
+              setSelectedTaskId(last.task_id)
+              fetchTaskLog(last.task_id)
+            }
+
             if (st.status === 'completed') {
               if (st.errors > 0) {
                 toast.warning(`批量测试完成：${st.completed} 成功，${st.errors} 失败`)
@@ -84,7 +147,7 @@ export default function PerfTaskPage() {
       toast.error(String(e))
       setBatchRunning(false)
     }
-  }, [clearBatchPoll])
+  }, [clearBatchPoll, fetchTaskLog])
 
   useEffect(() => {
     return () => clearBatchPoll()
@@ -97,13 +160,13 @@ export default function PerfTaskPage() {
       statusTitle={t('perf.status')}
       readyLabel={t('perf.ready')}
       running={running || batchRunning}
-      progress={progress}
+      progress={running ? progress : 0}
       result={result}
-      logText={logText}
+      logText={running ? logText : (batchRunning ? batchLogText : selectedTaskLog)}
       reportUrl={reportUrl}
       copied={copied}
-      onCopy={copyLog}
-      onStop={handleStop}
+      onCopy={running ? copyLog : copyBatchLog}
+      onStop={running ? handleStop : handleBatchStop}
       onResume={handleResume}
       taskId={taskId}
     >
@@ -153,9 +216,18 @@ export default function PerfTaskPage() {
             {batchState.completed} 成功
             {batchState.errors > 0 && <span className="text-[var(--danger)]">，{batchState.errors} 失败</span>}
           </h3>
+          <p className="text-xs text-[var(--text-muted)] mb-2">点击模型查看对应日志</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {batchState.results.map((r) => (
-              <div key={r.task_id} className="flex items-center gap-2 text-xs">
+              <div
+                key={r.task_id}
+                onClick={() => handleSelectTask(r.task_id)}
+                className={`flex items-center gap-2 text-xs rounded px-1.5 py-0.5 -mx-1.5 cursor-pointer transition-colors ${
+                  r.task_id === selectedTaskId
+                    ? 'bg-[var(--accent)]/10 ring-1 ring-[var(--accent-dim)]'
+                    : 'hover:bg-[var(--bg)]'
+                }`}
+              >
                 {r.status === 'error' ? (
                   <span className="text-[var(--danger)]">✗</span>
                 ) : (

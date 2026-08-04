@@ -193,6 +193,7 @@ export interface BatchStatus {
   completed: number
   errors: number
   current_model: string
+  current_task_id: string
   results: BatchRunResult[]
   error_details: { name: string; model: string; error: string }[]
 }
