@@ -4,11 +4,14 @@ import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
 import Collapsible from '@/components/ui/Collapsible'
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS, inputClass } from '@/components/ui/formStyles'
+import { getTemplateDownloadUrl, uploadBatchCsv, runBatchPerf } from '@/api/perf'
+import type { BatchUploadResponse } from '@/api/perf'
 
 interface Props {
   onSubmit: (config: Record<string, unknown>) => void
   disabled?: boolean
   onApiKeyChange?: (key: string) => void
+  onBatchSubmit?: (batchId: string, sharedConfig: Record<string, unknown>) => Promise<void>
 }
 
 const EMBEDDING_APIS = ['openai_embedding']
@@ -19,10 +22,12 @@ const EMBEDDING_DATASETS = ['random_embedding', 'embedding', 'random_embedding_b
 const RERANK_DATASETS = ['random_rerank', 'rerank']
 const LLM_DATASETS = ['openqa', 'random', 'random_vl', 'random_multi_turn', 'share_gpt_zh', 'share_gpt_en', 'longalpaca', 'line_by_line', 'speed_benchmark']
 
-export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: Props) {
+export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit }: Props) {
   const { t } = useLocale()
   const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
+  const [testMode, setTestMode] = useState<'single' | 'batch'>('single')
   const isLocal = modelSource === 'local'
+  const isBatch = testMode === 'batch'
   const modelManualRef = useRef(false)
 
   // OpenAI API fields
@@ -67,6 +72,13 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
   const [thinkingMode, setThinkingMode] = useState('auto')
   const [extraArgs, setExtraArgs] = useState('')
 
+  // Batch state
+  const [batchFile, setBatchFile] = useState<File | null>(null)
+  const [batchInfo, setBatchInfo] = useState<BatchUploadResponse | null>(null)
+  const [batchUploading, setBatchUploading] = useState(false)
+  const [batchError, setBatchError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   // Reset dataset when switching between LLM and embedding/reranker APIs
   useEffect(() => {
     if (isEmbeddingOrRerank(api)) {
@@ -89,8 +101,70 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
     if (name) setModel(name)
   }, [modelPath, isLocal])
 
+  const handleBatchUpload = async () => {
+    if (!batchFile) return
+    setBatchUploading(true)
+    setBatchError('')
+    try {
+      const info = await uploadBatchCsv(batchFile)
+      setBatchInfo(info)
+    } catch (e) {
+      setBatchError(String(e))
+      setBatchInfo(null)
+    } finally {
+      setBatchUploading(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (f) {
+      setBatchFile(f)
+      setBatchInfo(null)
+      setBatchError('')
+    }
+  }
+
+  const buildSharedConfig = (): Record<string, unknown> => {
+    const config: Record<string, unknown> = {
+      parallel: parallel.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
+      number: number.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
+    }
+    if (rate) config.rate = Number(rate)
+    if (maxTokens) config.max_tokens = Number(maxTokens)
+    if (minTokens) config.min_tokens = Number(minTokens)
+    if (dataset) config.dataset = dataset === 'custom' ? 'local_jsonl' : dataset
+    if (dataset === 'custom' && customDataset) config.dataset_label = customDataset
+    if (datasetPath) config.dataset_path = datasetPath
+    if (maxPromptLen) config.max_prompt_length = Number(maxPromptLen)
+    if (minPromptLen) config.min_prompt_length = Number(minPromptLen)
+    if (prefixLength) config.prefix_length = Number(prefixLength)
+    if (tokenizerPath) config.tokenizer_path = tokenizerPath
+    if (thinkingMode !== 'auto') {
+      config.extra_args = { enable_thinking: thinkingMode === 'on' }
+    }
+    if (extraArgs.trim()) {
+      try { config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), ...JSON.parse(extraArgs) } }
+      catch { /* handled in validation */ }
+    }
+    return config
+  }
+
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
+
+    if (isBatch) {
+      // Batch mode: validate CSV uploaded, then submit via onBatchSubmit
+      if (!batchInfo?.batch_id) {
+        setBatchError('请先上传模型列表文件')
+        return
+      }
+      const sharedConfig = buildSharedConfig()
+      onBatchSubmit?.(batchInfo.batch_id, sharedConfig)
+      return
+    }
+
+    // Single mode validation
     const newErrors: Record<string, string> = {}
     if (isLocal) {
       if (!modelPath.trim()) newErrors.modelPath = 'Required'
@@ -158,17 +232,13 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
     }
     setErrors({})
 
-    const config: Record<string, unknown> = {
-      parallel: parallel.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
-      number: number.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
-    }
+    const config = buildSharedConfig()
 
     if (isLocal) {
       config.model = modelPath
       config.model_path = modelPath
-      // Map backend to perf api type
       if (backend === 'auto') {
-        config.api = 'local'  // auto-detect, default to local/transformers
+        config.api = 'local'
       } else if (backend === 'vllm') {
         config.api = 'local_vllm'
       } else {
@@ -183,20 +253,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
       if (tokenizerPath) config.tokenizer_path = tokenizerPath
     }
 
-    if (rate) config.rate = Number(rate)
-    if (maxTokens) config.max_tokens = Number(maxTokens)
-    if (minTokens) config.min_tokens = Number(minTokens)
-    if (dataset) config.dataset = dataset === 'custom' ? 'local_jsonl' : dataset
-    if (dataset === 'custom' && customDataset) config.dataset_label = customDataset
-    if (datasetPath) config.dataset_path = datasetPath
-    if (maxPromptLen) config.max_prompt_length = Number(maxPromptLen)
-    if (minPromptLen) config.min_prompt_length = Number(minPromptLen)
-    if (prefixLength) config.prefix_length = Number(prefixLength)
-    // Thinking mode
-    if (thinkingMode !== 'auto') {
-      const enableThinking = thinkingMode === 'on'
-      config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), enable_thinking: enableThinking }
-    }
     if (extraArgs.trim()) {
       try { config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), ...JSON.parse(extraArgs) } }
       catch { newErrors.extra_args = t('perf.invalidJson') }
@@ -211,7 +267,89 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
 
-      {/* Model Source */}
+      {/* Test Mode Toggle */}
+      <div className="flex items-center gap-6">
+        <label className={`${FORM_LABEL_CLASS} !mb-0`}>测试模式</label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="tm" value="single" checked={!isBatch}
+            onChange={() => setTestMode('single')} className="accent-[var(--accent)]" />
+          <span className="text-sm text-[var(--text)]">单模型测试</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="tm" value="batch" checked={isBatch}
+            onChange={() => setTestMode('batch')} className="accent-[var(--accent)]" />
+          <span className="text-sm text-[var(--text)]">批量测试</span>
+        </label>
+      </div>
+
+      {/* ── Batch mode UI ── */}
+      {isBatch && (
+        <div className="space-y-3 p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
+          <div className="flex items-center gap-3 flex-wrap">
+            <a
+              href={getTemplateDownloadUrl()}
+              download="model_list_template.csv"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-dim)]/10 transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              下载模板
+            </a>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled}
+            >
+              选择文件
+            </Button>
+
+            {batchFile && (
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleBatchUpload}
+                disabled={disabled || batchUploading}
+              >
+                {batchUploading ? '上传中...' : '上传文件'}
+              </Button>
+            )}
+          </div>
+
+          {batchFile && !batchInfo && !batchError && (
+            <p className="text-xs text-[var(--text-muted)]">
+              已选择: {batchFile.name} — 点击"上传文件"解析模型列表
+            </p>
+          )}
+
+          {batchError && (
+            <p className="text-xs text-[var(--danger)]">{batchError}</p>
+          )}
+
+          {batchInfo && (
+            <div className="space-y-1">
+              <p className="text-xs text-[var(--green)]">
+                ✓ 上传成功，共 {batchInfo.model_count} 个模型
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {batchInfo.models.map((m) => (
+                  <span key={m} className="px-2 py-0.5 text-xs rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]">{m}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Model Source (single mode only) ── */}
+      {!isBatch && (
       <div className="flex items-center gap-6">
         <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
         <label className="flex items-center gap-2 cursor-pointer">
@@ -225,11 +363,12 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
           <span className="text-sm text-[var(--text)]">{t('eval.modelSourceLocal')}</span>
         </label>
       </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* ── OpenAI API fields ── */}
-        {!isLocal && (<>
+        {!isBatch && !isLocal && (<>
           <FormField label={t('eval.modelName')} required error={errors.model}>
             <input
               value={model}
@@ -263,7 +402,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
         </>)}
 
         {/* ── Local model fields ── */}
-        {isLocal && (<>
+        {!isBatch && isLocal && (<>
           <FormField label={t('eval.modelPath')} required error={errors.modelPath}>
             <input value={modelPath}
               onChange={(e) => { setModelPath(e.target.value); if (errors.modelPath) setErrors((p) => ({ ...p, modelPath: '' })) }}
@@ -357,12 +496,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
             className={inputClass(errors.minPromptLen)} placeholder={t('perf.placeholderDefaultVal', { v: '0' })} />
         </FormField>
 
-        {/* API mode: Tokenizer path shown here */}
-        {!isLocal && (
-          <FormField label={t('perf.tokenizerPath')}>
-            <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
-          </FormField>
-        )}
       </div>
 
       {/* ── 高级选项 ── */}
@@ -397,7 +530,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange }: P
       </Collapsible>
 
       <Button type="submit" variant="primary" disabled={disabled} className="btn-glow">
-        {t('perf.startPerf')}
+        {isBatch ? '开始批量测试' : t('perf.startPerf')}
       </Button>
     </form>
   )

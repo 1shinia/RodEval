@@ -176,6 +176,8 @@ class OpenaiPlugin(DefaultApiPlugin):
         # no usage information in the response, parse the response to get the tokens
         delta_contents = defaultdict(list)
         for response in responses:
+            if not isinstance(response, dict):
+                continue
             if 'object' in response:
                 self.__process_response_object(response, delta_contents)
             else:

@@ -126,3 +126,88 @@ export async function listSavedCompareReports() {
 export async function deleteCompareReport(id: number) {
   return apiDelete<{ ok: boolean }>('/api/v1/perf/compare/saved/' + id)
 }
+
+// Batch model testing
+export function getTemplateDownloadUrl(): string {
+  return '/api/v1/perf/template'
+}
+
+export interface BatchUploadResponse {
+  batch_id: string
+  model_count: number
+  models: string[]
+  preview: {
+    name: string
+    base_url: string
+    api_key: string
+    api: string
+    model: string
+    concurrency: number
+    max_tokens: number
+    stream: boolean
+    prompt: string
+  }[]
+}
+
+export async function uploadBatchCsv(file: File): Promise<BatchUploadResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/v1/perf/batch/upload', { method: 'POST', body: form })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(body.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export interface BatchRunResult {
+  task_id: string
+  name: string
+  model: string
+  status: string
+  error?: string
+}
+
+export interface BatchRunResponse {
+  batch_id: string
+  completed: number
+  errors: number
+  results: BatchRunResult[]
+  error_details: { name: string; model: string; error: string }[]
+}
+
+export async function launchBatchPerf(
+  batchId: string,
+  sharedConfig: Record<string, unknown>,
+): Promise<{ batch_id: string; total: number; status: string }> {
+  return apiPost<{ batch_id: string; total: number; status: string }>(
+    '/api/v1/perf/batch/launch', { batch_id: batchId, ...sharedConfig },
+  )
+}
+
+export interface BatchStatus {
+  batch_id: string
+  status: string          // 'running' | 'completed' | 'cancelled' | 'error'
+  total: number
+  completed: number
+  errors: number
+  current_model: string
+  results: BatchRunResult[]
+  error_details: { name: string; model: string; error: string }[]
+}
+
+export async function getBatchStatus(batchId: string): Promise<BatchStatus> {
+  return api<BatchStatus>(`/api/v1/perf/batch/status/${batchId}`)
+}
+
+export async function stopBatchPerf(batchId: string): Promise<{ batch_id: string; status: string }> {
+  return apiPost<{ batch_id: string; status: string }>(`/api/v1/perf/batch/stop/${batchId}`, {})
+}
+
+// Legacy — kept for backward compatibility but forwards to launch
+export async function runBatchPerf(
+  batchId: string,
+  sharedConfig: Record<string, unknown>,
+): Promise<BatchRunResponse> {
+  return apiPost<BatchRunResponse>('/api/v1/perf/batch/launch', { batch_id: batchId, ...sharedConfig }, undefined, 0)
+}

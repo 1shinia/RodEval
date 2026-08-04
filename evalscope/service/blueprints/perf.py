@@ -52,6 +52,354 @@ def _build_perf_table(result, api_type: str = None) -> str:
 
 bp_perf = Blueprint('perf', __name__, url_prefix='/api/v1/perf')
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Batch model testing — template download / CSV upload / batch run
+# ═══════════════════════════════════════════════════════════════════════════════
+
+BATCH_CSV_TEMPLATE = os.path.join(os.path.dirname(OUTPUT_DIR), 'data', 'model_list.csv')
+BATCH_UPLOAD_DIR = os.path.join(OUTPUT_DIR, '_batch_uploads')
+
+
+@bp_perf.route('/template', methods=['GET'])
+def download_template():
+    """Download the model list CSV template."""
+    if not os.path.isfile(BATCH_CSV_TEMPLATE):
+        return jsonify({'error': 'Template file not found on server'}), 404
+    return send_file(
+        BATCH_CSV_TEMPLATE,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name='model_list_template.csv',
+    )
+
+
+@bp_perf.route('/batch/upload', methods=['POST'])
+def upload_batch_csv():
+    """Upload a model list CSV for batch testing.
+
+    Returns parsed preview: model count + first few rows.
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    f = request.files['file']
+    if not f.filename or not f.filename.lower().endswith('.csv'):
+        return jsonify({'error': 'Only .csv files are accepted'}), 400
+
+    import csv as csv_mod
+    content = f.read().decode('utf-8-sig')
+    reader = csv_mod.DictReader(content.splitlines())
+
+    rows = []
+    for row in reader:
+        if not row.get('model'):
+            continue
+        enabled = row.get('enabled', 'TRUE').strip().upper()
+        if enabled == 'FALSE':
+            continue
+        rows.append({
+            'name': row['model'].strip(),
+            'base_url': (row.get('base_url') or '').strip(),
+            'api_key': (row.get('api_key') or '').strip(),
+            'api': (row.get('api') or 'openai').strip(),
+            'model': row['model'].strip(),
+            'concurrency': int(row.get('concurrency', 5)) if row.get('concurrency', '').strip() else 5,
+            'max_tokens': int(row.get('max_tokens', 200)) if row.get('max_tokens', '').strip() else 200,
+            'stream': (row.get('stream', 'TRUE') or 'TRUE').strip().upper() == 'TRUE',
+            'prompt': (row.get('prompt') or '').strip(),
+        })
+
+    if not rows:
+        return jsonify({'error': 'CSV 中没有有效的模型行（name/model 为空或被 disabled）'}), 400
+
+    # Save to temp file on server for later batch run
+    os.makedirs(BATCH_UPLOAD_DIR, exist_ok=True)
+    batch_id = uuid.uuid4().hex[:12]
+    saved_path = os.path.join(BATCH_UPLOAD_DIR, f'{batch_id}.csv')
+    with open(saved_path, 'w', encoding='utf-8') as outf:
+        outf.write(content)
+
+    return jsonify({
+        'batch_id': batch_id,
+        'model_count': len(rows),
+        'models': [r['name'] for r in rows],
+        'preview': rows[:5],
+    }), 200
+
+
+@bp_perf.route('/batch/launch', methods=['POST'])
+def launch_batch_perf():
+    """Launch batch performance tests in background.
+
+    JSON body: same as old /batch/run.
+    Returns immediately with batch_id.  Use /batch/status/<batch_id> to poll.
+    """
+    import csv as csv_mod
+    import threading
+    from datetime import datetime
+
+    data = request.get_json()
+    if not data or not data.get('batch_id'):
+        return jsonify({'error': 'batch_id is required'}), 400
+
+    batch_id = data['batch_id']
+    csv_path = os.path.join(BATCH_UPLOAD_DIR, f'{batch_id}.csv')
+    if not os.path.isfile(csv_path):
+        return jsonify({'error': f'Batch file not found: {batch_id}. Please re-upload.'}), 404
+
+    if batch_id in _batch_state:
+        return jsonify({'error': 'Batch already running'}), 409
+
+    with open(csv_path, 'r', encoding='utf-8-sig') as f:
+        reader = csv_mod.DictReader(f)
+        model_rows = list(reader)
+
+    total = sum(1 for r in model_rows
+                if (r.get('model') or '').strip()
+                and (r.get('enabled', 'TRUE') or 'TRUE').strip().upper() != 'FALSE')
+
+    state = {
+        'batch_id': batch_id,
+        'status': 'running',
+        'total': total,
+        'completed': 0,
+        'errors': 0,
+        'current_model': '',
+        'results': [],
+        'error_details': [],
+        'cancel_requested': False,
+    }
+    _batch_state[batch_id] = state
+
+    shared_config = {
+        'parallel': data.get('parallel', [1]),
+        'number': data.get('number', [10]),
+        'rate': data.get('rate'),
+        'max_tokens': data.get('max_tokens'),
+        'min_tokens': data.get('min_tokens'),
+        'dataset': data.get('dataset', 'openqa'),
+        'dataset_path': data.get('dataset_path'),
+        'max_prompt_length': data.get('max_prompt_length'),
+        'min_prompt_length': data.get('min_prompt_length'),
+        'prefix_length': data.get('prefix_length'),
+        'tokenizer_path': data.get('tokenizer_path'),
+        'extra_args': data.get('extra_args'),
+    }
+
+    def _run_batch():
+        state = _batch_state.get(batch_id)
+        if not state:
+            return
+        try:
+            for row in model_rows:
+                if state['cancel_requested']:
+                    state['status'] = 'cancelled'
+                    logger.info(f'[batch:{batch_id}] Cancelled by user')
+                    break
+
+                model_name = (row.get('model') or '').strip()
+                if not model_name:
+                    continue
+                enabled = (row.get('enabled', 'TRUE') or 'TRUE').strip().upper()
+                if enabled == 'FALSE':
+                    continue
+
+                state['current_model'] = model_name
+                task_id = f'perf_{int(datetime.now().timestamp() * 1000)}'
+                concurrency = int(row['concurrency']) if row.get('concurrency', '').strip() else 5
+                max_tok = int(row['max_tokens']) if row.get('max_tokens', '').strip() else 200
+                stream = (row.get('stream', 'TRUE') or 'TRUE').strip().upper() == 'TRUE'
+
+                perf_data = {
+                    'model': model_name,
+                    'api': (row.get('api') or 'openai').strip(),
+                    'url': (row.get('base_url') or '').strip(),
+                    'api_key': (row.get('api_key') or '').strip(),
+                    'parallel': [concurrency],
+                    'number': shared_config['number'],
+                    'max_tokens': max_tok,
+                    'stream': stream,
+                    'dataset': shared_config['dataset'],
+                }
+                if row.get('prompt', '').strip():
+                    perf_data['prompt'] = row['prompt'].strip()
+                if shared_config['rate']:
+                    perf_data['rate'] = shared_config['rate']
+                if shared_config['min_tokens']:
+                    perf_data['min_tokens'] = shared_config['min_tokens']
+                if shared_config['max_prompt_length']:
+                    perf_data['max_prompt_length'] = shared_config['max_prompt_length']
+                if shared_config['min_prompt_length']:
+                    perf_data['min_prompt_length'] = shared_config['min_prompt_length']
+                if shared_config['prefix_length']:
+                    perf_data['prefix_length'] = shared_config['prefix_length']
+                if shared_config['tokenizer_path']:
+                    perf_data['tokenizer_path'] = shared_config['tokenizer_path']
+                if shared_config['dataset_path']:
+                    perf_data['dataset_path'] = shared_config['dataset_path']
+                if shared_config['extra_args']:
+                    perf_data['extra_args'] = shared_config['extra_args']
+
+                if not try_reserve_slot(task_id, 'perf', model=model_name):
+                    state['errors'] += 1
+                    state['error_details'].append({'name': model_name, 'model': model_name, 'error': '并发已满'})
+                    continue
+
+                logger.info(f'[batch:{batch_id}] Running perf for {model_name}')
+
+                try:
+                    perf_args = PerfArguments.from_dict(perf_data)
+                    perf_args.no_timestamp = True
+                    perf_args.outputs_dir = os.path.join(OUTPUT_DIR, task_id)
+                    perf_args.name = 'perf'
+                    perf_args.enable_progress_tracker = True
+                    perf_args.no_test_connection = True
+
+                    os.makedirs(perf_args.outputs_dir, exist_ok=True)
+                    save_data = {k: v for k, v in perf_data.items() if k != 'api_key'}
+                    config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
+                    with open(config_file, 'w') as cf:
+                        json.dump(save_data, cf, ensure_ascii=False)
+
+                    create_log_file(task_id, os.path.join('perf', 'benchmark.log'))
+
+                    result = run_in_subprocess(
+                        run_perf_wrapper, perf_args, task_id=task_id, task_type='perf', model=perf_args.model
+                    )
+
+                    # Check if the benchmark actually succeeded (not just "ran without crashing")
+                    perf_success = True
+                    perf_error_msg = ''
+                    perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
+                    try:
+                        for entry in os.listdir(perf_dir):
+                            summary_path = os.path.join(perf_dir, entry, 'benchmark_summary.json')
+                            if not os.path.isfile(summary_path):
+                                continue
+                            with open(summary_path, 'r') as sf:
+                                summary = json.load(sf)
+                            failed = summary.get('Failed Requests', 0)
+                            if failed > 0:
+                                perf_success = False
+                                # Extract error from benchmark log
+                                log_path = os.path.join(perf_dir, 'benchmark.log')
+                                if os.path.isfile(log_path):
+                                    with open(log_path, 'r') as lf:
+                                        for line in lf:
+                                            if 'Non-retryable error' in line or 'Invalid' in line or 'error' in line.lower():
+                                                perf_error_msg = line.strip()
+                                                break
+                                if not perf_error_msg:
+                                    perf_error_msg = f'所有 {failed} 个请求失败（Success: {summary.get("Success Requests", 0)}）'
+                                break
+                    except Exception:
+                        pass
+
+                    if not perf_success:
+                        state['errors'] += 1
+                        state['completed'] += 1
+                        state['results'].append({
+                            'task_id': task_id,
+                            'name': model_name,
+                            'model': model_name,
+                            'status': 'error',
+                            'error': perf_error_msg,
+                        })
+                        state['error_details'].append({
+                            'name': model_name,
+                            'model': model_name,
+                            'error': perf_error_msg,
+                        })
+                        logger.warning(f'[batch:{batch_id}] [{task_id}] {model_name} 压测失败: {perf_error_msg}')
+                    else:
+
+                        # Write to SQLite
+                        try:
+                            from .. import db as _db
+                            perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
+                            has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                            runs = 0
+                            for sd in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
+                                if os.path.isdir(sd):
+                                    runs += sum(1 for s in os.listdir(sd) if os.path.isdir(os.path.join(sd, s)) and s != 'perf')
+                            _db.upsert_perf_task(
+                                task_id=task_id,
+                                model=perf_args.model,
+                                api=perf_args.api,
+                                dataset=perf_args.dataset_label or perf_args.dataset or 'N/A',
+                                runs=runs,
+                                has_report=has_report,
+                                timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            )
+                        except Exception as e:
+                            logger.warning(f'Failed to write perf to SQLite (non-fatal): {e}')
+
+                        state['completed'] += 1
+                        state['results'].append({'task_id': task_id, 'name': model_name, 'model': model_name, 'status': 'completed'})
+                        logger.info(f'[batch:{batch_id}] [{task_id}] {model_name} completed ({state["completed"]}/{total})')
+
+                except Exception as e:
+                    error_id = uuid.uuid4().hex[:8]
+                    logger.error(f'[batch:{batch_id}] [{task_id}] {model_name} failed: {e}', exc_info=True)
+                    state['errors'] += 1
+                    state['error_details'].append({'name': model_name, 'model': model_name, 'error': str(e)})
+                finally:
+                    unregister_process(task_id)
+                    state['current_model'] = ''
+
+            if state['status'] == 'running':
+                state['status'] = 'completed'
+        except Exception as e:
+            state['status'] = 'error'
+            logger.error(f'[batch:{batch_id}] Fatal error: {e}', exc_info=True)
+
+    thread = threading.Thread(target=_run_batch, daemon=True)
+    thread.start()
+
+    return jsonify({'batch_id': batch_id, 'total': total, 'status': 'launched'}), 200
+
+
+@bp_perf.route('/batch/status/<batch_id>', methods=['GET'])
+def get_batch_status(batch_id: str):
+    """Get the current status of a running batch test."""
+    state = _batch_state.get(batch_id)
+    if not state:
+        return jsonify({'error': 'Batch not found'}), 404
+    return jsonify({
+        'batch_id': batch_id,
+        'status': state['status'],
+        'total': state['total'],
+        'completed': state['completed'],
+        'errors': state['errors'],
+        'current_model': state['current_model'],
+        'results': state.get('results', []),
+        'error_details': state.get('error_details', []),
+    }), 200
+
+
+@bp_perf.route('/batch/stop/<batch_id>', methods=['POST'])
+def stop_batch_perf(batch_id: str):
+    """Request cancellation of a running batch test."""
+    state = _batch_state.get(batch_id)
+    if not state:
+        return jsonify({'error': 'Batch not found'}), 404
+    if state['status'] != 'running':
+        return jsonify({'error': f'Batch is not running (status: {state["status"]})'}), 400
+    state['cancel_requested'] = True
+    return jsonify({'batch_id': batch_id, 'status': 'cancelling'}), 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Batch state dict  (module-level; survives across requests)
+# ═══════════════════════════════════════════════════════════════════════════════
+_batch_state: dict = {}
+
+
+@bp_perf.route('/batch/run', methods=['POST'])
+def run_batch_perf_legacy():
+    """Legacy redirect: now use /batch/launch."""
+    return jsonify({'error': 'Use POST /api/v1/perf/batch/launch instead. See /batch/status/<id> for progress.'}), 410
+
 
 @bp_perf.route('/list', methods=['GET'])
 def list_perf_tasks():
