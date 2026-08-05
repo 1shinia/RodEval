@@ -411,7 +411,7 @@ def run_evaluation():
         max_eval = int(os.environ.get('MAX_CONCURRENT_EVAL', '2'))
         running = count_running_tasks('eval')
         return jsonify({
-            'error': f'已有 {running} 个评估任务运行中，最大并发 {max_eval}，请等待完成后再试',
+            'error': f'你的评估任务已达上限（{running}/{max_eval}），请等待完成后再试',
             'running': running,
             'max': max_eval,
         }), 429
@@ -632,7 +632,7 @@ def resume_evaluation():
         max_eval = int(os.environ.get('MAX_CONCURRENT_EVAL', '2'))
         running = count_running_tasks('eval')
         return jsonify({
-            'error': f'已有 {running} 个评估任务运行中，最大并发 {max_eval}，请等待完成后再试',
+            'error': f'你的评估任务已达上限（{running}/{max_eval}），请等待完成后再试',
             'running': running,
             'max': max_eval,
         }), 429

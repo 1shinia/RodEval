@@ -629,7 +629,7 @@ def run_performance_test():
         max_perf = int(os.environ.get('MAX_CONCURRENT_PERF', '1'))
         running = count_running_tasks('perf')
         return jsonify({
-            'error': f'已有 {running} 个压测任务运行中，最大并发 {max_perf}，请等待完成后再试',
+            'error': f'你的压测任务已达上限（{running}/{max_perf}），请等待完成后再试',
             'running': running,
             'max': max_perf,
         }), 429
@@ -779,7 +779,7 @@ def resume_performance_test():
         max_perf = int(os.environ.get('MAX_CONCURRENT_PERF', '1'))
         running = count_running_tasks('perf')
         return jsonify({
-            'error': f'已有 {running} 个压测任务运行中，最大并发 {max_perf}，请等待完成后再试',
+            'error': f'你的压测任务已达上限（{running}/{max_perf}），请等待完成后再试',
             'running': running,
             'max': max_perf,
         }), 429
