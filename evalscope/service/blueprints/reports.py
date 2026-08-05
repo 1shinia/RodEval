@@ -475,6 +475,17 @@ def load_report():
     try:
         root = _root_path()
         validate_report_name(report_name, root)
+
+        # Verify ownership: task_id must belong to current user
+        from .auth import get_current_user_id
+        from .. import db as _db
+        prefix, _, _ = process_report_name(report_name)
+        owner = _db._get_conn().execute(
+            'SELECT user_id FROM eval_reports WHERE task_id = ?', (prefix,)
+        ).fetchone()
+        if owner and owner[0] != get_current_user_id():
+            return jsonify({'error': 'Report not found'}), 404
+
         report_list, datasets, task_cfg = load_single_report(root, report_name)
         # Detect MTEB/RAG reports: results/ directory present but no standard report_list
         is_mteb = _is_mteb_report(root, report_name)
