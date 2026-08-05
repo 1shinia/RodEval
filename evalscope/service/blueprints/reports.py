@@ -337,7 +337,7 @@ def list_reports():
             from .. import db as _db
             from .auth import get_current_user_id
             current_uid = get_current_user_id()
-            removed = _db.cleanup_eval_reports(root)
+            removed = _db.cleanup_eval_reports(root, user_id=current_uid)
             if removed:
                 logger.info(f'Cleaned up {removed} stale eval report(s) from DB')
             items, total, available_models, available_datasets = _db.query_eval_reports(
@@ -648,9 +648,10 @@ def delete_report():
         task_id, _, _ = process_report_name(report_name)
         try:
             from .. import db as _db
+        from .auth import get_current_user_id
 
             # Extract task_id (prefix) from composite report_name
-            _db.delete_eval_report(task_id)
+            _db.delete_eval_report(task_id, user_id=get_current_user_id())
             logger.info(f'Deleted from SQLite: {task_id}')
         except Exception as e:
             logger.warning(f'Failed to delete {task_id} from SQLite: {e}')

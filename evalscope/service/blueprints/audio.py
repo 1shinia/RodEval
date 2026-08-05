@@ -160,7 +160,8 @@ def delete_audio_report(task_id: str):
     # Sync SQLite
     try:
         from .. import db as _db
-        _db.delete_eval_report(task_id)
+        from .auth import get_current_user_id
+        _db.delete_eval_report(task_id, user_id=get_current_user_id())
     except Exception as e:
         logger.warning(f'Failed to delete Audio task {task_id} from SQLite: {e}')
     return jsonify({'success': True})

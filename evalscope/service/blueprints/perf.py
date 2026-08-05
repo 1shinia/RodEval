@@ -480,7 +480,7 @@ def list_perf_tasks():
         from .. import db as _db
         from .auth import get_current_user_id
         current_uid = get_current_user_id()
-        removed = _db.cleanup_perf_tasks(root)
+        removed = _db.cleanup_perf_tasks(root, user_id=current_uid)
         if removed:
             logger.info(f'Cleaned up {removed} stale perf task(s) from DB')
         items, total, available_models, available_datasets = _db.query_perf_tasks(
@@ -1319,7 +1319,8 @@ def delete_compare_report(report_id: int):
     """Delete a saved compare report."""
     try:
         from .. import db as _db
-        deleted = _db.delete_compare_report(report_id)
+        from .auth import get_current_user_id
+        deleted = _db.delete_compare_report(report_id, user_id=get_current_user_id())
         if deleted:
             return jsonify({'ok': True}), 200
         return jsonify({'error': 'Report not found'}), 404

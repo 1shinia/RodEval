@@ -387,9 +387,12 @@ def query_eval_reports(
     return items, total, avail_models, avail_datasets
 
 
-def delete_eval_report(task_id: str) -> None:
+def delete_eval_report(task_id: str, user_id: int | None = None) -> None:
     conn = _get_conn()
-    conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id, ))
+    if user_id is not None:
+        conn.execute('DELETE FROM eval_reports WHERE task_id = ? AND user_id = ?', (task_id, user_id))
+    else:
+        conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id,))
     conn.commit()
 
 
@@ -427,13 +430,16 @@ def upsert_perf_task(
             raise
 
 
-def cleanup_perf_tasks(output_dir: str) -> int:
+def cleanup_perf_tasks(output_dir: str, user_id: int | None = None) -> int:
     """Remove perf_tasks rows whose directories no longer exist on disk.
 
     Returns the number of rows removed.
     """
     conn = _get_conn()
-    rows = conn.execute('SELECT task_id FROM perf_tasks').fetchall()
+    if user_id is not None:
+        rows = conn.execute('SELECT task_id FROM perf_tasks WHERE user_id = ?', (user_id,)).fetchall()
+    else:
+        rows = conn.execute('SELECT task_id FROM perf_tasks').fetchall()
     stale: list[str] = []
     for (tid,) in rows:
         if not os.path.isdir(os.path.join(output_dir, tid)):
@@ -444,13 +450,16 @@ def cleanup_perf_tasks(output_dir: str) -> int:
     return len(stale)
 
 
-def cleanup_eval_reports(output_dir: str) -> int:
+def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
     """Remove eval_reports rows whose directories no longer exist on disk.
 
     Returns the number of rows removed.
     """
     conn = _get_conn()
-    rows = conn.execute('SELECT task_id FROM eval_reports').fetchall()
+    if user_id is not None:
+        rows = conn.execute('SELECT task_id FROM eval_reports WHERE user_id = ?', (user_id,)).fetchall()
+    else:
+        rows = conn.execute('SELECT task_id FROM eval_reports').fetchall()
     stale: list[str] = []
     for (tid,) in rows:
         if not os.path.isdir(os.path.join(output_dir, tid)):
@@ -1017,9 +1026,12 @@ def list_compare_reports(user_id: int = 1) -> list[dict]:
     ]
 
 
-def delete_compare_report(report_id: int) -> bool:
+def delete_compare_report(report_id: int, user_id: int | None = None) -> bool:
     """Delete a compare report by ID. Returns True if deleted."""
     conn = _get_conn()
-    cur = conn.execute('DELETE FROM compare_reports WHERE id = ?', (report_id,))
+    if user_id is not None:
+        cur = conn.execute('DELETE FROM compare_reports WHERE id = ? AND user_id = ?', (report_id, user_id))
+    else:
+        cur = conn.execute('DELETE FROM compare_reports WHERE id = ?', (report_id,))
     conn.commit()
     return cur.rowcount > 0
