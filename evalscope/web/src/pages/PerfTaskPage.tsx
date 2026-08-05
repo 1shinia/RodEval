@@ -146,8 +146,11 @@ export default function PerfTaskPage() {
               toast.info(`批量测试已取消：${st.completed} 完成`)
             }
           }
-        } catch {
-          // silently ignore poll errors
+        } catch (e) {
+          // Batch state lost (e.g. server restart) or network error
+          clearBatchPoll()
+          setBatchRunning(false)
+          toast.warning('批量状态丢失（服务可能已重启）')
         }
       }, 3000)
     } catch (e) {

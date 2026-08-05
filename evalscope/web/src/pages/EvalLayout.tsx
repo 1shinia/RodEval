@@ -184,7 +184,10 @@ export default function EvalLayout() {
               else toast.success(`批量评估完成：${st.completed} 个模型全部成功`)
             } else if (st.status === 'cancelled') toast.info(`批量评估已取消：${st.completed} 完成`)
           }
-        } catch { /* */ }
+        } catch (e) {
+          clearBatchPoll(); setBatchRunning(false)
+          toast.warning('批量状态丢失（服务可能已重启）')
+        }
       }, 3000)
     } catch (e) {
       toast.error(String(e)); setBatchRunning(false)
