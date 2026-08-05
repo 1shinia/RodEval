@@ -115,8 +115,8 @@ export default function EvalLayout() {
   const getDisplayLog = useCallback(() => {
     if (running) return logText
     if (batchRunning) return batchLogText
-    return logText || selectedTaskLog
-  }, [running, logText, batchRunning, batchLogText, selectedTaskLog])
+    return selectedTaskId ? selectedTaskLog : logText
+  }, [running, logText, batchRunning, batchLogText, selectedTaskId, selectedTaskLog])
 
   const copyCurrentLog = useCallback(async () => {
     const text = getDisplayLog()
@@ -237,7 +237,7 @@ export default function EvalLayout() {
       running={running || batchRunning}
       progress={running ? progress : 0}
       result={result}
-      logText={running ? logText : (batchRunning ? batchLogText : (logText || selectedTaskLog))}
+      logText={running ? logText : (batchRunning ? batchLogText : (selectedTaskId ? selectedTaskLog : logText))}
       reportUrl={reportUrl}
       copied={copied}
       onCopy={copyCurrentLog}
