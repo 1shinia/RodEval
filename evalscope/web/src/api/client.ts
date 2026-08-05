@@ -1,5 +1,10 @@
 const DEFAULT_TIMEOUT = 30_000 // 30 seconds
 
+export function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('evalscope_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }))
@@ -29,7 +34,7 @@ export async function api<T = unknown>(
       if (v !== undefined && v !== '') url.searchParams.set(k, String(v))
     }
   }
-  const res = await fetch(url.toString(), { signal: createAbortSignal(timeoutMs), cache: 'no-store' })
+  const res = await fetch(url.toString(), { signal: createAbortSignal(timeoutMs), cache: 'no-store', headers: getAuthHeaders() })
   return handleResponse<T>(res)
 }
 
@@ -41,7 +46,7 @@ export async function apiPost<T = unknown>(
 ): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...headers },
     body: JSON.stringify(body),
     signal: createAbortSignal(timeoutMs),
   })
@@ -55,7 +60,7 @@ export async function apiDelete<T = unknown>(
 ): Promise<T> {
   const res = await fetch(path, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: body ? JSON.stringify(body) : undefined,
     signal: createAbortSignal(timeoutMs),
   })

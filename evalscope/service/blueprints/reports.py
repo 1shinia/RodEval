@@ -335,6 +335,8 @@ def list_reports():
         # --- Try SQLite first ---
         try:
             from .. import db as _db
+            from .auth import get_current_user_id
+            current_uid = get_current_user_id()
             removed = _db.cleanup_eval_reports(root)
             if removed:
                 logger.info(f'Cleaned up {removed} stale eval report(s) from DB')
@@ -349,6 +351,7 @@ def list_reports():
                 page=page,
                 page_size=page_size,
                 backend=backend,
+                user_id=current_uid,
             )
             # Sanity: filter out reports whose directories no longer exist
             items = [it for it in items if _report_dir_exists(it['name'], root)]
@@ -364,6 +367,7 @@ def list_reports():
                 page=1,
                 page_size=10000,
                 backend=backend,
+                user_id=current_uid,
             )[0]
             all_filtered = [r for r in all_total if _report_dir_exists(r['name'], root)]
             total = len(all_filtered)

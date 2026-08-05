@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, Mic, Trash2 } from 'lucide-react'
 import { toast } from '@/components/common/Toast'
+import { getAuthHeaders } from '@/api/client'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import ReportFiltersBar, { type ReportFilters } from '@/components/reports/ReportFilters'
@@ -53,7 +54,7 @@ export default function AudioReportsTab() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/v1/audio/reports')
+      const response = await fetch('/api/v1/audio/reports', { headers: getAuthHeaders() })
       if (!response.ok) throw new Error(`Failed to load reports: ${response.statusText}`)
       const data = await response.json()
       setAllReports(data.reports || [])
@@ -67,7 +68,7 @@ export default function AudioReportsTab() {
   const handleDelete = useCallback(async (taskId: string) => {
     if (!window.confirm(`确定要删除此报告吗？\n\n${taskId}`)) return
     try {
-      const response = await fetch(`/api/v1/audio/reports/${encodeURIComponent(taskId)}`, { method: 'DELETE' })
+      const response = await fetch(`/api/v1/audio/reports/${encodeURIComponent(taskId)}`, { method: 'DELETE', headers: getAuthHeaders() })
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
         throw new Error((data as any).error || `HTTP ${response.status}`)

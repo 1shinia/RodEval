@@ -22,7 +22,7 @@ _db_path: str | None = None
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 5  # Bump when adding migrations below
+SCHEMA_VERSION = 7  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -108,6 +108,27 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         ALTER TABLE compare_reports ADD COLUMN root_path TEXT DEFAULT '';
         UPDATE compare_reports SET backend = 'Perf' WHERE backend IS NULL;
         UPDATE compare_reports SET root_path = '' WHERE root_path IS NULL;
+    '''
+    ),
+    (
+        6, 'add users table + user_id columns', '''
+        CREATE TABLE IF NOT EXISTS users (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            username      TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role          TEXT DEFAULT 'user',
+            created_at    TEXT NOT NULL
+        );
+    '''
+    ),
+    (
+        7, 'add user_id to data tables', '''
+        ALTER TABLE eval_reports ADD COLUMN user_id INTEGER DEFAULT 1;
+        ALTER TABLE perf_tasks ADD COLUMN user_id INTEGER DEFAULT 1;
+        ALTER TABLE compare_reports ADD COLUMN user_id INTEGER DEFAULT 1;
+        UPDATE eval_reports SET user_id = 1 WHERE user_id IS NULL;
+        UPDATE perf_tasks SET user_id = 1 WHERE user_id IS NULL;
+        UPDATE compare_reports SET user_id = 1 WHERE user_id IS NULL;
     '''
     ),
 ]
@@ -218,16 +239,18 @@ def upsert_eval_report(
     timestamp: str,
     dataset_scores: dict | None = None,
     eval_backend: str = '',
+    user_id: int = 1,
 ) -> None:
     conn = _get_conn()
     conn.execute(
         '''INSERT OR REPLACE INTO eval_reports
-           (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores, eval_backend)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+           (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores, eval_backend, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (
             task_id, model_name, dataset_name, score, num_samples, timestamp,
             json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
             eval_backend,
+            user_id,
         ),
     )
     conn.commit()
@@ -244,11 +267,12 @@ def query_eval_reports(
     page: int = 1,
     page_size: int = 20,
     backend: str = '',
+    user_id: int = 1,
 ) -> tuple[list[dict], int, list[str], list[str]]:
     """Return ``(items, total, available_models, available_datasets)``."""
     conn = _get_conn()
-    where: list[str] = []
-    params: list[Any] = []
+    where: list[str] = ['user_id = ?']
+    params: list[Any] = [user_id]
 
     if search:
         # SQLite LIKE is case-insensitive for ASCII — no LOWER() needed, index-friendly
@@ -374,15 +398,16 @@ def upsert_perf_task(
     runs: int,
     has_report: bool,
     timestamp: str,
+    user_id: int = 1,
 ) -> None:
     conn = _get_conn()
     for attempt in range(5):
         try:
             conn.execute(
                 '''INSERT OR REPLACE INTO perf_tasks
-                   (task_id, model, api, dataset, runs, has_report, timestamp)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                (task_id, model, api, dataset, runs, int(has_report), timestamp),
+                   (task_id, model, api, dataset, runs, has_report, timestamp, user_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (task_id, model, api, dataset, runs, int(has_report), timestamp, user_id),
             )
             conn.commit()
             return
@@ -428,7 +453,7 @@ def cleanup_eval_reports(output_dir: str) -> int:
     return len(stale)
 
 
-def upsert_aigc_audio_report(output_dir: str, task_id: str) -> bool:
+def upsert_aigc_audio_report(output_dir: str, task_id: str, user_id: int = 1) -> bool:
     """Read AIGC/Audio results.json and upsert into eval_reports.
 
     Returns True if a report was upserted, False if skipped.
@@ -498,6 +523,7 @@ def upsert_aigc_audio_report(output_dir: str, task_id: str) -> bool:
         timestamp=timestamp,
         dataset_scores=None,
         eval_backend=eval_backend,
+        user_id=user_id,
     )
     return True
 
@@ -510,11 +536,12 @@ def query_perf_tasks(
     sort_order: str = 'desc',
     page: int = 1,
     page_size: int = 20,
+    user_id: int = 1,
 ) -> tuple[list[dict], int, list[str], list[str]]:
     """Return ``(items, total, available_models, available_datasets)``."""
     conn = _get_conn()
-    where: list[str] = []
-    params: list[Any] = []
+    where: list[str] = ['user_id = ?']
+    params: list[Any] = [user_id]
 
     if search:
         where.append('(model LIKE ? OR dataset LIKE ?)')

@@ -12,6 +12,7 @@ from . import db as _db
 from .blueprints import bp_eval, bp_perf, bp_reports
 from .blueprints.aigc import bp_aigc
 from .blueprints.audio import bp_audio
+from .blueprints.auth import bp_auth, require_auth
 from .utils import OUTPUT_DIR as _DEFAULT_ROOT
 
 logger = get_logger()
@@ -76,6 +77,7 @@ def create_app(outputs: str = None):
     app.register_blueprint(bp_reports)
     app.register_blueprint(bp_aigc)
     app.register_blueprint(bp_audio)
+    app.register_blueprint(bp_auth)
 
     # Use HuggingFace mirror for MTEB dataset downloads (faster in CN)
     os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
@@ -131,6 +133,13 @@ def create_app(outputs: str = None):
             return None
     else:
         logger.info('API Key authentication disabled (set EVALSCOPE_API_KEY to enable)')
+
+    # --- JWT authentication -----------------------------------------------
+    app.before_request(require_auth)
+
+    # Ensure default admin user exists with correct password
+    with app.app_context():
+        _ensure_default_admin()
 
     # --- Access logging --------------------------------------------------
     _setup_access_logging(app, outputs_root)
@@ -371,6 +380,23 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
             logger.warning('waitress not installed, falling back to Flask dev server (single-threaded)')
             logger.warning('Install waitress for production use: pip install waitress')
             app.run(host=host, port=port, debug=False)
+
+
+def _ensure_default_admin() -> None:
+    """Ensure the default admin user exists with the correct password."""
+    from werkzeug.security import generate_password_hash
+
+    conn = _db._get_conn()
+    existing = conn.execute("SELECT password_hash FROM users WHERE username = 'admin'").fetchone()
+    default_hash = generate_password_hash('admin123')
+    if not existing:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
+            ('admin', default_hash, 'admin', datetime.now().isoformat()),
+        )
+    else:
+        conn.execute("UPDATE users SET password_hash = ? WHERE username = 'admin'", (default_hash,))
+    conn.commit()
 
 
 if __name__ == '__main__':

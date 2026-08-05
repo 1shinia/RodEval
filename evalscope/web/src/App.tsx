@@ -3,12 +3,14 @@ import { LocaleProvider } from '@/contexts/LocaleContext'
 import { ReportsProvider } from '@/contexts/ReportsContext'
 import { CompareProvider } from '@/contexts/CompareContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import MainLayout from '@/layouts/MainLayout'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
 import PageErrorBoundary from '@/components/common/PageErrorBoundary'
 import ToastContainer from '@/components/common/Toast'
 import { lazy, Suspense } from 'react'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
+import type { ReactNode } from 'react'
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const ReportsLayout = lazy(() => import('@/pages/ReportsLayout'))
@@ -29,12 +31,31 @@ const ReportViewerPage = lazy(() => import('@/pages/ReportViewerPage'))
 const BenchmarksPage = lazy(() => import('@/pages/BenchmarksPage'))
 const AIGCReportDetailPage = lazy(() => import('@/pages/AIGCReportDetailPage'))
 const AudioReportDetailPage = lazy(() => import('@/pages/AudioReportDetailPage'))
+const LoginPage = lazy(() => import('@/pages/LoginPage'))
+const RegisterPage = lazy(() => import('@/pages/RegisterPage'))
+
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+function GuestOnly({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth()
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
 
 function AppRoutes() {
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
-        <Route element={<MainLayout />}>
+        {/* Auth pages — guest only */}
+        <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
+        <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
+
+        {/* All other routes require auth */}
+        <Route element={<RequireAuth><MainLayout /></RequireAuth>}>
           <Route path="/dashboard" element={<PageErrorBoundary pageName="dashboard"><DashboardPage /></PageErrorBoundary>} />
           <Route path="/reports" element={<PageErrorBoundary pageName="reports"><ReportsLayout /></PageErrorBoundary>}>
             <Route index element={<Navigate to="/reports/llm" replace />} />
@@ -71,12 +92,14 @@ export default function App() {
       <ErrorBoundary>
         <ThemeProvider>
           <LocaleProvider>
-            <ReportsProvider>
-            <CompareProvider>
-              <AppRoutes />
-              <ToastContainer />
-            </CompareProvider>
-            </ReportsProvider>
+            <AuthProvider>
+              <ReportsProvider>
+              <CompareProvider>
+                <AppRoutes />
+                <ToastContainer />
+              </CompareProvider>
+              </ReportsProvider>
+            </AuthProvider>
           </LocaleProvider>
         </ThemeProvider>
       </ErrorBoundary>

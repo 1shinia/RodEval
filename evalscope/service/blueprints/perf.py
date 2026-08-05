@@ -138,6 +138,7 @@ def launch_batch_perf():
     import csv as csv_mod
     import threading
     from datetime import datetime
+    from .auth import get_current_user_id
 
     data = request.get_json()
     if not data or not data.get('batch_id'):
@@ -171,6 +172,9 @@ def launch_batch_perf():
         'cancel_requested': False,
     }
     _batch_state[batch_id] = state
+
+    # Capture user_id for the background thread
+    current_uid = get_current_user_id()
 
     shared_config = {
         'parallel': data.get('parallel', [1]),
@@ -364,6 +368,7 @@ def launch_batch_perf():
                                 runs=runs,
                                 has_report=has_report,
                                 timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                user_id=current_uid,
                             )
                         except Exception as e:
                             logger.warning(f'Failed to write perf to SQLite (non-fatal): {e}')
@@ -474,6 +479,8 @@ def list_perf_tasks():
     # --- Try SQLite first ---
     try:
         from .. import db as _db
+        from .auth import get_current_user_id
+        current_uid = get_current_user_id()
         removed = _db.cleanup_perf_tasks(root)
         if removed:
             logger.info(f'Cleaned up {removed} stale perf task(s) from DB')
@@ -485,6 +492,7 @@ def list_perf_tasks():
             sort_order=sort_order,
             page=page,
             page_size=page_size,
+            user_id=current_uid,
         )
         return jsonify({
             'tasks': items,
@@ -678,6 +686,7 @@ def run_performance_test():
                 from datetime import datetime
 
                 from .. import db as _db
+                from .auth import get_current_user_id
                 perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
                 has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
                 runs = 0
@@ -695,6 +704,7 @@ def run_performance_test():
                     runs=runs,
                     has_report=has_report,
                     timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    user_id=get_current_user_id(),
                 )
             except Exception as e:
                 logger.warning(f'Failed to write perf to SQLite (non-fatal): {e}')
@@ -832,6 +842,7 @@ def resume_performance_test():
                 from datetime import datetime
 
                 from .. import db as _db
+                from .auth import get_current_user_id
                 perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
                 has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
                 runs = 0
@@ -849,6 +860,7 @@ def resume_performance_test():
                     runs=runs,
                     has_report=has_report,
                     timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    user_id=get_current_user_id(),
                 )
             except Exception as e:
                 logger.warning(f'Failed to write perf to SQLite (non-fatal): {e}')

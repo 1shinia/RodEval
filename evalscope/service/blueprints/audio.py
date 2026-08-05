@@ -16,14 +16,29 @@ OUTPUT_DIR = Path(os.getenv('EVALSCOPE_OUTPUT_DIR', './outputs'))
 
 @bp_audio.route('/reports', methods=['GET'])
 def list_audio_reports():
-    """List all Audio evaluation reports."""
+    """List all Audio evaluation reports (filtered by current user)."""
     reports = []
 
     if not OUTPUT_DIR.exists():
         return jsonify({'reports': reports})
 
+    # Get current user's Audio task_ids from eval_reports table
+    from .auth import get_current_user_id
+    from ..db import _get_conn
+    current_uid = get_current_user_id()
+    conn = _get_conn()
+    user_task_ids = {
+        r[0] for r in conn.execute(
+            "SELECT task_id FROM eval_reports WHERE user_id = ? AND eval_backend = 'AudioEval'",
+            (current_uid,)
+        ).fetchall()
+    }
+
+    # Scan only user's task directories
     for task_dir in OUTPUT_DIR.iterdir():
         if not task_dir.is_dir():
+            continue
+        if task_dir.name not in user_task_ids:
             continue
 
         results_file = task_dir / 'results.json'

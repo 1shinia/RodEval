@@ -311,6 +311,9 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             from datetime import datetime
 
             from .. import db as _db
+            from .auth import get_current_user_id
+
+            current_uid = get_current_user_id()
 
             if task_config.eval_backend == EvalBackend.RAG_EVAL:
                 # MTEB results are in results/ with MTEB JSON format
@@ -355,6 +358,7 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                             timestamp=datetime.now().isoformat(),
                             dataset_scores=dataset_scores,
                             eval_backend=task_config.eval_backend or '',
+                            user_id=current_uid,
                         )
                         break
                     except Exception as e:
@@ -366,7 +370,7 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                     raise last_err  # type: ignore[misc]
             elif task_config.eval_backend in (EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
                 # AIGC/Audio don't produce reports/ dir — read from results.json
-                _db.upsert_aigc_audio_report(os.path.dirname(task_config.work_dir), task_id)
+                _db.upsert_aigc_audio_report(os.path.dirname(task_config.work_dir), task_id, user_id=current_uid)
         except Exception as e:
             logger.warning(f'Failed to write eval to SQLite (non-fatal): {e}')
 
@@ -1075,6 +1079,7 @@ def launch_eval_batch():
     _eval_batch_state[batch_id] = state
 
     shared_config = {
+        'user_id': data.get('user_id', 1),
         'eval_backend': data.get('eval_backend', ''),
         'datasets': data.get('datasets', []),
         'limit': data.get('limit'),
@@ -1176,7 +1181,8 @@ def launch_eval_batch():
                     else:
                         task_config = _build_task_config_openai(eval_data)
 
-                    task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+                    user_out = os.path.join(OUTPUT_DIR, str(shared_config.get('user_id', 1)))
+                    task_config.work_dir = os.path.join(user_out, task_id)
                     os.makedirs(task_config.work_dir, exist_ok=True)
 
                     create_log_file(task_id, 'eval.log')

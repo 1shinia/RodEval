@@ -221,15 +221,29 @@ def get_aigc_benchmarks():
 
 @bp_aigc.route('/reports', methods=['GET'])
 def list_aigc_reports():
-    """List all AIGC evaluation reports."""
+    """List all AIGC evaluation reports (filtered by current user)."""
     reports = []
 
     if not OUTPUT_DIR.exists():
         return jsonify({'reports': reports})
 
-    # Scan task directories
+    # Get current user's AIGC task_ids from eval_reports table
+    from .auth import get_current_user_id
+    from ..db import _get_conn
+    current_uid = get_current_user_id()
+    conn = _get_conn()
+    user_task_ids = {
+        r[0] for r in conn.execute(
+            "SELECT task_id FROM eval_reports WHERE user_id = ? AND eval_backend = 'AIGC_EVAL'",
+            (current_uid,)
+        ).fetchall()
+    }
+
+    # Scan only user's task directories
     for task_dir in OUTPUT_DIR.iterdir():
         if not task_dir.is_dir():
+            continue
+        if task_dir.name not in user_task_ids:
             continue
 
         results_file = task_dir / 'results.json'

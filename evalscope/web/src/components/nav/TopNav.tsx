@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useLocale } from '@/contexts/LocaleContext'
+import { useAuth } from '@/contexts/AuthContext'
 import LocaleToggle from './LocaleToggle'
 import ThemeToggle from './ThemeToggle'
 import RunningTasksIndicator from './RunningTasksIndicator'
-import { LayoutDashboard, Sparkles, ClipboardCheck, GitCompareArrows, Activity, BarChart4, Medal, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Sparkles, ClipboardCheck, GitCompareArrows, Activity, BarChart4, Medal, Menu, X, User, LogOut } from 'lucide-react'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 px-3.5 py-2 rounded-lg text-base font-medium transition-all duration-200 ${
@@ -29,7 +30,10 @@ const mobileLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function TopNav() {
   const { t } = useLocale()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
 
   const navItems = [
     { to: '/dashboard', icon: <LayoutDashboard size={18} />, label: t('nav.dashboard') },
@@ -66,6 +70,25 @@ export default function TopNav() {
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <RunningTasksIndicator />
+
+          {/* User menu */}
+          <div className="relative">
+            <button onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card2)] transition-all duration-200">
+              <User size={16} />
+              <span className="hidden sm:inline max-w-[100px] truncate">{user?.username ?? ''}</span>
+            </button>
+            {userMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-36 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] shadow-lg py-1 z-50">
+                <button onClick={() => { logout(); navigate('/login'); }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--bg)] transition-colors">
+                  <LogOut size={14} />
+                  退出登录
+                </button>
+              </div>
+            )}
+          </div>
+
           <LocaleToggle />
           <ThemeToggle />
           <button onClick={() => setMobileOpen(!mobileOpen)}
