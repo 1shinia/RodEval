@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Mic, Volume2 } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
-import { getAuthHeaders } from '@/api/client'
+import { api } from '@/api/client'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 
@@ -50,11 +50,7 @@ export default function AudioReportDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/v1/audio/report/${encodeURIComponent(taskId)}`, { headers: getAuthHeaders() })
-      if (!response.ok) {
-        throw new Error(`Failed to load report: ${response.statusText}`)
-      }
-      const data = await response.json()
+      const data = await api<any>(`/api/v1/audio/report/${encodeURIComponent(taskId)}`)
       setReport(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load report')

@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAuthHeaders } from '@/api/client';
+import { api } from '@/api/client';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -31,11 +31,7 @@ export default function AIGCReportsPage() {
     const loadReports = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/v1/aigc/reports', { headers: getAuthHeaders() });
-        if (!response.ok) {
-          throw new Error(`Failed to load reports: ${response.statusText}`);
-        }
-        const data = await response.json();
+        const data = await api<any>('/api/v1/aigc/reports');
         setReports(data.reports || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load reports');

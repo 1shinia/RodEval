@@ -54,23 +54,22 @@ def verify_token(token: str) -> dict | None:
 
 
 def require_auth():
-    """Decorator factory — use as a Flask before_request hook."""
-    # Ignore OPTIONS and auth endpoints
-    if request.method == 'OPTIONS' or request.path.startswith('/api/v1/auth/'):
+    """Flask before_request hook — skip auth for public paths, require Bearer token otherwise."""
+    if request.method == 'OPTIONS':
         return None
 
-    # Public endpoints
-    if request.path in ('/health', '/api/v1/eval/benchmarks', '/api/v1/config',
-                        '/api/v1/perf/template', '/api/v1/eval/batch/template'):
-        return None
-    if request.path.startswith('/api/v1/benchmarks') or request.path.startswith('/dashboard'):
-        return None
-    # SSE / iframe / window.open endpoints can't send auth headers
-    if request.path.endswith('/log/stream') or request.path.endswith('/progress/stream'):
-        return None
-    if request.path in ('/api/v1/reports/chart', '/api/v1/eval/report',
-                        '/api/v1/perf/report', '/api/v1/reports/html'):
-        return None
+    # Public path prefixes (no auth required)
+    for prefix in ('/health', '/dashboard', '/api/v1/auth/',
+                   '/api/v1/config', '/api/v1/benchmarks',
+                   '/api/v1/eval/benchmarks', '/api/v1/perf/template',
+                   '/api/v1/eval/batch/template', '/api/v1/perf/batch/template'):
+        if request.path.startswith(prefix):
+            return None
+
+    # Endpoints that can't send auth headers (EventSource / iframe / window.open)
+    for suffix in ('/log/stream', '/progress/stream', '/report', '/chart', '/html'):
+        if request.path.endswith(suffix):
+            return None
 
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):

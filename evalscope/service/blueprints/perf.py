@@ -174,9 +174,8 @@ def launch_batch_perf():
     _batch_state[batch_id] = state
 
     # Capture user_id for the background thread
-    current_uid = get_current_user_id()
-
     shared_config = {
+        'user_id': get_current_user_id(),
         'parallel': data.get('parallel', [1]),
         'number': data.get('number', [10]),
         'rate': data.get('rate'),
@@ -368,7 +367,7 @@ def launch_batch_perf():
                                 runs=runs,
                                 has_report=has_report,
                                 timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                user_id=current_uid,
+                                user_id=shared_config['user_id'],
                             )
                         except Exception as e:
                             logger.warning(f'Failed to write perf to SQLite (non-fatal): {e}')

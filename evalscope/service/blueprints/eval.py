@@ -1191,7 +1191,7 @@ def launch_eval_batch():
                     create_log_file(task_id, 'eval.log')
 
                     with app.app_context():
-                        _execute_task(task_id, task_config, label='Batch Eval', user_id=current_uid)
+                        _execute_task(task_id, task_config, label='Batch Eval', user_id=shared_config['user_id'])
 
                     s['completed'] += 1
                     s['results'].append({
