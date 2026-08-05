@@ -2,6 +2,7 @@
 
 import datetime
 import os
+import uuid
 import sqlite3
 
 import jwt
@@ -34,6 +35,7 @@ def _user_by_username(username: str) -> dict | None:
 
 def _create_token(user: dict) -> str:
     payload = {
+        'jti': uuid.uuid4().hex,
         'sub': str(user['id']),
         'username': user['username'],
         'role': user['role'],
@@ -41,6 +43,29 @@ def _create_token(user: dict) -> str:
         'iat': datetime.datetime.utcnow(),
     }
     return jwt.encode(payload, _JWT_SECRET, algorithm='HS256')
+
+
+def _is_blacklisted(jti: str) -> bool:
+    """Return True if the token jti is in the blacklist."""
+    conn = _get_conn()
+    row = conn.execute('SELECT 1 FROM token_blacklist WHERE jti = ?', (jti,)).fetchone()
+    return row is not None
+
+
+def _blacklist_token(jti: str, exp: float) -> None:
+    """Add a token jti to the blacklist with its expiry for cleanup."""
+    conn = _get_conn()
+    exp_str = datetime.datetime.utcfromtimestamp(exp).isoformat()
+    conn.execute('INSERT OR IGNORE INTO token_blacklist (jti, expires_at) VALUES (?, ?)', (jti, exp_str))
+    conn.commit()
+
+
+def _cleanup_expired_tokens() -> None:
+    """Remove expired tokens from the blacklist."""
+    conn = _get_conn()
+    now = datetime.datetime.utcnow().isoformat()
+    conn.execute('DELETE FROM token_blacklist WHERE expires_at < ?', (now,))
+    conn.commit()
 
 
 def verify_token(token: str) -> dict | None:
@@ -79,6 +104,8 @@ def require_auth():
     user = verify_token(token)
     if user is None:
         return jsonify({'error': 'Token expired or invalid'}), 401
+    if _is_blacklisted(user.get('jti', '')):
+        return jsonify({'error': 'Token has been revoked'}), 401
 
     request.current_user = user
     return None
@@ -157,3 +184,110 @@ def login():
         'token': token,
         'user': {'id': user['id'], 'username': user['username'], 'role': user['role']},
     })
+
+
+@bp_auth.route('/logout', methods=['POST'])
+def logout():
+    """Invalidate the current token by adding its jti to the blacklist."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Missing token'}), 400
+    token = auth_header[7:]
+    payload = verify_token(token)
+    if payload is None:
+        return jsonify({'error': 'Token invalid or already expired'}), 400
+    _blacklist_token(payload['jti'], payload['exp'])
+    _cleanup_expired_tokens()  # opportunistic cleanup
+    return jsonify({'ok': True}), 200
+
+
+def _require_admin() -> dict | None:
+    """Return the admin user dict if the request has a valid admin token, else None + error response."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return None
+    payload = verify_token(auth_header[7:])
+    if payload is None or payload.get('role') != 'admin':
+        return None
+    return payload
+
+
+@bp_auth.route('/users', methods=['GET'])
+def list_users():
+    """List all users (admin only)."""
+    admin = _require_admin()
+    if admin is None:
+        return jsonify({'error': 'Admin access required'}), 403
+    conn = _get_conn()
+    rows = conn.execute('SELECT id, username, role, created_at FROM users ORDER BY id').fetchall()
+    return jsonify({'users': [dict(r) for r in rows]}), 200
+
+
+@bp_auth.route('/users', methods=['POST'])
+def create_user():
+    """Create a new user (admin only)."""
+    admin = _require_admin()
+    if admin is None:
+        return jsonify({'error': 'Admin access required'}), 403
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+    username = (data.get('username') or '').strip()
+    password = (data.get('password') or '').strip()
+    role = (data.get('role') or 'user').strip()
+    if not username or not password:
+        return jsonify({'error': 'username and password are required'}), 400
+    if len(username) < 2 or len(username) > 32:
+        return jsonify({'error': 'username must be 2-32 characters'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'password must be at least 6 characters'}), 400
+    conn = _get_conn()
+    existing = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+    if existing:
+        return jsonify({'error': '用户名已存在'}), 409
+    pw_hash = generate_password_hash(password)
+    now = datetime.datetime.utcnow().isoformat()
+    conn.execute(
+        'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
+        (username, pw_hash, role, now),
+    )
+    conn.commit()
+    new_user = _user_by_username(username)
+    return jsonify({'user': {'id': new_user['id'], 'username': new_user['username'], 'role': new_user['role']}}), 201
+
+
+@bp_auth.route('/users/<int:user_id>', methods=['DELETE'])
+def delete_user(user_id: int):
+    """Delete a user (admin only, cannot delete self)."""
+    admin = _require_admin()
+    if admin is None:
+        return jsonify({'error': 'Admin access required'}), 403
+    if int(admin['sub']) == user_id:
+        return jsonify({'error': '不能删除自己'}), 400
+    conn = _get_conn()
+    cur = conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    conn.commit()
+    if cur.rowcount == 0:
+        return jsonify({'error': '用户不存在'}), 404
+    return jsonify({'ok': True}), 200
+
+
+@bp_auth.route('/users/<int:user_id>/password', methods=['PUT'])
+def reset_password(user_id: int):
+    """Reset a user's password (admin only)."""
+    admin = _require_admin()
+    if admin is None:
+        return jsonify({'error': 'Admin access required'}), 403
+    data = request.get_json()
+    if not data or not data.get('password'):
+        return jsonify({'error': 'password is required'}), 400
+    password = data['password'].strip()
+    if len(password) < 6:
+        return jsonify({'error': 'password must be at least 6 characters'}), 400
+    conn = _get_conn()
+    pw_hash = generate_password_hash(password)
+    cur = conn.execute('UPDATE users SET password_hash = ? WHERE id = ?', (pw_hash, user_id))
+    conn.commit()
+    if cur.rowcount == 0:
+        return jsonify({'error': '用户不存在'}), 404
+    return jsonify({'ok': True}), 200

@@ -22,7 +22,7 @@ _db_path: str | None = None
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 7  # Bump when adding migrations below
+SCHEMA_VERSION = 8  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -129,6 +129,14 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         UPDATE eval_reports SET user_id = 1 WHERE user_id IS NULL;
         UPDATE perf_tasks SET user_id = 1 WHERE user_id IS NULL;
         UPDATE compare_reports SET user_id = 1 WHERE user_id IS NULL;
+    '''
+    ),
+    (
+        8, 'add token_blacklist table', '''
+        CREATE TABLE IF NOT EXISTS token_blacklist (
+            jti         TEXT PRIMARY KEY,
+            expires_at  TEXT NOT NULL
+        );
     '''
     ),
 ]

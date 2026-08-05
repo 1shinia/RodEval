@@ -72,12 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user)
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Invalidate token on server
+    try {
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch { /* ignore network errors */ }
     localStorage.removeItem(AUTH_KEY)
     localStorage.removeItem(USER_KEY)
     setToken(null)
     setUser(null)
-  }, [])
+  }, [token])
 
   const value = useMemo(() => ({
     token, user, login, register, logout, isAuthenticated,

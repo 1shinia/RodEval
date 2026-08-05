@@ -33,6 +33,7 @@ const AIGCReportDetailPage = lazy(() => import('@/pages/AIGCReportDetailPage'))
 const AudioReportDetailPage = lazy(() => import('@/pages/AudioReportDetailPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'))
+const UserManagementPage = lazy(() => import('@/pages/UserManagementPage'))
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -79,6 +80,7 @@ function AppRoutes() {
           <Route path="/viewer" element={<PageErrorBoundary pageName="viewer"><ReportViewerPage /></PageErrorBoundary>} />
           <Route path="/reports/aigc/:taskId" element={<PageErrorBoundary pageName="aigc-report"><AIGCReportDetailPage /></PageErrorBoundary>} />
           <Route path="/reports/audio/:taskId" element={<PageErrorBoundary pageName="audio-report"><AudioReportDetailPage /></PageErrorBoundary>} />
+          <Route path="/admin/users" element={<PageErrorBoundary pageName="admin-users"><UserManagementPage /></PageErrorBoundary>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
