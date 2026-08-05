@@ -125,6 +125,28 @@ export default function TopNav() {
                 </button>
               </div>
             )}
+            {/* Password change dialog — positioned below avatar */}
+            {pwDialogOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-80 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-xl p-6">
+                <h3 className="text-sm font-medium mb-4">修改密码</h3>
+                <div className="space-y-3">
+                  <input type="password" value={oldPw} onChange={e => setOldPw(e.target.value)}
+                    placeholder="当前密码" autoFocus
+                    className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm" />
+                  <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+                    placeholder="新密码（至少6位）"
+                    className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm" />
+                  {pwError && <p className="text-xs text-[var(--danger)]">{pwError}</p>}
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setPwDialogOpen(false)} className="px-3 py-1.5 text-sm rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-card2)]">取消</button>
+                    <button onClick={handleChangePassword} disabled={pwLoading}
+                      className="px-3 py-1.5 text-sm rounded-lg bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-50">
+                      {pwLoading ? '修改中...' : '确认'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <LocaleToggle />
@@ -144,31 +166,6 @@ export default function TopNav() {
           ))}
         </nav>
       </div>
-
-      {/* Password change dialog */}
-      {pwDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[25vh]" onClick={() => setPwDialogOpen(false)}>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-xl p-6 w-80" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-medium mb-4">修改密码</h3>
-            <div className="space-y-3">
-              <input type="password" value={oldPw} onChange={e => setOldPw(e.target.value)}
-                placeholder="当前密码" autoFocus
-                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm" />
-              <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
-                placeholder="新密码（至少6位）"
-                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm" />
-              {pwError && <p className="text-xs text-[var(--danger)]">{pwError}</p>}
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setPwDialogOpen(false)} className="px-3 py-1.5 text-sm rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-card2)]">取消</button>
-                <button onClick={handleChangePassword} disabled={pwLoading}
-                  className="px-3 py-1.5 text-sm rounded-lg bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-50">
-                  {pwLoading ? '修改中...' : '确认'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   )
 }
