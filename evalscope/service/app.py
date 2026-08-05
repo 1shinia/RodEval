@@ -197,6 +197,13 @@ def create_app(outputs: str = None):
             'server_address': server_address,
         })
 
+    @app.route('/api/v1/tasks/slots', methods=['GET'])
+    def get_slots():
+        """Return per-user concurrency slot usage."""
+        from .blueprints.auth import get_current_user_id
+        from .utils.process import get_user_slots
+        return jsonify(get_user_slots(get_current_user_id())), 200
+
     @app.route('/api/v1/tasks/running', methods=['GET'])
     def get_running_tasks():
         """Return a list of currently running tasks with metadata.

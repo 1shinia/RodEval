@@ -30,6 +30,7 @@ class TaskInfo:
     task_id: str
     task_type: str  # 'eval' or 'perf'
     model: str = ''
+    user_id: int = 0
     start_time: float = field(default_factory=time.time)
     process: multiprocessing.Process | None = None
 
@@ -90,30 +91,52 @@ def count_running_tasks(task_type: str | None = None) -> int:
         return sum(1 for info in _active_processes.values() if task_type is None or info.task_type == task_type)
 
 
-def try_reserve_slot(task_id: str, task_type: str, model: str = '') -> bool:
-    """Atomically check the concurrency limit and reserve a slot.
-
-    Returns ``True`` if the slot was reserved (count < max), ``False`` if
-    the limit has been reached.  When ``True`` a placeholder *TaskInfo* is
-    inserted into the registry so that subsequent calls see the increased
-    count immediately — closing the race window between checking and
-    registering.
-
-    The caller MUST call :func:`finalize_slot` (or :func:`unregister_process`)
-    to either attach the real process or clean up the placeholder.
-    """
-    max_key = f'MAX_CONCURRENT_{task_type.upper()}'
-    max_slots = int(os.environ.get(max_key, '2' if task_type == 'eval' else '1'))
+def get_user_slots(user_id: int) -> dict:
+    """Return per-user slot usage for eval and perf tasks."""
+    max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
+    max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
     with _active_lock:
-        running = sum(1 for info in _active_processes.values() if info.task_type == task_type)
-        if running >= max_slots:
+        eval_used = sum(1 for i in _active_processes.values() if i.task_type == 'eval' and i.user_id == user_id)
+        perf_used = sum(1 for i in _active_processes.values() if i.task_type == 'perf' and i.user_id == user_id)
+    return {
+        'eval': {'used': eval_used, 'max': max_eval},
+        'perf': {'used': perf_used, 'max': max_perf},
+    }
+
+
+def try_reserve_slot(task_id: str, task_type: str, model: str = '', user_id: int = 0) -> bool:
+    """Atomically check the per-user concurrency limit and reserve a slot.
+
+    Returns ``True`` if the slot was reserved, ``False`` otherwise.
+    Limits are per-user, configured via env vars:
+      MAX_EVAL_PER_USER (default 2), MAX_PERF_PER_USER (default 2).
+    A hard global cap is also checked:
+      MAX_EVAL_GLOBAL (default 0 = unlimited), MAX_PERF_GLOBAL (default 0 = unlimited).
+    """
+    max_user_key = f'MAX_{task_type.upper()}_PER_USER'
+    max_user = int(os.environ.get(max_user_key, '2'))
+    max_global_key = f'MAX_{task_type.upper()}_GLOBAL'
+    max_global = int(os.environ.get(max_global_key, '0'))
+
+    with _active_lock:
+        running_user = sum(
+            1 for info in _active_processes.values()
+            if info.task_type == task_type and info.user_id == user_id
+        )
+        if running_user >= max_user:
             return False
-        # Insert a placeholder so other threads see the slot as taken
+
+        if max_global > 0:
+            running_global = sum(1 for info in _active_processes.values() if info.task_type == task_type)
+            if running_global >= max_global:
+                return False
+
         _active_processes[task_id] = TaskInfo(
             task_id=task_id,
             task_type=task_type,
             model=model,
-            process=None,  # will be filled in by finalize_slot()
+            user_id=user_id,
+            process=None,
         )
         return True
 

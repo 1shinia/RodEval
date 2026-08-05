@@ -273,7 +273,7 @@ def launch_batch_perf():
                 if shared_config.get('read_timeout'):
                     perf_data['read_timeout'] = shared_config['read_timeout']
 
-                if not try_reserve_slot(task_id, 'perf', model=model_name):
+                if not try_reserve_slot(task_id, 'perf', model=model_name, user_id=shared_config['user_id']):
                     state['errors'] += 1
                     state['error_details'].append({'name': model_name, 'model': model_name, 'error': '并发已满'})
                     continue

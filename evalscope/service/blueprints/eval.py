@@ -1129,7 +1129,7 @@ def launch_eval_batch():
                 s['current_task_id'] = task_id
                 eval_backend = shared_config.get('eval_backend', '')
 
-                if not try_reserve_slot(task_id, 'eval', model=model_name):
+                if not try_reserve_slot(task_id, 'eval', model=model_name, user_id=current_uid):
                     s['errors'] += 1
                     s['error_details'].append({'name': model_name, 'model': model_name, 'error': '并发已满'})
                     continue
