@@ -476,12 +476,20 @@ def delete_aigc_report(task_id: str):
         return jsonify({'error': 'Access denied'}), 403
     if not task_dir.is_dir():
         return jsonify({'error': 'Report not found'}), 404
+
+    # Verify ownership before deletion
+    from .auth import get_current_user_id
+    from .. import db as _db
+    owner = _db._get_conn().execute(
+        'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
+    ).fetchone()
+    if owner and owner[0] != get_current_user_id():
+        return jsonify({'error': 'Report not found'}), 404
+
     shutil.rmtree(str(task_dir))
     logger.info(f'Deleted AIGC report: {task_dir}')
     # Sync SQLite
     try:
-        from .. import db as _db
-        from .auth import get_current_user_id
         _db.delete_eval_report(task_id, user_id=get_current_user_id())
     except Exception as e:
         logger.warning(f'Failed to delete AIGC task {task_id} from SQLite: {e}')

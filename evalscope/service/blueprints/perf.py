@@ -900,14 +900,22 @@ def delete_performance_test():
     if not os.path.isdir(task_dir):
         return jsonify({'error': f'Task not found: {task_id}'}), 404
 
+    # Verify ownership
+    from .auth import get_current_user_id
+    from .. import db as _db
+    owner = _db._get_conn().execute(
+        'SELECT user_id FROM perf_tasks WHERE task_id = ?', (task_id,)
+    ).fetchone()
+    if owner and owner[0] != get_current_user_id():
+        return jsonify({'error': 'Task not found'}), 404
+
     try:
         shutil.rmtree(task_dir)
         logger.info(f'Deleted perf task: {task_id}')
 
         # Sync SQLite
         try:
-            from .. import db as _db
-            _db.delete_perf_task(task_id)
+            _db.delete_perf_task(task_id, user_id=get_current_user_id())
         except Exception as e:
             logger.debug(f'Failed to delete from SQLite (non-fatal): {e}')
 

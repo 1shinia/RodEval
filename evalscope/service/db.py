@@ -615,9 +615,12 @@ def query_perf_tasks(
     return items, total, avail_models, avail_datasets
 
 
-def delete_perf_task(task_id: str) -> None:
+def delete_perf_task(task_id: str, user_id: int | None = None) -> None:
     conn = _get_conn()
-    conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id, ))
+    if user_id is not None:
+        conn.execute('DELETE FROM perf_tasks WHERE task_id = ? AND user_id = ?', (task_id, user_id))
+    else:
+        conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id,))
     conn.commit()
 
 

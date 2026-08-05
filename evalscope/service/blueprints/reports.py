@@ -651,17 +651,23 @@ def delete_report():
             return jsonify({'error': 'Access denied: invalid report path'}), 403
         if not os.path.isdir(report_dir):
             return jsonify({'error': 'Report folder not found'}), 404
+
+        # Verify ownership before deletion
+        from .auth import get_current_user_id
+        from .. import db as _db
+        task_id, _, _ = process_report_name(report_name)
+        owner = _db._get_conn().execute(
+            'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
+        ).fetchone()
+        if owner and owner[0] != get_current_user_id():
+            return jsonify({'error': 'Report not found'}), 404
+
         import shutil
         shutil.rmtree(report_dir)
         logger.info(f'Deleted report: {report_dir}')
 
         # Sync SQLite
-        task_id, _, _ = process_report_name(report_name)
         try:
-            from .. import db as _db
-            from .auth import get_current_user_id
-
-            # Extract task_id (prefix) from composite report_name
             _db.delete_eval_report(task_id, user_id=get_current_user_id())
             logger.info(f'Deleted from SQLite: {task_id}')
         except Exception as e:
