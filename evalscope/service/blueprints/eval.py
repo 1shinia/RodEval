@@ -280,7 +280,7 @@ def _all_results_empty(result) -> bool:
     return False
 
 
-def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', use_direct: bool = False):
+def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', use_direct: bool = False, user_id: int | None = None):
     """Run the evaluation and return a Flask response."""
     create_log_file(task_id, os.path.join('logs', 'eval_log.log'))
     try:
@@ -313,7 +313,7 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             from .. import db as _db
             from .auth import get_current_user_id
 
-            current_uid = get_current_user_id()
+            current_uid = user_id if user_id is not None else get_current_user_id()
 
             if task_config.eval_backend == EvalBackend.RAG_EVAL:
                 # MTEB results are in results/ with MTEB JSON format
@@ -1078,8 +1078,12 @@ def launch_eval_batch():
     }
     _eval_batch_state[batch_id] = state
 
+    # Capture user_id from request (not from client data) for background thread
+    from .auth import get_current_user_id
+    current_uid = get_current_user_id()
+
     shared_config = {
-        'user_id': data.get('user_id', 1),
+        'user_id': current_uid,
         'eval_backend': data.get('eval_backend', ''),
         'datasets': data.get('datasets', []),
         'limit': data.get('limit'),
@@ -1181,14 +1185,13 @@ def launch_eval_batch():
                     else:
                         task_config = _build_task_config_openai(eval_data)
 
-                    user_out = os.path.join(OUTPUT_DIR, str(shared_config.get('user_id', 1)))
-                    task_config.work_dir = os.path.join(user_out, task_id)
+                    task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
                     os.makedirs(task_config.work_dir, exist_ok=True)
 
                     create_log_file(task_id, 'eval.log')
 
                     with app.app_context():
-                        _execute_task(task_id, task_config, label='Batch Eval')
+                        _execute_task(task_id, task_config, label='Batch Eval', user_id=current_uid)
 
                     s['completed'] += 1
                     s['results'].append({
