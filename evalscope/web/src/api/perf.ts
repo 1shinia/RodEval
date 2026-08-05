@@ -1,4 +1,4 @@
-import { api, apiPost, apiDelete } from './client'
+import { api, apiPost, apiDelete, getAuthHeaders } from './client'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
 
 export interface PerfTaskMeta {
@@ -153,7 +153,7 @@ export interface BatchUploadResponse {
 export async function uploadBatchCsv(file: File): Promise<BatchUploadResponse> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch('/api/v1/perf/batch/upload', { method: 'POST', body: form })
+  const res = await fetch('/api/v1/perf/batch/upload', { method: 'POST', body: form, headers: getAuthHeaders() })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(body.error || `HTTP ${res.status}`)

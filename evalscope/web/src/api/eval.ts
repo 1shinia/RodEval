@@ -1,4 +1,4 @@
-import { apiPost, api } from './client'
+import { apiPost, api, getAuthHeaders } from './client'
 import type { BenchmarksResponse, EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
 
 export async function submitEvalTask(
@@ -76,7 +76,7 @@ export function getEvalTemplateDownloadUrl(): string {
 export async function uploadEvalBatchCsv(file: File): Promise<EvalBatchUploadResponse> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch('/api/v1/eval/batch/upload', { method: 'POST', body: form })
+  const res = await fetch('/api/v1/eval/batch/upload', { method: 'POST', body: form, headers: getAuthHeaders() })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(body.error || res.statusText)
