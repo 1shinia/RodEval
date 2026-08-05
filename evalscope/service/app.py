@@ -206,13 +206,16 @@ def create_app(outputs: str = None):
 
     @app.route('/api/v1/tasks/running', methods=['GET'])
     def get_running_tasks():
-        """Return a list of currently running tasks with metadata.
+        """Return a list of currently running tasks for the current user.
 
         Merges in-memory registry with SQLite-persisted state so that
         tasks surviving a server restart are still visible.
         """
+        from .blueprints.auth import get_current_user_id
         from .utils import get_running_tasks as _get_running_tasks
-        tasks = _get_running_tasks()
+
+        uid = get_current_user_id()
+        tasks = [t for t in _get_running_tasks() if t.get('user_id', 0) == uid]
         seen_ids = {t['task_id'] for t in tasks}
 
         # Add SQLite-persisted tasks that are still marked 'running'

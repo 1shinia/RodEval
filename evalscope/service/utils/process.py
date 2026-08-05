@@ -71,6 +71,7 @@ def get_running_tasks() -> list[dict]:
                 'task_id': info.task_id,
                 'task_type': info.task_type,
                 'model': info.model,
+                'user_id': info.user_id,
                 'start_time': info.start_time,
                 'elapsed_seconds': round(time.time() - info.start_time, 1),
             })
