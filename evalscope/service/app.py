@@ -222,14 +222,14 @@ def create_app(outputs: str = None):
         try:
             db_tasks = _db.list_running_tasks()
             for dt in db_tasks:
-                if dt['task_id'] not in seen_ids:
+                if dt['task_id'] not in seen_ids and dt.get('user_id', 0) == uid:
                     tasks.append({
                         'task_id': dt['task_id'],
                         'task_type': dt['task_type'],
-                        'model': dt['model'],
+                        'model': dt.get('model', ''),
                         'start_time': dt['started_at'],
                         'elapsed_seconds': None,
-                        'source': 'sqlite',  # indicate this was recovered from DB
+                        'source': 'sqlite',
                     })
         except Exception as e:
             logger.debug(f'Failed to load SQLite running tasks: {e}')
