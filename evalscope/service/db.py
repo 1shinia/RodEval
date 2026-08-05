@@ -972,25 +972,26 @@ def backfill(output_dir: str) -> None:
 # Compare reports CRUD                                                        #
 # --------------------------------------------------------------------------- #
 
-def save_compare_report(name: str, task_ids_json: str, task_count: int, backend: str = 'Perf', root_path: str = '') -> int:
+def save_compare_report(name: str, task_ids_json: str, task_count: int, backend: str = 'Perf', root_path: str = '', user_id: int = 1) -> int:
     """Save a compare report and return its ID."""
     from datetime import datetime
 
     conn = _get_conn()
     created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn.execute(
-        'INSERT INTO compare_reports (name, task_ids, created_at, task_count, backend, root_path) VALUES (?, ?, ?, ?, ?, ?)',
-        (name, task_ids_json, created_at, task_count, backend, root_path),
+        'INSERT INTO compare_reports (name, task_ids, created_at, task_count, backend, root_path, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        (name, task_ids_json, created_at, task_count, backend, root_path, user_id),
     )
     conn.commit()
     return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
 
 
-def list_compare_reports() -> list[dict]:
-    """Return all saved compare reports, newest first."""
+def list_compare_reports(user_id: int = 1) -> list[dict]:
+    """Return all saved compare reports for the given user, newest first."""
     conn = _get_conn()
     rows = conn.execute(
-        'SELECT id, name, task_ids, created_at, task_count, backend, root_path FROM compare_reports ORDER BY created_at DESC'
+        'SELECT id, name, task_ids, created_at, task_count, backend, root_path FROM compare_reports WHERE user_id = ? ORDER BY created_at DESC',
+        (user_id,)
     ).fetchall()
     return [
         {

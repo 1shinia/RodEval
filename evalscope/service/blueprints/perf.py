@@ -1292,7 +1292,8 @@ def save_compare_report():
 
     try:
         from .. import db as _db
-        report_id = _db.save_compare_report(name, json.dumps(task_ids), len(task_ids), backend_type, root_path)
+        from .auth import get_current_user_id
+        report_id = _db.save_compare_report(name, json.dumps(task_ids), len(task_ids), backend_type, root_path, user_id=get_current_user_id())
         return jsonify({'id': report_id, 'name': name, 'task_count': len(task_ids)}), 201
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
@@ -1305,7 +1306,8 @@ def list_compare_reports():
     """List all saved compare reports."""
     try:
         from .. import db as _db
-        reports = _db.list_compare_reports()
+        from .auth import get_current_user_id
+        reports = _db.list_compare_reports(user_id=get_current_user_id())
         return jsonify({'reports': reports}), 200
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
@@ -1417,7 +1419,8 @@ def download_compare_report(report_id: int):
     """Download a saved compare report as a self-contained HTML file."""
     try:
         from .. import db as _db
-        reports = _db.list_compare_reports()
+        from .auth import get_current_user_id
+        reports = _db.list_compare_reports(user_id=get_current_user_id())
         report = next((r for r in reports if r['id'] == report_id), None)
         if not report:
             return jsonify({'error': 'Report not found'}), 404
