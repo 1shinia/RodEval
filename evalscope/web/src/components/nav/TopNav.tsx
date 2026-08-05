@@ -147,7 +147,7 @@ export default function TopNav() {
 
       {/* Password change dialog */}
       {pwDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setPwDialogOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[25vh] bg-black/40" onClick={() => setPwDialogOpen(false)}>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-xl p-6 w-80" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-medium mb-4">修改密码</h3>
             <div className="space-y-3">
