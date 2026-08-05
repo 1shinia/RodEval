@@ -3,7 +3,6 @@
 import datetime
 import os
 import uuid
-import sqlite3
 
 import jwt
 from flask import Blueprint, current_app, jsonify, request
@@ -118,7 +117,7 @@ def get_current_user_id() -> int:
 
 
 def get_user_output_dir(user_id: int = None) -> str:
-    """Return user-specific output directory."""
+    """Return user-specific output directory. (P3: deferred — not yet active)"""
     from ..utils import OUTPUT_DIR
     uid = user_id if user_id is not None else get_current_user_id()
     return os.path.join(OUTPUT_DIR, str(uid))
