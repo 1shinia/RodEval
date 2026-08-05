@@ -383,20 +383,17 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
 
 
 def _ensure_default_admin() -> None:
-    """Ensure the default admin user exists with the correct password."""
+    """Ensure the default admin user exists (does not overwrite existing password)."""
     from werkzeug.security import generate_password_hash
 
     conn = _db._get_conn()
     existing = conn.execute("SELECT password_hash FROM users WHERE username = 'admin'").fetchone()
-    default_hash = generate_password_hash('admin123')
     if not existing:
         conn.execute(
             "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
-            ('admin', default_hash, 'admin', datetime.now().isoformat()),
+            ('admin', generate_password_hash('admin123'), 'admin', datetime.now().isoformat()),
         )
-    else:
-        conn.execute("UPDATE users SET password_hash = ? WHERE username = 'admin'", (default_hash,))
-    conn.commit()
+        conn.commit()
 
 
 if __name__ == '__main__':
