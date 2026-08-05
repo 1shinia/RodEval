@@ -127,7 +127,7 @@ export default function TopNav() {
             )}
             {/* Password change dialog — positioned below avatar */}
             {pwDialogOpen && (
-              <div className="fixed right-4 top-16 z-50 w-80 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-xl p-6" onClick={e => e.stopPropagation()}>
+              <div className="absolute right-0 top-full mt-1 z-50 w-80 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-xl p-6" onClick={e => e.stopPropagation()}>
                 <h3 className="text-sm font-medium mb-4">修改密码</h3>
                 <div className="space-y-3">
                   <input type="password" value={oldPw} onChange={e => setOldPw(e.target.value)}
