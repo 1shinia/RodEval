@@ -65,8 +65,10 @@ def require_auth():
         return None
     if request.path.startswith('/api/v1/benchmarks') or request.path.startswith('/dashboard'):
         return None
-    # SSE endpoints can't send auth headers (EventSource API limitation)
+    # SSE / iframe endpoints can't send auth headers
     if request.path.endswith('/log/stream') or request.path.endswith('/progress/stream'):
+        return None
+    if request.path == '/api/v1/reports/chart':
         return None
 
     auth_header = request.headers.get('Authorization', '')

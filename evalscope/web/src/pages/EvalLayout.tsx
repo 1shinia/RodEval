@@ -112,8 +112,15 @@ export default function EvalLayout() {
     } catch { setSelectedTaskLog('') }
   }, [])
 
-  const copyBatchLog = useCallback(async () => {
-    const text = batchRunning ? batchLogText : selectedTaskLog
+  const getDisplayLog = useCallback(() => {
+    if (running) return logText
+    if (batchRunning) return batchLogText
+    return logText || selectedTaskLog
+  }, [running, logText, batchRunning, batchLogText, selectedTaskLog])
+
+  const copyCurrentLog = useCallback(async () => {
+    const text = getDisplayLog()
+    if (!text) return
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text)
@@ -124,7 +131,7 @@ export default function EvalLayout() {
       }
       toast.success('日志已复制')
     } catch { toast.error('复制失败') }
-  }, [batchLogText, selectedTaskLog, batchRunning])
+  }, [getDisplayLog])
 
   const handleBatchUpload = useCallback(async (file: File) => {
     batchFileRef.current = file
@@ -230,10 +237,10 @@ export default function EvalLayout() {
       running={running || batchRunning}
       progress={running ? progress : 0}
       result={result}
-      logText={running ? logText : (batchRunning ? batchLogText : selectedTaskLog)}
+      logText={running ? logText : (batchRunning ? batchLogText : (logText || selectedTaskLog))}
       reportUrl={reportUrl}
       copied={copied}
-      onCopy={running ? copyLog : copyBatchLog}
+      onCopy={copyCurrentLog}
       onStop={running ? handleStop : onBatchStop}
       onResume={handleResume}
       taskId={taskId}
