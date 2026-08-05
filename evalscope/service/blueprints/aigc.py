@@ -38,7 +38,8 @@ def run_aigc_evaluation():
         model = data.get('model', {}).get('model_name_or_path', 'unknown')
 
         # Reserve slot for concurrent control
-        if not try_reserve_slot(task_id, 'aigc', model):
+        from .auth import get_current_user_id
+        if not try_reserve_slot(task_id, 'aigc', model, user_id=get_current_user_id()):
             return jsonify({'error': f'Max concurrent AIGC tasks reached ({MAX_CONCURRENT_AIGC})'}), 429
 
         try:

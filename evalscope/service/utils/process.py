@@ -420,6 +420,11 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
             return
         first = report_list[0]
         task_id = os.path.basename(task_config.work_dir.rstrip('/'))
+        # Read existing user_id from DB (set by parent process) instead of defaulting
+        existing_uid = _db._get_conn().execute(
+            'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
+        ).fetchone()
+        user_id = existing_uid[0] if existing_uid else 1
         total_num = sum(r.num or 0 for r in report_list)
         dataset_names = [r.dataset_name for r in report_list]
         score_sum = sum(r.score for r in report_list if r.score is not None)
@@ -442,6 +447,7 @@ def _persist_eval_report(task_config: TaskConfig) -> None:
                     timestamp=datetime.now().isoformat(),
                     dataset_scores=dataset_scores,
                     eval_backend=getattr(task_config, 'eval_backend', ''),
+                    user_id=user_id,
                 )
                 return
             except Exception as e:
