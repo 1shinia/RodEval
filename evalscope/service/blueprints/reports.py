@@ -648,7 +648,7 @@ def delete_report():
         task_id, _, _ = process_report_name(report_name)
         try:
             from .. import db as _db
-        from .auth import get_current_user_id
+            from .auth import get_current_user_id
 
             # Extract task_id (prefix) from composite report_name
             _db.delete_eval_report(task_id, user_id=get_current_user_id())
