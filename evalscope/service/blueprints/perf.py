@@ -625,8 +625,9 @@ def run_performance_test():
 
     # --- Concurrency guard (atomic check + reserve) ---
     model = data.get('model', '')
-    if not try_reserve_slot(task_id, 'perf', model=model):
-        max_perf = int(os.environ.get('MAX_CONCURRENT_PERF', '1'))
+    from .auth import get_current_user_id
+    if not try_reserve_slot(task_id, 'perf', model=model, user_id=get_current_user_id()):
+        max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
         running = count_running_tasks('perf')
         return jsonify({
             'error': f'你的压测任务已达上限（{running}/{max_perf}），请等待完成后再试',
@@ -775,8 +776,9 @@ def resume_performance_test():
 
     # Concurrency guard
     model = data.get('model', '')
-    if not try_reserve_slot(task_id, 'perf', model=model):
-        max_perf = int(os.environ.get('MAX_CONCURRENT_PERF', '1'))
+    from .auth import get_current_user_id
+    if not try_reserve_slot(task_id, 'perf', model=model, user_id=get_current_user_id()):
+        max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
         running = count_running_tasks('perf')
         return jsonify({
             'error': f'你的压测任务已达上限（{running}/{max_perf}），请等待完成后再试',

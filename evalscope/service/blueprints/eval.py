@@ -407,8 +407,9 @@ def run_evaluation():
     # --- Concurrency guard (atomic check + reserve) ---
     data, task_id = _parse_request()
     model = data.get('model', '')
-    if not try_reserve_slot(task_id, 'eval', model=model):
-        max_eval = int(os.environ.get('MAX_CONCURRENT_EVAL', '2'))
+    from .auth import get_current_user_id
+    if not try_reserve_slot(task_id, 'eval', model=model, user_id=get_current_user_id()):
+        max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
         running = count_running_tasks('eval')
         return jsonify({
             'error': f'你的评估任务已达上限（{running}/{max_eval}），请等待完成后再试',
@@ -627,9 +628,10 @@ def resume_evaluation():
             logger.warning(f'Failed to read progress for {task_id}: {e}')
 
     # Concurrency guard
+    from .auth import get_current_user_id
     model = ''  # We'll extract this from the config after loading
-    if not try_reserve_slot(task_id, 'eval', model=model):
-        max_eval = int(os.environ.get('MAX_CONCURRENT_EVAL', '2'))
+    if not try_reserve_slot(task_id, 'eval', model=model, user_id=get_current_user_id()):
+        max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
         running = count_running_tasks('eval')
         return jsonify({
             'error': f'你的评估任务已达上限（{running}/{max_eval}），请等待完成后再试',
