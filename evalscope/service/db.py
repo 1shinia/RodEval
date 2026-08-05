@@ -849,6 +849,7 @@ def backfill(output_dir: str) -> None:
                     timestamp=timestamp,
                     dataset_scores=dataset_scores,
                     eval_backend=eval_backend,
+                    user_id=1,  # backfill: all existing data → admin
                 )
                 eval_count += 1
             except Exception as e:
@@ -949,6 +950,7 @@ def backfill(output_dir: str) -> None:
                 runs=runs,
                 has_report=has_report,
                 timestamp=timestamp,
+                user_id=1,  # backfill: all existing data → admin
             )
             perf_count += 1
         if perf_count:
