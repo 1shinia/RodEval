@@ -65,10 +65,11 @@ def require_auth():
         return None
     if request.path.startswith('/api/v1/benchmarks') or request.path.startswith('/dashboard'):
         return None
-    # SSE / iframe endpoints can't send auth headers
+    # SSE / iframe / window.open endpoints can't send auth headers
     if request.path.endswith('/log/stream') or request.path.endswith('/progress/stream'):
         return None
-    if request.path == '/api/v1/reports/chart':
+    if request.path in ('/api/v1/reports/chart', '/api/v1/eval/report',
+                        '/api/v1/perf/report', '/api/v1/reports/html'):
         return None
 
     auth_header = request.headers.get('Authorization', '')
