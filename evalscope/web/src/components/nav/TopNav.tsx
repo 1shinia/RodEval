@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { toast } from '@/components/common/Toast'
 import LocaleToggle from './LocaleToggle'
 import ThemeToggle from './ThemeToggle'
 import RunningTasksIndicator from './RunningTasksIndicator'
-import { LayoutDashboard, Sparkles, ClipboardCheck, GitCompareArrows, Activity, BarChart4, Medal, Menu, X, User, Users, LogOut } from 'lucide-react'
+import { LayoutDashboard, Sparkles, ClipboardCheck, GitCompareArrows, Activity, BarChart4, Medal, Menu, X, User, Users, LogOut, KeyRound } from 'lucide-react'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 px-3.5 py-2 rounded-lg text-base font-medium transition-all duration-200 ${
@@ -30,10 +31,35 @@ const mobileLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function TopNav() {
   const { t } = useLocale()
-  const { user, logout } = useAuth()
+  const { user, token, logout } = useAuth()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [pwDialogOpen, setPwDialogOpen] = useState(false)
+  const [oldPw, setOldPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [pwError, setPwError] = useState('')
+  const [pwLoading, setPwLoading] = useState(false)
+
+  const handleChangePassword = async () => {
+    if (!oldPw.trim() || !newPw.trim()) return
+    if (newPw.length < 6) { setPwError('新密码至少6个字符'); return }
+    setPwLoading(true); setPwError('')
+    try {
+      const res = await fetch('/api/v1/auth/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ old_password: oldPw, new_password: newPw }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('密码已修改'); setPwDialogOpen(false); setOldPw(''); setNewPw('')
+      } else {
+        setPwError(data.error || '修改失败')
+      }
+    } catch { setPwError('网络错误') }
+    finally { setPwLoading(false) }
+  }
 
   const navItems = [
     { to: '/dashboard', icon: <LayoutDashboard size={18} />, label: t('nav.dashboard') },
@@ -87,6 +113,11 @@ export default function TopNav() {
                     用户管理
                   </button>
                 )}
+                <button onClick={() => { setPwDialogOpen(true); setUserMenuOpen(false) }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg)] transition-colors">
+                  <KeyRound size={14} />
+                  修改密码
+                </button>
                 <button onClick={() => { logout(); navigate('/login'); }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--bg)] transition-colors">
                   <LogOut size={14} />
@@ -113,6 +144,31 @@ export default function TopNav() {
           ))}
         </nav>
       </div>
+
+      {/* Password change dialog */}
+      {pwDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setPwDialogOpen(false)}>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-xl p-6 w-80" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-medium mb-4">修改密码</h3>
+            <div className="space-y-3">
+              <input type="password" value={oldPw} onChange={e => setOldPw(e.target.value)}
+                placeholder="当前密码" autoFocus
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm" />
+              <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+                placeholder="新密码（至少6位）"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm" />
+              {pwError && <p className="text-xs text-[var(--danger)]">{pwError}</p>}
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setPwDialogOpen(false)} className="px-3 py-1.5 text-sm rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-card2)]">取消</button>
+                <button onClick={handleChangePassword} disabled={pwLoading}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-50">
+                  {pwLoading ? '修改中...' : '确认'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

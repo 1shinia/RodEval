@@ -201,6 +201,34 @@ def logout():
     return jsonify({'ok': True}), 200
 
 
+@bp_auth.route('/password', methods=['PUT'])
+def change_password():
+    """Change current user's password."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Missing token'}), 400
+    payload = verify_token(auth_header[7:])
+    if payload is None:
+        return jsonify({'error': 'Token invalid or expired'}), 401
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+    old_password = (data.get('old_password') or '').strip()
+    new_password = (data.get('new_password') or '').strip()
+    if not old_password or not new_password:
+        return jsonify({'error': 'old_password and new_password are required'}), 400
+    if len(new_password) < 6:
+        return jsonify({'error': '新密码至少6个字符'}), 400
+    user = _user_by_username(payload['username'])
+    if not user or not check_password_hash(user['password_hash'], old_password):
+        return jsonify({'error': '当前密码错误'}), 401
+    conn = _get_conn()
+    conn.execute('UPDATE users SET password_hash = ? WHERE id = ?',
+                 (generate_password_hash(new_password), user['id']))
+    conn.commit()
+    return jsonify({'ok': True}), 200
+
+
 def _require_admin() -> dict | None:
     """Return the admin user dict if the request has a valid admin token, else None + error response."""
     auth_header = request.headers.get('Authorization', '')
