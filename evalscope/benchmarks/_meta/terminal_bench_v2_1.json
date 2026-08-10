@@ -63,7 +63,13 @@
         "value": {}
       }
     },
-    "sandbox_config": {},
+    "sandbox_config": {
+      "image": "python:3.11-slim",
+      "tools_config": {
+        "shell_executor": {},
+        "python_executor": {}
+      }
+    },
     "category": "agent"
   },
   "statistics": {

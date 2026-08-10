@@ -165,6 +165,7 @@ export default function LLMEvalForm({ context }: Props) {
   const [timeout, setTimeout_] = useState('300')
   const [stream, setStream] = useState(false)
   const [useSandbox, setUseSandbox] = useState(false)
+  const [sandboxDatasets, setSandboxDatasets] = useState<Set<string>>(new Set())
   const [temperature, setTemperature] = useState('')
   const [topP, setTopP] = useState('')
   const [maxTokens, setMaxTokens] = useState('')
@@ -199,12 +200,16 @@ export default function LLMEvalForm({ context }: Props) {
       .then((res) => {
         const all = [...(res.text ?? []), ...(res.multimodal ?? [])]
         const names: string[] = []
+        const needsSandbox = new Set<string>()
         for (const b of all) {
           if (!b.tags?.includes('Custom') && b.name !== 'data_collection') {
             names.push(b.name)
+            const sc = b.meta?.sandbox_config
+            if (sc && Object.keys(sc).length > 0) needsSandbox.add(b.name)
           }
         }
         setBenchmarkNames(names)
+        setSandboxDatasets(needsSandbox)
       })
       .catch((e) => { toast.error(e instanceof Error ? e.message : 'Failed to load benchmarks') })
   }, [])
@@ -234,6 +239,17 @@ export default function LLMEvalForm({ context }: Props) {
     if (errors.datasets) setErrors((prev) => ({ ...prev, datasets: '' }))
   }
 
+  // Auto-toggle sandbox when datasets change (covers both typing and suggestion clicks)
+  useEffect(() => {
+    const selected = datasets.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+    const needsSandbox = selected.some(ds => sandboxDatasets.has(ds))
+    if (needsSandbox && !useSandbox) {
+      setUseSandbox(true)
+    } else if (!needsSandbox && useSandbox) {
+      setUseSandbox(false)
+    }
+  }, [datasets, sandboxDatasets])
+
   const selectSuggestion = (name: string) => {
     if (ALL_LOCAL_TYPES.includes(name)) {
       setDatasetHub('local')
@@ -255,6 +271,13 @@ export default function LLMEvalForm({ context }: Props) {
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
+
+    // Warn if sandbox-required dataset selected without sandbox
+    const selected = datasets.split(',').map(s => s.trim()).filter(Boolean)
+    const needsSandbox = selected.some(ds => sandboxDatasets.has(ds))
+    if (needsSandbox && !useSandbox) {
+      toast.warning('所选数据集需要 Docker 沙箱环境，测试结果可能不准确')
+    }
 
     // Batch mode: delegate to onBatchSubmit
     if (isBatch) {
