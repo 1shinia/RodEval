@@ -1,6 +1,19 @@
 import { apiPost, api, getAuthHeaders } from './client'
 import type { BenchmarksResponse, EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
 
+export interface RunningTask {
+  task_id: string
+  task_type: string
+  model: string
+  user_id: number
+  start_time: number
+  elapsed_seconds: number
+}
+
+export async function listRunningTasks(): Promise<{ tasks: RunningTask[] }> {
+  return api<{ tasks: RunningTask[] }>('/api/v1/tasks/running')
+}
+
 export async function submitEvalTask(
   payload: Record<string, unknown>,
   taskId: string,

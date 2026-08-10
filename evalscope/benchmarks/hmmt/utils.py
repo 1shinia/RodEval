@@ -19,7 +19,7 @@ def extract_hmmt_answer(prediction: str) -> str:
 
     # 1) Prefer EvalScope's built-in math extraction logic
     try:
-        from evalscope.metrics.math.parser import extract_answer as _extract_answer
+        from evalscope.metrics.math_parser import extract_answer as _extract_answer
 
         ans = _extract_answer(pred)
         if isinstance(ans, str) and ans.strip():

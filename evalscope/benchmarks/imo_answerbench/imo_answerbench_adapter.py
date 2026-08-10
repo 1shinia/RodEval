@@ -94,6 +94,6 @@ class IMOAnswerBenchAdapter(DefaultDataAdapter):
 
     def extract_answer(self, prediction: str, task_state: TaskState) -> str:
         """Extract final answer using math parser with fallback to boxed extraction."""
-        from evalscope.metrics.math.parser import extract_answer
+        from evalscope.metrics.math_parser import extract_answer
 
         return extract_answer(prediction or '')

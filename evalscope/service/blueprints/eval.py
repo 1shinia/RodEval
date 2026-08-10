@@ -1069,14 +1069,14 @@ def list_benchmarks():
             all_entries = [build_benchmark_entry(name) for name in all_names]
 
             if filter_type == 'text':
-                result = {'text': [e for e in all_entries if e.get('category') == 'llm']}
+                result = {'text': [e for e in all_entries if e.get('category') in ('llm', 'agent')]}
             elif filter_type == 'multimodal':
                 result = {'multimodal': [e for e in all_entries if e.get('category') == 'vlm']}
             elif filter_type == 'rag':
                 result = {'rag': [e for e in all_entries if e.get('category') == 'rag']}
             else:
                 result = {
-                    'text': [e for e in all_entries if e.get('category') == 'llm'],
+                    'text': [e for e in all_entries if e.get('category') in ('llm', 'agent')],
                     'multimodal': [e for e in all_entries if e.get('category') == 'vlm'],
                     'rag': [e for e in all_entries if e.get('category') == 'rag'],
                 }
