@@ -1234,6 +1234,7 @@ def launch_eval_batch():
         'judge_api_url': data.get('judge_api_url'),
         'judge_api_key': data.get('judge_api_key'),
         'ignore_errors': data.get('ignore_errors', False),
+        'use_sandbox': data.get('use_sandbox', False),
         'dataset_args': data.get('dataset_args'),
         'system_prompt': data.get('system_prompt'),
         'thinking_mode': data.get('thinking_mode'),
@@ -1286,6 +1287,7 @@ def launch_eval_batch():
                                 'timeout', 'stream', 'temperature', 'top_p', 'max_tokens',
                                 'top_k', 'seed', 'judge_strategy', 'judge_model',
                                 'judge_api_url', 'judge_api_key', 'ignore_errors',
+                                'use_sandbox',
                                 'dataset_args', 'system_prompt', 'thinking_mode'):
                         val = shared_config.get(key)
                         if val is not None:

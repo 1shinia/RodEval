@@ -164,6 +164,7 @@ export default function LLMEvalForm({ context }: Props) {
   const [repeats, setRepeats] = useState('1')
   const [timeout, setTimeout_] = useState('300')
   const [stream, setStream] = useState(false)
+  const [useSandbox, setUseSandbox] = useState(false)
   const [temperature, setTemperature] = useState('')
   const [topP, setTopP] = useState('')
   const [maxTokens, setMaxTokens] = useState('')
@@ -276,6 +277,7 @@ export default function LLMEvalForm({ context }: Props) {
         judge_api_url: judgeApiUrl || undefined,
         judge_api_key: judgeApiKey || undefined,
         ignore_errors: ignoreErrors,
+        use_sandbox: useSandbox,
         dataset_args: datasetArgs || undefined,
         system_prompt: systemPrompt || undefined,
         thinking_mode: thinkingMode,
@@ -417,6 +419,7 @@ export default function LLMEvalForm({ context }: Props) {
     if (seed && seed !== '42') config.seed = Number(seed)
     if (judgeStrategy && judgeStrategy !== 'auto') config.judge_strategy = judgeStrategy
     if (ignoreErrors) config.ignore_errors = true
+    if (useSandbox) config.use_sandbox = true
     if (datasetArgs) { try { const extra = JSON.parse(datasetArgs); config.dataset_args = { ...(config.dataset_args as Record<string, unknown> || {}), ...extra } } catch { /* ignore */ } }
     if (systemPrompt.trim()) {
       const da = (config.dataset_args || {}) as Record<string, unknown>
@@ -803,6 +806,10 @@ export default function LLMEvalForm({ context }: Props) {
               <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] cursor-pointer">
                 <input type="checkbox" checked={ignoreErrors} onChange={(e) => setIgnoreErrors(e.target.checked)} className="accent-[var(--accent)]" />
                 {t('eval.ignoreErrors')}
+              </label>
+              <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] cursor-pointer">
+                <input type="checkbox" checked={useSandbox} onChange={(e) => setUseSandbox(e.target.checked)} className="accent-[var(--accent)]" />
+                Docker 沙箱
               </label>
             </div>
             {/* Row 4 — 系统提示 + 数据集参数 */}
