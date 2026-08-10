@@ -582,6 +582,131 @@ def run_evaluation():
         unregister_process(task_id)
 
 
+@bp_eval.route('/launch', methods=['POST'])
+def launch_evaluation():
+    """Non-blocking evaluation launch — returns immediately.
+
+    Same request body as /invoke, but runs the evaluation in a background
+    thread and returns the task_id immediately.  The client should poll
+    /progress and use the SSE log stream (/log/stream) for real-time updates.
+    """
+    data, task_id = _parse_request()
+    model = data.get('model', '')
+    from .auth import get_current_user_id
+    from ..utils.process import get_user_slots
+    uid = get_current_user_id()
+    if not try_reserve_slot(task_id, 'eval', model=model, user_id=uid):
+        max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
+        slots = get_user_slots(uid)
+        running_count = slots['eval']['used']
+        return jsonify({
+            'error': f'你的评估任务已达上限（{running_count}/{max_eval}），请等待完成后再试',
+            'running': running_count,
+            'max': max_eval,
+        }), 429
+
+    launch_result: LaunchResult | None = None
+    try:
+        model_source = data.get('model_source')
+        if model_source == ModelSource.LOCAL:
+            model_path = data['model_path']
+            backend = data.get('backend', LocalBackend.AUTO)
+            backend_args = data.get('backend_args', {})
+            logger.info(f'[{task_id}] Launching local model: path={model_path} backend={backend}')
+            try:
+                launch_result = launch(model_path, backend=backend, backend_args=backend_args)
+                logger.info(f'[{task_id}] Launched: backend={launch_result.backend} '
+                            f'eval_type={launch_result.eval_type}')
+            except Exception as e:
+                error_id = uuid.uuid4().hex[:8]
+                logger.error(f'[{error_id}] [{task_id}] Launch failed: {e}', exc_info=True)
+                return jsonify({
+                    'status': 'error', 'task_id': task_id,
+                    'error': 'Model launch failed', 'error_id': error_id,
+                }), 500
+
+        # ── Build TaskConfig ───────────────────────────────────────────
+        eval_backend = data.get('eval_backend', '')
+        if eval_backend == EvalBackend.RAG_EVAL:
+            eval_config = data.get('eval_config', {})
+            if not eval_config:
+                return jsonify({'error': 'eval_config is required for RAG eval'}), 400
+            task_config = TaskConfig(
+                eval_backend=EvalBackend.RAG_EVAL, eval_config=eval_config,
+                work_dir=os.path.join(OUTPUT_DIR, task_id),
+                no_timestamp=True, enable_progress_tracker=True,
+            )
+        elif eval_backend == EvalBackend.AIGC_EVAL:
+            eval_config = data.get('eval_config', {})
+            if not eval_config:
+                return jsonify({'error': 'eval_config is required for AIGC eval'}), 400
+            task_config = TaskConfig(
+                eval_backend=EvalBackend.AIGC_EVAL, eval_config=eval_config,
+                work_dir=os.path.join(OUTPUT_DIR, task_id),
+                no_timestamp=True, enable_progress_tracker=True,
+            )
+        elif eval_backend == EvalBackend.AUDIO_EVAL:
+            eval_config = data.get('eval_config', {})
+            if not eval_config:
+                return jsonify({'error': 'eval_config is required for Audio eval'}), 400
+            task_config = TaskConfig(
+                eval_backend=EvalBackend.AUDIO_EVAL, eval_config=eval_config,
+                work_dir=os.path.join(OUTPUT_DIR, task_id),
+                no_timestamp=True, enable_progress_tracker=True,
+            )
+        else:
+            if launch_result is not None:
+                task_config = _build_task_config_local(data, launch_result)
+            else:
+                task_config = _build_task_config_openai(data)
+
+        task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
+        os.makedirs(task_config.work_dir, exist_ok=True)
+        try:
+            task_config.dump_yaml(task_config.work_dir)
+        except Exception as e:
+            logger.warning(f'[{task_id}] Failed to save task config: {e}')
+
+        use_direct = (
+            launch_result is not None
+            and (is_direct_eval_type(task_config.eval_type or '') or launch_result.api_url is not None)
+        )
+
+        logger.info(f'[{task_id}] Launching: model={task_config.model} '
+                    f'eval_type={task_config.eval_type} datasets={task_config.datasets}')
+
+        # ── Launch in background thread ──────────────────────────────
+        import threading
+        app = current_app._get_current_object()
+
+        def _run():
+            try:
+                with app.app_context():
+                    _execute_task(task_id, task_config, label='Task',
+                                  use_direct=use_direct, user_id=uid)
+            except Exception as e:
+                logger.error(f'[{task_id}] Background eval failed: {e}', exc_info=True)
+            finally:
+                if launch_result:
+                    launcher_stop(launch_result)
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+
+        return jsonify({'task_id': task_id, 'status': 'launched'}), 202
+
+    except Exception as e:
+        if launch_result:
+            launcher_stop(launch_result)
+        unregister_process(task_id)
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] [{task_id}] Launch setup failed: {e}', exc_info=True)
+        return jsonify({
+            'status': 'error', 'task_id': task_id,
+            'error': 'Failed to start evaluation', 'error_id': error_id,
+        }), 500
+
+
 @bp_eval.route('/resume/invoke', methods=['POST'])
 def resume_evaluation():
     """Resume an interrupted evaluation task (blocking).
@@ -1263,4 +1388,10 @@ def stop_eval_batch(batch_id: str):
     if not s:
         return jsonify({'error': 'Batch not found'}), 404
     s['cancel_requested'] = True
+
+    # Kill the currently running subprocess for immediate stop
+    current_task_id = s.get('current_task_id', '')
+    if current_task_id:
+        stop_process(current_task_id)
+
     return jsonify({'batch_id': batch_id, 'status': 'cancelling'}), 200

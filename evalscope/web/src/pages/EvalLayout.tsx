@@ -5,7 +5,7 @@ import { useQueryParams } from '@/hooks/useQueryParams'
 import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask,
-  launchEvalBatch, getEvalBatchStatus, stopEvalBatch, uploadEvalBatchCsv } from '@/api/eval'
+  launchEvalBatch, getEvalBatchStatus, stopEvalBatch, uploadEvalBatchCsv, launchEvalTask } from '@/api/eval'
 import type { EvalBatchStatus } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
 
@@ -52,6 +52,7 @@ export default function EvalLayout() {
   const api = useMemo(
     () => ({
       submit: submitEvalTask,
+      launch: launchEvalTask,
       stop: stopEvalTask,
       getProgress: getEvalProgress,
       getLog: getEvalLog,
@@ -167,7 +168,6 @@ export default function EvalLayout() {
           setBatchState(st)
           if (st.current_task_id && st.current_task_id !== lastLogTaskIdRef.current) {
             lastLogTaskIdRef.current = st.current_task_id
-            setBatchLogText('')
           }
           if (st.current_task_id) {
             try { const log = await getEvalLog(st.current_task_id); setBatchLogText(log.text || '') } catch { /* */ }

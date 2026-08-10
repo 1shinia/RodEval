@@ -115,7 +115,6 @@ export default function PerfTaskPage() {
           // Fetch log for current task (only during running)
           if (st.current_task_id && st.current_task_id !== lastLogTaskIdRef.current) {
             lastLogTaskIdRef.current = st.current_task_id
-            setBatchLogText('')
           }
           if (st.current_task_id) {
             try {

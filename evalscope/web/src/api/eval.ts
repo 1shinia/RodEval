@@ -10,6 +10,16 @@ export async function submitEvalTask(
   return apiPost<EvalInvokeResponse>('/api/v1/eval/invoke', payload, { 'EvalScope-Task-Id': taskId }, 0)
 }
 
+export async function launchEvalTask(
+  payload: Record<string, unknown>,
+  taskId: string,
+): Promise<{ task_id: string; status: string }> {
+  // Non-blocking launch — returns immediately, use SSE + polling for progress.
+  return apiPost<{ task_id: string; status: string }>(
+    '/api/v1/eval/launch', payload, { 'EvalScope-Task-Id': taskId },
+  )
+}
+
 export async function getEvalProgress(taskId: string): Promise<ProgressResponse> {
   return api<ProgressResponse>('/api/v1/eval/progress', { task_id: taskId })
 }

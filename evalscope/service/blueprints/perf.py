@@ -426,6 +426,12 @@ def stop_batch_perf(batch_id: str):
     if state['status'] != 'running':
         return jsonify({'error': f'Batch is not running (status: {state["status"]})'}), 400
     state['cancel_requested'] = True
+
+    # Kill the currently running subprocess for immediate stop
+    current_task_id = state.get('current_task_id', '')
+    if current_task_id:
+        stop_process(current_task_id)
+
     return jsonify({'batch_id': batch_id, 'status': 'cancelling'}), 200
 
 

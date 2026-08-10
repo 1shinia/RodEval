@@ -6,6 +6,7 @@ import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/ty
 
 export interface TaskApi {
   submit: (config: Record<string, unknown>, taskId: string) => Promise<EvalInvokeResponse>
+  launch?: (config: Record<string, unknown>, taskId: string) => Promise<{ task_id: string; status: string }>
   stop: (taskId: string) => Promise<unknown>
   getProgress: (taskId: string) => Promise<ProgressResponse>
   getLog: (taskId: string, startLine?: number, page?: number) => Promise<LogResponse>
@@ -90,41 +91,53 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   const handleSubmit = async (config: Record<string, unknown>) => {
     const id = `${taskPrefix}_${Date.now()}`
     setTaskId(id)
-    setRunning(true)
     setLogText('')
     setProgress(0)
     setResult(null)
     setCopied(false)
-    let shouldFinalize = true
+
+    // Use non-blocking /launch if available, otherwise blocking /invoke
+    const launchFn = api.launch || api.submit
+
     try {
-      const res = await api.submit(config, id)
-      setResult(res)
+      const res = await launchFn(config, id)
+      // For blocking /invoke, res is the full result (eval completed).
+      // For non-blocking /launch, res is {task_id, status: 'launched'}.
+      if (res && (res as { status: string }).status === 'launched') {
+        // Non-blocking: start monitoring
+        setRunning(true)
+        // Poll progress every 3 seconds until done
+        const poll = setInterval(async () => {
+          try {
+            const p = await api.getProgress(id)
+            setProgress(p.percent ?? 0)
+            if ((p.percent ?? 0) >= 100 || p.status === 'completed' || p.status === 'error' || p.status === 'stopped') {
+              clearInterval(poll)
+              setRunning(false)
+              // Fetch final log
+              try {
+                const finalLog = await api.getLog(id, 0, 999999)
+                if (finalLog.text) setLogText(finalLog.text)
+              } catch { /* ignore */ }
+              setResult({ status: p.status === 'error' ? 'error' : 'ok', task_id: id } as EvalInvokeResponse)
+            }
+          } catch { /* ignore poll errors */ }
+        }, 3000)
+      } else {
+        // Blocking mode: eval completed, res is the full result
+        setResult(res as EvalInvokeResponse)
+        setRunning(false)
+        try {
+          const finalLog = await api.getLog(id, 0, 999999)
+          if (finalLog.text) setLogText(finalLog.text)
+          const finalProg = await api.getProgress(id)
+          setProgress(finalProg.percent ?? 100)
+        } catch { /* ignore */ }
+      }
     } catch (e) {
       const msg = String(e)
-      const isNetworkIssue =
-        msg.includes('AbortError') ||
-        msg.includes('abort') ||
-        msg.includes('timeout') ||
-        msg.includes('network') ||
-        msg.includes('NetworkError') ||
-        msg.includes('Failed to fetch')
-      if (isNetworkIssue) {
-        toast.warning('请求中断，但任务可能在后台继续运行。请等待日志更新或刷新页面查看。')
-        shouldFinalize = false  // keep running=true, SSE stays alive
-        return
-      }
-      setResult({ status: 'error', task_id: id, error: msg })
+      setResult({ status: 'error', task_id: id, error: msg } as EvalInvokeResponse)
       toast.error(msg)
-    } finally {
-      if (!shouldFinalize) return
-      setRunning(false)
-      // Fetch complete final log + progress
-      try {
-        const finalLog = await api.getLog(id, 0, 999999)
-        if (finalLog.text) setLogText(finalLog.text)
-        const finalProg = await api.getProgress(id)
-        setProgress(finalProg.percent ?? 100)
-      } catch { /* ignore */ }
     }
   }
 
