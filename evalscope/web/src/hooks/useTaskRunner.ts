@@ -221,7 +221,6 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       try {
         const d = await api.getProgress(taskId)
         if (cancelled) return
-        setProgress(d.percent ?? 0)
         if ((d.percent ?? 0) >= 100 && d.status === 'completed') {
           setRunning(false)
           clearTaskId()

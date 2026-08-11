@@ -58,18 +58,18 @@ logger = get_logger()
         extra_params={
             'user_model': {
                 'type': 'str',
-                'description': 'Model used to simulate the user in the environment.',
-                'value': 'qwen-plus'
+                'description': 'User simulation model. Leave empty to reuse the eval model.',
+                'value': ''
             },
             'api_key': {
                 'type': 'str',
-                'description': 'API key for the user model backend.',
-                'value': 'EMPTY'
+                'description': 'API key for the user model. Leave empty to reuse the eval API key.',
+                'value': ''
             },
             'api_base': {
                 'type': 'str',
-                'description': 'Base URL for the user model API requests.',
-                'value': 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+                'description': 'Base URL for the user model. Leave empty to reuse the eval API URL.',
+                'value': ''
             },
             'generation_config': {
                 'type': 'dict',
@@ -93,11 +93,14 @@ class TauBenchAdapter(AgentAdapter):
             feature_name=self.pretty_name
         )
 
-        # setup user model args
-        self.user_model = self.extra_params.get('user_model', 'qwen-plus')
-        self.api_key = self.extra_params.get('api_key', 'EMPTY')
-        self.api_base = self.extra_params.get('api_base', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+        # setup user model args — fall back to eval model config when not specified
+        tc = self._task_config
+        self.user_model = self.extra_params.get('user_model') or (tc.model if tc else 'deepseek-v4-flash')
+        self.api_key = self.extra_params.get('api_key') or (tc.api_key if tc else 'EMPTY')
+        self.api_base = self.extra_params.get('api_base') or (tc.api_url if tc else 'https://unitoken.rodcountdi.com/v1')
         self.generation_config = self.extra_params.get('generation_config', {'temperature': 0.0, 'max_tokens': 4096})
+        # Disable thinking mode — reasoning_content in multi-turn messages causes API errors
+        self.generation_config.setdefault('thinking', None)
 
     @run_once
     def _patch_env_completion(self) -> str:
