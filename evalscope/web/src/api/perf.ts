@@ -34,9 +34,14 @@ export async function submitPerfTask(
   payload: Record<string, unknown>,
   taskId: string,
 ): Promise<EvalInvokeResponse> {
-  // Perf tasks can run for hours — no client-side timeout (0 = disable).
-  // Progress is tracked via SSE; the HTTP response only arrives on completion.
   return apiPost<EvalInvokeResponse>('/api/v1/perf/invoke', payload, { 'EvalScope-Task-Id': taskId }, 0)
+}
+
+export async function launchPerfTask(
+  payload: Record<string, unknown>,
+  taskId: string,
+): Promise<{ task_id: string; status: string }> {
+  return apiPost<{ task_id: string; status: string }>('/api/v1/perf/launch', payload, { 'EvalScope-Task-Id': taskId })
 }
 
 export async function getPerfProgress(taskId: string): Promise<ProgressResponse> {

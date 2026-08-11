@@ -3,12 +3,13 @@ import { useLocale } from '@/contexts/LocaleContext'
 import PerfConfigForm from '@/components/perf/PerfConfigForm'
 import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
-import { submitPerfTask, stopPerfTask, getPerfProgress, getPerfLog, getPerfReportUrl, resumePerfTask, launchBatchPerf, getBatchStatus, stopBatchPerf } from '@/api/perf'
+import { submitPerfTask, launchPerfTask, stopPerfTask, getPerfProgress, getPerfLog, getPerfReportUrl, resumePerfTask, launchBatchPerf, getBatchStatus, stopBatchPerf } from '@/api/perf'
 import type { BatchStatus } from '@/api/perf'
 import { toast } from '@/components/common/Toast'
 
 const perfApi = {
   submit: submitPerfTask,
+  launch: launchPerfTask,
   stop: stopPerfTask,
   getProgress: getPerfProgress,
   getLog: getPerfLog,

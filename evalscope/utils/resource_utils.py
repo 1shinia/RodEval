@@ -207,15 +207,17 @@ def compute_eval_total_count(task_config: 'TaskConfig') -> Optional[int]:
         for subset in active_subsets:
             sample_count = subset_count_map.get(subset)
             if sample_count is None:
-                continue
-            # Apply limit per subset first
-            if limit is not None:
-                if isinstance(limit, float):
-                    effective = int(sample_count * limit)
-                else:
-                    effective = min(sample_count, int(limit))
+                # No per-subset stats – count as one evaluator instance
+                effective = 1
             else:
-                effective = sample_count
+                # Apply limit per subset
+                if limit is not None:
+                    if isinstance(limit, float):
+                        effective = max(1, int(sample_count * limit))
+                    else:
+                        effective = min(sample_count, int(limit))
+                else:
+                    effective = sample_count
             # Then multiply by repeats
             total += effective * repeats
 

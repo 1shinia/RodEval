@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 from tabulate import tabulate
 
 from evalscope.perf.arguments import Arguments as PerfArguments
@@ -731,6 +731,128 @@ def run_performance_test():
     finally:
         # Clean up the placeholder if the subprocess was never registered
         unregister_process(task_id)
+
+
+@bp_perf.route('/launch', methods=['POST'])
+def launch_performance_test():
+    """Non-blocking performance benchmark launch — returns immediately.
+
+    Same request body as /invoke, but runs the benchmark in a background
+    thread and returns the task_id immediately.  The client should poll
+    /progress and use the SSE log stream (/log/stream) for real-time updates.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body is required'}), 400
+
+    task_id = request.headers.get('EvalScope-Task-Id')
+    if not task_id:
+        return jsonify({'error': 'EvalScope-Task-Id header is required'}), 400
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    model = data.get('model', '')
+    from .auth import get_current_user_id
+    from ..utils.process import get_user_slots
+    uid = get_current_user_id()
+    if not try_reserve_slot(task_id, 'perf', model=model, user_id=uid):
+        max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
+        slots = get_user_slots(uid)
+        running = slots['perf']['used']
+        return jsonify({
+            'error': f'你的压测任务已达上限（{running}/{max_perf}），请等待完成后再试',
+            'running': running,
+            'max': max_perf,
+        }), 429
+
+    try:
+        api_type = data.get('api', 'openai')
+        required_fields = ['model']
+        if not api_type.startswith('local'):
+            required_fields.append('url')
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'{field} is required'}), 400
+
+        if 'api' not in data:
+            data['api'] = 'openai'
+
+        perf_args = PerfArguments.from_dict(data)
+        perf_args.no_timestamp = True
+        perf_args.outputs_dir = os.path.join(OUTPUT_DIR, task_id)
+        perf_args.name = 'perf'
+        perf_args.enable_progress_tracker = True
+        perf_args.no_test_connection = True
+        if perf_args.read_timeout is None:
+            perf_args.read_timeout = 300
+
+        os.makedirs(perf_args.outputs_dir, exist_ok=True)
+        try:
+            save_data = {k: v for k, v in data.items() if k != 'api_key'}
+            config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
+            with open(config_file, 'w') as f:
+                json.dump(save_data, f, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f'[{task_id}] Failed to save task config: {e}')
+
+        create_log_file(task_id, os.path.join('perf', 'benchmark.log'))
+
+        logger.info(f'[{task_id}] Launching performance benchmark for model: {perf_args.model}')
+        logger.info(f'[{task_id}] URL: {perf_args.url}')
+
+        # ── Launch in background thread ──────────────────────────────
+        import threading
+        app = current_app._get_current_object()
+
+        def _run():
+            try:
+                with app.app_context():
+                    result = run_in_subprocess(
+                        run_perf_wrapper, perf_args,
+                        task_id=task_id, task_type='perf', model=perf_args.model
+                    )
+                    table_str = _build_perf_table(result, api_type=perf_args.api)
+                    logger.info(f'[{task_id}] Task completed successfully')
+
+                    try:
+                        from datetime import datetime
+                        from .. import db as _db
+                        perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
+                        has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                        runs = 0
+                        for search_dir in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
+                            if os.path.isdir(search_dir):
+                                runs += sum(
+                                    1 for s in os.listdir(search_dir)
+                                    if os.path.isdir(os.path.join(search_dir, s)) and s != 'perf'
+                                )
+                        _db.upsert_perf_task(
+                            task_id=task_id, model=perf_args.model, api=perf_args.api,
+                            dataset=perf_args.dataset_label or perf_args.dataset or 'N/A',
+                            runs=runs, has_report=has_report,
+                            timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            user_id=uid,
+                        )
+                    except Exception as e:
+                        logger.warning(f'[{task_id}] Failed to write perf to SQLite (non-fatal): {e}')
+            except Exception as e:
+                logger.error(f'[{task_id}] Background perf failed: {e}', exc_info=True)
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+
+        return jsonify({'task_id': task_id, 'status': 'launched'}), 202
+
+    except Exception as e:
+        unregister_process(task_id)
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] [{task_id}] Launch setup failed: {e}', exc_info=True)
+        return jsonify({
+            'status': 'error', 'task_id': task_id,
+            'error': 'Failed to start performance test', 'error_id': error_id,
+        }), 500
 
 
 @bp_perf.route('/stop', methods=['POST'])

@@ -114,6 +114,20 @@ def create_app(outputs: str = None):
     except Exception as e:
         logger.debug(f'Startup log cleanup failed (non-fatal): {e}')
 
+    # --- Clean up orphaned sandbox containers from previous runs ----------
+    try:
+        import subprocess
+        orphaned = subprocess.run(
+            ['docker', 'ps', '-a', '-q', '--filter', 'name=sandbox-'],
+            capture_output=True, text=True, timeout=10
+        )
+        if orphaned.stdout.strip():
+            ids = orphaned.stdout.strip().split()
+            subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
+            logger.info('Startup cleanup: removed %d orphaned sandbox container(s)', len(ids))
+    except Exception as e:
+        logger.debug(f'Startup sandbox cleanup failed (non-fatal): {e}')
+
     # --- API Key authentication (optional) --------------------------------
     # Set EVALSCOPE_API_KEY env var to enable.  When set, all /api/* requests
     # must include an ``X-API-Key`` header matching the configured key.

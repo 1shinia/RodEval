@@ -31,6 +31,30 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   const [copied, setCopied] = useState(false)
   const resumedRef = useRef(false)
 
+  // --- localStorage persistence: survive page refresh ---
+  const STORAGE_KEY = `evalscope_last_${taskPrefix}`
+
+  const saveTaskId = useCallback((id: string) => {
+    try { localStorage.setItem(STORAGE_KEY, id) } catch { /* quota / private mode */ }
+  }, [STORAGE_KEY])
+
+  const clearTaskId = useCallback(() => {
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+  }, [STORAGE_KEY])
+
+  // On mount: restore persisted task if no URL param and no active task
+  useEffect(() => {
+    if (urlTaskId || taskId) return
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        setTaskId(saved)
+        // kick off monitoring – same logic as ?task= URL param
+        window.history.replaceState(null, '', `?task=${saved}`)
+      }
+    } catch { /* ignore */ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Resume monitoring a task from URL ?task=xxx (e.g. from running tasks indicator)
   useEffect(() => {
     if (urlTaskId && !resumedRef.current) {
@@ -90,6 +114,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
 
   const handleSubmit = async (config: Record<string, unknown>) => {
     const id = `${taskPrefix}_${Date.now()}`
+    saveTaskId(id)
     setTaskId(id)
     setLogText('')
     setProgress(0)
@@ -98,12 +123,6 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
 
     // Use non-blocking /launch if available, otherwise blocking /invoke
     const launchFn = api.launch || api.submit
-    const isBlocking = !api.launch
-
-    // For blocking submit, enable running immediately so SSE log streaming works
-    if (isBlocking) {
-      setRunning(true)
-    }
 
     try {
       const res = await launchFn(config, id)
@@ -120,6 +139,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
             if (p.status === 'completed' || p.status === 'error' || p.status === 'stopped') {
               clearInterval(poll)
               setRunning(false)
+              clearTaskId()
               // Fetch final log
               try {
                 const finalLog = await api.getLog(id, 0, 999999)
@@ -133,6 +153,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
         // Blocking mode: eval completed, res is the full result
         setResult(res as EvalInvokeResponse)
         setRunning(false)
+        clearTaskId()
         try {
           const finalLog = await api.getLog(id, 0, 999999)
           if (finalLog.text) setLogText(finalLog.text)
@@ -143,6 +164,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     } catch (e) {
       const msg = String(e)
       setRunning(false)
+      clearTaskId()
       setResult({ status: 'error', task_id: id, error: msg } as EvalInvokeResponse)
       toast.error(msg)
     }
@@ -151,6 +173,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   const handleStop = async () => {
     if (!taskId) return
     try { await api.stop(taskId) } catch { toast.warning('Stop request failed') }
+    clearTaskId()
     setRunning(false)
     setResult({ status: 'stopped', task_id: taskId })
   }
@@ -201,6 +224,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
         setProgress(d.percent ?? 0)
         if ((d.percent ?? 0) >= 100 && d.status === 'completed') {
           setRunning(false)
+          clearTaskId()
           setResult((prev) => prev ?? { status: 'ok', task_id: taskId! })
         }
       } catch { /* ignore */ }
