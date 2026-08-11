@@ -111,7 +111,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
           try {
             const p = await api.getProgress(id)
             setProgress(p.percent ?? 0)
-            if ((p.percent ?? 0) >= 100 || p.status === 'completed' || p.status === 'error' || p.status === 'stopped') {
+            if (p.status === 'completed' || p.status === 'error' || p.status === 'stopped') {
               clearInterval(poll)
               setRunning(false)
               // Fetch final log

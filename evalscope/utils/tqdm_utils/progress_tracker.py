@@ -130,7 +130,7 @@ class ProgressTracker:
         processed = self._processed_count
         percent: Optional[float] = None
         if self._total_count > 0:
-            percent = round(processed / self._total_count * 100, 2)
+            percent = min(round(processed / self._total_count * 100, 2), 100.0)
         state = {
             'status': self._status,
             'phase': self._phase,

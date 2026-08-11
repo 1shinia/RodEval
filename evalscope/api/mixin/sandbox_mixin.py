@@ -66,11 +66,14 @@ class SandboxBackend(ABC):
 class EnclaveSandboxBackend(SandboxBackend):
     """ms_enclave-backed sandbox backend delegating to :class:`SandboxService`."""
 
-    def __init__(self, benchmark_meta: 'BenchmarkMeta', task_config: 'TaskConfig'):
+    def __init__(self, benchmark_meta: 'BenchmarkMeta', task_config: 'TaskConfig',
+                 use_custom_image: bool = False,
+                 build_context: Optional[tuple] = None):
         super().__init__(benchmark_meta, task_config)
         self._pool_handle: Optional[PoolHandle] = None
         self._pool_size: int = self._resolve_pool_size()
-        self._use_custom_image: bool = False
+        self._use_custom_image: bool = use_custom_image
+        self._build_context: Optional[tuple] = build_context
 
     def _resolve_pool_size(self) -> int:
         if not self._task_config:
@@ -93,7 +96,10 @@ class EnclaveSandboxBackend(SandboxBackend):
             image = sandbox_cfg_dict.get('image')
             if self._use_custom_image and image and should_build_docker_image(image):
                 logger.info(f'Building sandbox image: {image}')
-                build_ctx, dockerfile = default_docker_build_context()
+                if self._build_context:
+                    build_ctx, dockerfile = self._build_context
+                else:
+                    build_ctx, dockerfile = default_docker_build_context()
                 build_docker_image(image, path=build_ctx, dockerfile=dockerfile)
                 logger.info(f'Sandbox image built: {image}')
 
@@ -209,7 +215,15 @@ class SandboxMixin:
     def _get_backend(self) -> SandboxBackend:
         if self._backend:
             return self._backend
-        self._backend = EnclaveSandboxBackend(self._benchmark_meta, self._task_config)
+        use_custom_image = bool(getattr(self, '_use_custom_image', False))
+        build_context = None
+        if use_custom_image and hasattr(self, 'get_build_context'):
+            build_context = self.get_build_context()
+        self._backend = EnclaveSandboxBackend(
+            self._benchmark_meta, self._task_config,
+            use_custom_image=use_custom_image,
+            build_context=build_context,
+        )
         return self._backend
 
     @thread_safe
