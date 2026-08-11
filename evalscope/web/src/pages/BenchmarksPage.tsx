@@ -11,7 +11,7 @@ import Tabs from '@/components/ui/Tabs'
 import Badge from '@/components/ui/Badge'
 import { BookOpen, X, Database, Layers, FlaskConical, Tag, ExternalLink } from 'lucide-react'
 
-type TabKey = 'all' | 'text' | 'multimodal' | 'rag'
+type TabKey = 'all' | 'text' | 'agent' | 'multimodal' | 'rag'
 
 /** Strip markdown formatting for a plain-text preview */
 function stripMarkdown(md: string): string {
@@ -90,12 +90,14 @@ export default function BenchmarksPage() {
 
   // Count by category
   const textCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'llm').length, [allBenchmarks])
+  const agentCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'agent').length, [allBenchmarks])
   const mmCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'vlm').length, [allBenchmarks])
   const ragCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'rag').length, [allBenchmarks])
 
   // Filter by tab
   const tabFiltered = useMemo(() => {
     if (tab === 'text') return allBenchmarks.filter((b) => b.category === 'llm')
+    if (tab === 'agent') return allBenchmarks.filter((b) => b.category === 'agent')
     if (tab === 'multimodal') return allBenchmarks.filter((b) => b.category === 'vlm')
     if (tab === 'rag') return allBenchmarks.filter((b) => b.category === 'rag')
     return allBenchmarks
@@ -153,6 +155,7 @@ export default function BenchmarksPage() {
     { key: 'all', label: `${t('benchmarks.all')} (${allBenchmarks.length})` },
     { key: 'text', label: `${t('benchmarks.text')} (${textCount})` },
     { key: 'multimodal', label: `${t('benchmarks.multimodal')} (${mmCount})` },
+    { key: 'agent', label: `${t('benchmarks.agent')} (${agentCount})` },
     { key: 'rag', label: `${t('benchmarks.rag')} (${ragCount})` },
   ]
 
@@ -261,6 +264,9 @@ export default function BenchmarksPage() {
                   {entry.category === 'vlm' && (
                     <Badge variant="warning" className="text-[9px] shrink-0">VLM</Badge>
                   )}
+                  {entry.category === 'agent' && (
+                    <Badge variant="default" className="text-[9px] shrink-0">Agent</Badge>
+                  )}
                   {entry.category === 'rag' && (
                     <Badge variant="info" className="text-[9px] shrink-0">RAG</Badge>
                   )}
@@ -355,6 +361,9 @@ export default function BenchmarksPage() {
                   <h2 className="text-lg font-semibold text-[var(--text)]">{selectedEntry.pretty_name}</h2>
                   {selectedEntry.category === 'vlm' && (
                     <Badge variant="warning" className="text-[10px] shrink-0">VLM</Badge>
+                  )}
+                  {selectedEntry.category === 'agent' && (
+                    <Badge variant="default" className="text-[10px] shrink-0">Agent</Badge>
                   )}
                   {selectedEntry.category === 'rag' && (
                     <Badge variant="info" className="text-[10px] shrink-0">RAG</Badge>

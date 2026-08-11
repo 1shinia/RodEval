@@ -4,6 +4,7 @@
     "dataset_id": "princeton-nlp/SWE-bench_Verified",
     "paper_url": null,
     "tags": [
+      "Agent",
       "Coding"
     ],
     "metrics": [

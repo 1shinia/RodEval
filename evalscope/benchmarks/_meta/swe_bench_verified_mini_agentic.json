@@ -4,6 +4,7 @@
     "dataset_id": "evalscope/swe-bench-verified-mini",
     "paper_url": null,
     "tags": [
+      "Agent",
       "Coding"
     ],
     "metrics": [

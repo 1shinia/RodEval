@@ -4,6 +4,7 @@
     "dataset_id": "ScaleAI/SWE-bench_Pro",
     "paper_url": null,
     "tags": [
+      "Agent",
       "Coding"
     ],
     "metrics": [

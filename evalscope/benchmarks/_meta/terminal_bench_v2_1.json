@@ -4,6 +4,7 @@
     "dataset_id": "https://hub.harborframework.com/datasets/terminal-bench/terminal-bench-2-1/latest",
     "paper_url": null,
     "tags": [
+      "Agent",
       "Coding"
     ],
     "metrics": [
