@@ -98,6 +98,12 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
 
     // Use non-blocking /launch if available, otherwise blocking /invoke
     const launchFn = api.launch || api.submit
+    const isBlocking = !api.launch
+
+    // For blocking submit, enable running immediately so SSE log streaming works
+    if (isBlocking) {
+      setRunning(true)
+    }
 
     try {
       const res = await launchFn(config, id)
@@ -136,6 +142,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       }
     } catch (e) {
       const msg = String(e)
+      setRunning(false)
       setResult({ status: 'error', task_id: id, error: msg } as EvalInvokeResponse)
       toast.error(msg)
     }
