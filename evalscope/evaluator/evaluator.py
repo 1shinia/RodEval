@@ -335,6 +335,9 @@ class DefaultEvaluator(Evaluator):
         task_state = (
             self._predict_sample(item.sample, model_prediction_dir) if item.needs_predict else item.task_state
         )
+        if item.needs_predict and not self.benchmark.use_batch_scoring:
+            sample_id = item.sample.metadata.get('instance_id', item.sample.metadata.get('id', '?'))
+            logger.info(f'Prediction done for sample {sample_id}, starting review phase...')
         sample_score = (None if self.benchmark.use_batch_scoring else self._review_task_state(task_state))
         return task_state, sample_score
 

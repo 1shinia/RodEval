@@ -144,7 +144,10 @@ def eval_instance(
         copy_to_container(container, eval_file, PurePosixPath('/eval.sh'))
 
         # Run eval script, write output to logs
+        logger.info(f'> Running eval script in container for {instance_id} '
+                    f'(timeout={timeout}s), this may take several minutes...')
         test_output, timed_out, total_runtime = exec_run_with_timeout(container, '/bin/bash /eval.sh', timeout)
+        logger.info(f'< Eval script completed for {instance_id}: runtime={total_runtime:.1f}s, timed_out={timed_out}')
         test_output_path = log_dir / LOG_TEST_OUTPUT
         logger.info(f'Test runtime: {total_runtime:_.2f} seconds')
         with open(test_output_path, 'w') as f:
@@ -182,7 +185,11 @@ def eval_instance(
         report['error'] = error_msg
     finally:
         # Remove instance container
-        cleanup_container(client, container, logger)
+        try:
+            cleanup_container(client, container, logger)
+        except Exception:
+            logger.warning(f'Failed to cleanup container for {instance_id}, '
+                           f'it will be cleaned on next service restart')
         return {
             'completed': eval_completed,
             'resolved': report.get(instance_id, {}).get('resolved', False),
