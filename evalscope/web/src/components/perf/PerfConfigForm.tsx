@@ -12,6 +12,7 @@ interface Props {
   disabled?: boolean
   onApiKeyChange?: (key: string) => void
   onBatchSubmit?: (batchId: string, sharedConfig: Record<string, unknown>) => Promise<void>
+  onModeChange?: (mode: 'single' | 'batch') => void
 }
 
 const EMBEDDING_APIS = ['openai_embedding']
@@ -22,7 +23,7 @@ const EMBEDDING_DATASETS = ['random_embedding', 'embedding', 'random_embedding_b
 const RERANK_DATASETS = ['random_rerank', 'rerank']
 const LLM_DATASETS = ['openqa', 'random', 'random_vl', 'random_multi_turn', 'share_gpt_zh', 'share_gpt_en', 'longalpaca', 'line_by_line', 'speed_benchmark']
 
-export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit }: Props) {
+export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit, onModeChange }: Props) {
   const { t } = useLocale()
   const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
   const [testMode, setTestMode] = useState<'single' | 'batch'>('single')
@@ -278,12 +279,12 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         <label className={`${FORM_LABEL_CLASS} !mb-0`}>测试模式</label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="radio" name="tm" value="single" checked={!isBatch}
-            onChange={() => setTestMode('single')} className="accent-[var(--accent)]" />
+            onChange={() => { setTestMode('single'); onModeChange?.('single') }} className="accent-[var(--accent)]" />
           <span className="text-sm text-[var(--text)]">单模型测试</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="radio" name="tm" value="batch" checked={isBatch}
-            onChange={() => setTestMode('batch')} className="accent-[var(--accent)]" />
+            onChange={() => { setTestMode('batch'); onModeChange?.('batch') }} className="accent-[var(--accent)]" />
           <span className="text-sm text-[var(--text)]">批量测试</span>
         </label>
       </div>

@@ -84,6 +84,19 @@ export default function PerfTaskPage() {
     fetchTaskLog(tid)
   }, [fetchTaskLog])
 
+  const handleModeChange = useCallback((mode: 'single' | 'batch') => {
+    if (mode === 'single') {
+      // Switching to single-model: clear stale batch state
+      batchIdRef.current = null
+      clearBatchPoll()
+      setBatchRunning(false)
+      setBatchState(null)
+      setBatchLogText('')
+      setSelectedTaskId('')
+      setSelectedTaskLog('')
+    }
+  }, [clearBatchPoll])
+
   const handleBatchStop = useCallback(async () => {
     const bid = batchIdRef.current
     if (!bid) return
@@ -185,6 +198,7 @@ export default function PerfTaskPage() {
         disabled={running || batchRunning}
         onApiKeyChange={onApiKeyChange}
         onBatchSubmit={handleBatchSubmit}
+        onModeChange={handleModeChange}
       />
 
       {/* Batch progress */}
