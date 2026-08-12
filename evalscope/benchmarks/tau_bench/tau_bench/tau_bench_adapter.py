@@ -99,9 +99,13 @@ class TauBenchAdapter(AgentAdapter):
         self.api_key = self.extra_params.get('api_key') or (tc.api_key if tc else 'EMPTY')
         self.api_base = self.extra_params.get('api_base') or (tc.api_url if tc else 'https://unitoken.rodcountdi.com/v1')
         self.generation_config = self.extra_params.get('generation_config', {'temperature': 0.0, 'max_tokens': 4096})
-        # Force-disable thinking mode — reasoning_content in multi-turn messages causes 400 errors.
-        # Use False (not None/null) because deepseek-v4-pro defaults to thinking ON at API level.
-        self.generation_config['thinking'] = False
+        # DeepSeek models default to thinking ON; the parameter must be set at
+        # *top level* (not inside extra_body) or the API ignores it.  The model
+        # layer moves unknown keys into extra_body, so we pre-populate extra_body
+        # directly — this also works for non-DeepSeek models (they ignore it).
+        self.generation_config['extra_body'] = {'thinking': {'type': 'disabled'}}
+        if tc and tc.generation_config is not None:
+            tc.generation_config.extra_body = {'thinking': {'type': 'disabled'}}
 
     @run_once
     def _patch_env_completion(self) -> str:
@@ -112,6 +116,16 @@ class TauBenchAdapter(AgentAdapter):
             from evalscope.api.model import GenerateConfig, get_model
             from evalscope.constants import EvalType
 
+            # Strip reasoning_content — DeepSeek thinking mode injects it into
+            # assistant messages, but the API requires it to be echoed back on
+            # subsequent turns. Since the user simulator doesn't have it, any
+            # message containing reasoning_content will trigger a 400 error.
+            clean = []
+            for msg in messages:
+                if isinstance(msg, dict) and 'reasoning_content' in msg:
+                    msg = {k: v for k, v in msg.items() if k != 'reasoning_content'}
+                clean.append(msg)
+
             user_server = get_model(
                 model=adapter_instance.user_model,
                 eval_type=EvalType.OPENAI_API,
@@ -120,7 +134,7 @@ class TauBenchAdapter(AgentAdapter):
                 config=GenerateConfig(**adapter_instance.generation_config)
             )
 
-            res = user_server.generate(input=[dict_to_chat_message(msg) for msg in messages])
+            res = user_server.generate(input=[dict_to_chat_message(msg) for msg in clean])
 
             message = {'role': 'assistant', 'content': res.completion}
             self.messages.append(message)

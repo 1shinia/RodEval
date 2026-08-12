@@ -42,8 +42,11 @@ def _patch_agent_solve(model: Model):
         ]
 
         for step_index in range(max_num_steps):
+            # Strip reasoning_content before sending — DeepSeek thinking mode
+            # requires it to be echoed back, but we don't track it across turns.
+            clean = [{k: v for k, v in msg.items() if k != 'reasoning_content'} for msg in messages]
             res = model.generate(
-                input=[dict_to_chat_message(msg) for msg in messages],
+                input=[dict_to_chat_message(msg) for msg in clean],
                 tools=[ToolInfo.model_validate(tool['function']) for tool in self.tools_info]
             )
             oai_res = openai_chat_choices(res.choices, include_reasoning=False)
