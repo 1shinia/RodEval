@@ -205,7 +205,18 @@ export default function EvalLayout() {
     try { await stopEvalBatch(bid); toast.info('正在停止批量评估...') } catch (e) { toast.error(String(e)) }
   }, [])
 
-  const setBatchMode = useCallback((v: boolean) => setIsBatch(v), [])
+  const setBatchMode = useCallback((v: boolean) => {
+    setIsBatch(v)
+    if (!v) {
+      // Switching to single-model: clear stale batch state
+      setBatchInfo(null)
+      setBatchError('')
+      setBatchLogText('')
+      setBatchState(null)
+      setSelectedTaskId('')
+      setSelectedTaskLog('')
+    }
+  }, [])
 
   if (location.pathname === '/eval') {
     return <Navigate to="/eval/llm" replace />
