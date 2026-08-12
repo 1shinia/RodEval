@@ -128,8 +128,9 @@ class Tau3BenchAdapter(AgentAdapter):
         self.api_key = self.extra_params.get('api_key') or (tc.api_key if tc else 'EMPTY')
         self.api_base = self.extra_params.get('api_base') or (tc.api_url if tc else 'https://unitoken.rodcountdi.com/v1')
         self.generation_config = self.extra_params.get('generation_config', {'temperature': 0.0, 'max_tokens': 4096})
-        # Disable thinking mode — reasoning_content in multi-turn messages causes API errors
-        self.generation_config.setdefault('thinking', None)
+        # Force-disable thinking mode — reasoning_content in multi-turn messages causes 400 errors.
+        # Use False (not None/null) because deepseek-v4-pro defaults to thinking ON at API level.
+        self.generation_config['thinking'] = False
 
         # retrieval config (banking_knowledge only)
         self.retrieval_config = self.extra_params.get('retrieval_config', 'bm25')
