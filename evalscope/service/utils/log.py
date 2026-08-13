@@ -3,7 +3,11 @@ from collections import deque
 
 from evalscope.constants import DEFAULT_WORK_DIR
 
-OUTPUT_DIR = os.path.abspath(os.getenv('EVALSCOPE_OUTPUT_DIR', DEFAULT_WORK_DIR))
+# Default to the project root's outputs/ directory, not CWD-sensitive ./outputs.
+# Falls back to DEFAULT_WORK_DIR if the package directory can't be resolved.
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_default_output = os.path.join(_project_root, 'outputs') if os.path.isdir(_project_root) else DEFAULT_WORK_DIR
+OUTPUT_DIR = os.path.abspath(os.getenv('EVALSCOPE_OUTPUT_DIR', _default_output))
 
 
 def validate_task_id(task_id: str) -> None:
@@ -134,20 +138,53 @@ def get_log_content(task_id: str, sub_path: str, start_line: int = None, page: i
     return {'text': ''.join(lines), 'head_line': head_line, 'tail_line': tail_line, 'total_lines': total_lines}
 
 
-# Retention policy for old task logs (default 30 days, configurable via env var).
-_RETENTION_DAYS = int(os.getenv('EVALSCOPE_LOG_RETENTION_DAYS', '30'))
+# Retention policy for incomplete task logs (default 7 days, configurable via env var).
+# Completed evaluations (progress.json status == 'completed') are kept forever.
+_RETENTION_DAYS = int(os.getenv('EVALSCOPE_LOG_RETENTION_DAYS', '7'))
+
+
+def _read_progress_status(dir_path: str) -> tuple[str, str]:
+    """Read progress.json and return ``(status, updated_at)``.
+
+    Returns ``('', '')`` if progress.json is missing or malformed.
+    """
+    import json
+    pj = os.path.join(dir_path, 'progress.json')
+    if not os.path.isfile(pj):
+        return '', ''
+    try:
+        with open(pj, encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get('status', ''), data.get('updated_at', '')
+    except (json.JSONDecodeError, IOError, OSError, ValueError):
+        return '', ''
+
+
+def _parse_timestamp(value: str) -> float | None:
+    """Parse an ISO timestamp into epoch seconds, or None if unparseable."""
+    if not value:
+        return None
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(value).timestamp()
+    except (ValueError, TypeError):
+        return None
 
 
 def cleanup_old_task_logs() -> dict:
-    """Remove task output directories older than the retention period.
+    """Remove incomplete task output directories older than the retention period.
 
-    Uses SQLite metadata (``finished_at``) when available; falls back to
-    directory modification time.  Skips directories that are currently
-    running (checked against the in-memory registry).
+    Completed evaluations (``progress.json`` status == ``completed``) are kept
+    indefinitely.  Incomplete tasks (stopped / failed / error / running /
+    missing progress.json) are removed after ``_RETENTION_DAYS``.
+
+    Age is determined by ``progress.json`` ``updated_at`` when available,
+    falling back to directory modification time.  Directories that are
+    currently running (in-memory registry) are skipped.
 
     Returns:
         dict with keys ``removed`` (int), ``skipped_running`` (int),
-        ``freed_bytes`` (int), ``errors`` (list of str).
+        ``skipped_completed`` (int), ``freed_bytes`` (int), ``errors`` (list).
     """
     import shutil
     import time
@@ -158,11 +195,18 @@ def cleanup_old_task_logs() -> dict:
     cutoff = time.time() - _RETENTION_DAYS * 86400
     removed = 0
     skipped_running = 0
+    skipped_completed = 0
     freed_bytes = 0
     errors: list = []
 
     if not os.path.isdir(OUTPUT_DIR):
-        return {'removed': 0, 'skipped_running': 0, 'freed_bytes': 0, 'errors': ['output_dir not found']}
+        return {
+            'removed': 0,
+            'skipped_running': 0,
+            'skipped_completed': 0,
+            'freed_bytes': 0,
+            'errors': ['output_dir not found'],
+        }
 
     # Gather running task IDs from the in-memory registry.
     running_ids: set = set()
@@ -170,16 +214,6 @@ def cleanup_old_task_logs() -> dict:
         from ..utils.process import get_running_tasks as _get_running
         for t in _get_running():
             running_ids.add(t['task_id'])
-    except Exception:
-        pass
-
-    # Try SQLite for finished_at timestamps.
-    db_finished: dict = {}
-    try:
-        from .. import db as _db
-        conn = _db._get_conn()
-        rows = conn.execute('SELECT task_id, finished_at FROM task_state WHERE finished_at IS NOT NULL').fetchall()
-        db_finished = {r['task_id']: r['finished_at'] for r in rows}
     except Exception:
         pass
 
@@ -197,14 +231,15 @@ def cleanup_old_task_logs() -> dict:
             skipped_running += 1
             continue
 
-        # Determine age: prefer SQLite finished_at, fall back to mtime.
-        if dir_name in db_finished:
-            try:
-                # finished_at is ISO format: '2026-06-01T12:00:00'
-                ts = time.mktime(time.strptime(db_finished[dir_name][:19], '%Y-%m-%dT%H:%M:%S'))
-            except Exception:
-                ts = entry.stat().st_mtime
-        else:
+        # Completed evaluations are kept forever.
+        status, updated_at = _read_progress_status(entry.path)
+        if status == 'completed':
+            skipped_completed += 1
+            continue
+
+        # Determine age: prefer progress.json updated_at, fall back to mtime.
+        ts = _parse_timestamp(updated_at)
+        if ts is None:
             ts = entry.stat().st_mtime
 
         if ts >= cutoff:
@@ -221,8 +256,12 @@ def cleanup_old_task_logs() -> dict:
 
     if removed > 0:
         logger.info(
-            'Log retention cleanup: removed %d old task directories, freed %.1f MB (%d running tasks skipped)', removed,
-            freed_bytes / (1024 * 1024), skipped_running
+            'Log retention cleanup: removed %d incomplete task directories, '
+            'freed %.1f MB (kept %d completed, %d running skipped)',
+            removed,
+            freed_bytes / (1024 * 1024),
+            skipped_completed,
+            skipped_running,
         )
     if errors:
         for err in errors:
@@ -231,6 +270,7 @@ def cleanup_old_task_logs() -> dict:
     return {
         'removed': removed,
         'skipped_running': skipped_running,
+        'skipped_completed': skipped_completed,
         'freed_bytes': freed_bytes,
         'errors': errors,
     }

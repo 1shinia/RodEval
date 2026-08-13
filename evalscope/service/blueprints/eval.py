@@ -816,6 +816,19 @@ def stop_evaluation():
 
     stopped = stop_process(task_id)
     if stopped:
+        # Mark progress as stopped so stale SSE/polling doesn't confuse the frontend
+        try:
+            progress_file = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+            if os.path.isfile(progress_file):
+                with open(progress_file, 'r+') as f:
+                    data = json.load(f)
+                    data['status'] = 'stopped'
+                    data['percent'] = data.get('percent', 0)
+                    f.seek(0)
+                    f.truncate()
+                    json.dump(data, f)
+        except Exception:
+            pass
         return jsonify({'status': 'stopped', 'task_id': task_id}), 200
     else:
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404

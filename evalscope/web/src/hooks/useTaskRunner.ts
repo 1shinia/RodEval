@@ -30,6 +30,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   const [progress, setProgress] = useState(0)
   const [copied, setCopied] = useState(false)
   const resumedRef = useRef(false)
+  const launchPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // --- localStorage persistence: survive page refresh ---
   const STORAGE_KEY = `evalscope_last_${taskPrefix}`
@@ -131,6 +132,8 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       if (res && (res as { status: string }).status === 'launched') {
         // Non-blocking: start monitoring
         setRunning(true)
+        // Clear any stale launch poll from a previous evaluation
+        if (launchPollRef.current) { clearInterval(launchPollRef.current); launchPollRef.current = null }
         // Poll progress every 3 seconds until done
         const poll = setInterval(async () => {
           try {
@@ -138,6 +141,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
             setProgress(p.percent ?? 0)
             if (p.status === 'completed' || p.status === 'error' || p.status === 'stopped') {
               clearInterval(poll)
+              if (launchPollRef.current === poll) launchPollRef.current = null
               setRunning(false)
               clearTaskId()
               // Fetch final log
@@ -149,6 +153,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
             }
           } catch { /* ignore poll errors */ }
         }, 3000)
+        launchPollRef.current = poll
       } else {
         // Blocking mode: eval completed, res is the full result
         setResult(res as EvalInvokeResponse)
@@ -172,6 +177,8 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
 
   const handleStop = async () => {
     if (!taskId) return
+    // Clear launch poll interval so no more progress updates fire
+    if (launchPollRef.current) { clearInterval(launchPollRef.current); launchPollRef.current = null }
     try { await api.stop(taskId) } catch { toast.warning('Stop request failed') }
     clearTaskId()
     setRunning(false)
