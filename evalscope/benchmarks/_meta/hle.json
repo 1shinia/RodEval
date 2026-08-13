@@ -5,7 +5,8 @@
     "paper_url": null,
     "tags": [
       "Knowledge",
-      "QA"
+      "QA",
+      "MultiModal"
     ],
     "metrics": [
       "acc"
@@ -36,7 +37,7 @@
       }
     },
     "sandbox_config": {},
-    "category": "llm"
+    "category": "vlm"
   },
   "statistics": {
     "total_samples": 2500,

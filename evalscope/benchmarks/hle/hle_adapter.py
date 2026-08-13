@@ -49,7 +49,7 @@ Your judgment must focus only on if there are meaningful differences between [co
     BenchmarkMeta(
         name='hle',
         pretty_name="Humanity's-Last-Exam",
-        tags=[Tags.KNOWLEDGE, Tags.QA],
+        tags=[Tags.KNOWLEDGE, Tags.QA, Tags.MULTI_MODAL],
         description="""
 ## Overview
 
