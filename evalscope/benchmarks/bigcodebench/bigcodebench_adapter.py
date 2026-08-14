@@ -92,6 +92,10 @@ _EXTRA_PARAMS = {
 
 _SANDBOX_CONFIG = {
     'image': 'bigcodebench/bigcodebench-evaluate:latest',
+    # 覆盖镜像默认 ENTRYPOINT（python3 -m bigcodebench.evaluate，需 SPLIT SUBSET 参数），
+    # 否则容器启动即报错退出（Exited），导致 exec 代码时报 409 "container is not running"。
+    # 改为常驻进程，ms_enclave 通过 exec_run 在运行中的容器内执行代码。
+    'entrypoint': ['sh', '-c', 'sleep infinity'],
     'tools_config': {
         'shell_executor': {},
         'python_executor': {}
