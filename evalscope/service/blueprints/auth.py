@@ -86,7 +86,9 @@ def require_auth():
     for prefix in ('/health', '/dashboard', '/api/v1/auth/',
                    '/api/v1/config', '/api/v1/benchmarks',
                    '/api/v1/eval/benchmarks', '/api/v1/perf/template',
-                   '/api/v1/eval/batch/template', '/api/v1/perf/batch/template'):
+                   '/api/v1/eval/batch/template', '/api/v1/perf/batch/template',
+                   '/api/v1/aigc/file', '/api/v1/audio/file',
+                   '/api/v1/reports/media/file'):
         if request.path.startswith(prefix):
             return None
 
