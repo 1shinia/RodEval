@@ -47,6 +47,21 @@ const VIDEO_ASPECT_RATIOS = [
   { value: '1:1', label: '1:1 (方形)' },
 ]
 
+const PROVIDER_OPTIONS: { value: 'openai' | 'custom' | 'dashscope'; label: string; apiPlaceholder: string; modelPlaceholder: string }[] = [
+  {
+    value: 'openai', label: 'OpenAI 兼容',
+    apiPlaceholder: 'https://api.example.com/v1', modelPlaceholder: 'stable-diffusion-v1-5',
+  },
+  {
+    value: 'dashscope', label: 'DashScope (百炼)',
+    apiPlaceholder: 'https://dashscope.aliyuncs.com/api/v1', modelPlaceholder: 'kling/kling-v3-omni-video-generation',
+  },
+  {
+    value: 'custom', label: '自定义',
+    apiPlaceholder: 'https://api.example.com/v1', modelPlaceholder: '模型名称',
+  },
+]
+
 function resolveVideoSize(resolution: string, ratio: string): { width: number; height: number } {
   // Standard resolution mappings
   const presets: Record<string, Record<string, [number, number]>> = {
@@ -66,8 +81,9 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const isLocal = modelSource === 'local'
 
   // API provider (only when modelSource === 'api')
-  const [provider, setProvider] = useState<'openai' | 'custom'>('openai')
+  const [provider, setProvider] = useState<'openai' | 'custom' | 'dashscope'>('openai')
   const isCustomProvider = provider === 'custom'
+  const currentProvider = PROVIDER_OPTIONS.find(p => p.value === provider) ?? PROVIDER_OPTIONS[0]
 
   // Advanced settings (for custom provider)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -272,23 +288,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         </label>
       </div>
 
-      {/* API Provider (only when API mode) */}
-      {!isLocal && (
-        <div className="flex items-center gap-6">
-          <label className={`${FORM_LABEL_CLASS} !mb-0`}>API 提供商</label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="aigc_provider" value="openai" checked={!isCustomProvider}
-              onChange={() => setProvider('openai')} className="accent-[var(--accent)]" />
-            <span className="text-sm text-[var(--text)]">OpenAI 兼容</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="aigc_provider" value="custom" checked={isCustomProvider}
-              onChange={() => setProvider('custom')} className="accent-[var(--accent)]" />
-            <span className="text-sm text-[var(--text)]">自定义</span>
-          </label>
-        </div>
-      )}
-
       {/* Advanced settings (for custom provider) */}
       {!isLocal && isCustomProvider && (
         <div className="border border-[var(--border-md)] rounded-lg p-4 space-y-3">
@@ -347,20 +346,28 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2">
         {t('aigc.modelConfig')}
       </h4>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
         {/* API mode fields */}
         {!isLocal && (<>
+          <FormField label="API 提供商">
+            <select value={provider} onChange={e => setProvider(e.target.value as typeof provider)} className={FORM_INPUT_CLASS}>
+              {PROVIDER_OPTIONS.map(p => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </FormField>
+
           <FormField label={t('eval.modelName')} required error={errors.model}>
             <input value={model}
               onChange={e => { setModel(e.target.value.trimStart()); if (errors.model) setErrors(p => ({ ...p, model: '' })) }}
-              className={FORM_INPUT_CLASS} placeholder="stable-diffusion-v1-5" />
+              className={FORM_INPUT_CLASS} placeholder={currentProvider.modelPlaceholder} />
           </FormField>
 
-          <FormField label={t('eval.apiUrl')} required error={errors.apiBase}>
+          <FormField label={t('eval.apiUrl')} required error={errors.apiBase} className="md:col-span-2">
             <input value={apiBase}
               onChange={e => { setApiBase(e.target.value); if (errors.apiBase) setErrors(p => ({ ...p, apiBase: '' })) }}
-              className={FORM_INPUT_CLASS} placeholder="https://api.example.com/v1/images/generations" />
+              className={FORM_INPUT_CLASS} placeholder={currentProvider.apiPlaceholder} />
           </FormField>
 
           <FormField label={t('eval.apiKey')} required error={errors.apiKey}>

@@ -12,19 +12,18 @@ and async polling. Returns raw media bytes; model classes handle PIL/frame conve
 import base64
 import json
 import logging
+import requests
 import time as _time
 from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import Any, Dict, Optional
 
-import requests
-
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Abstract base
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class AIGCApiAdapter(ABC):
     """Base for API provider adapters.
@@ -101,15 +100,11 @@ class AIGCApiAdapter(ABC):
         has_status = 'status' in data
         return has_id and has_status
 
-    def _handle_retry(
-        self, response, url: str, headers: dict, payload: dict, **params
-    ) -> requests.Response:
+    def _handle_retry(self, response, url: str, headers: dict, payload: dict, **params) -> requests.Response:
         """Optional retry hook. Subclass can override to e.g. fall back size format."""
         return response
 
-    def _poll_async(
-        self, data: Dict[str, Any], post_url: str, headers: Dict[str, str]
-    ) -> Dict[str, Any]:
+    def _poll_async(self, data: Dict[str, Any], post_url: str, headers: Dict[str, str]) -> Dict[str, Any]:
         """Poll an async task until complete. Returns the final response data.
 
         Subclass must override for providers with custom polling logic.
@@ -163,9 +158,7 @@ class AIGCApiAdapter(ABC):
                 break
         return data
 
-    def _fetch_async_content(
-        self, data: Dict[str, Any], task_id: str, headers: Dict[str, str]
-    ) -> Dict[str, Any]:
+    def _fetch_async_content(self, data: Dict[str, Any], task_id: str, headers: Dict[str, str]) -> Dict[str, Any]:
         """Download async task content. Returns data dict with b64_json or url key."""
         # Try common response fields
         for key in ('url', 'video_url', 'b64_json', 'content'):
@@ -180,6 +173,7 @@ class AIGCApiAdapter(ABC):
 # ═══════════════════════════════════════════════════════════════════════
 # OpenAI-compatible adapter (default, covers 90% of API platforms)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class OpenAICompatibleAdapter(AIGCApiAdapter):
     """Standard OpenAI-compatible images/video generation API.
@@ -274,9 +268,8 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
             item = {'url': data['video']} if isinstance(data['video'], str) else data['video']
         elif 'result' in data:
             result = data['result']
-            item = result if isinstance(result, dict) else (
-                result[0] if isinstance(result, list) and len(result) > 0 else {}
-            )
+            item = result if isinstance(result,
+                                        dict) else (result[0] if isinstance(result, list) and len(result) > 0 else {})
         else:
             raise ValueError(
                 f'Unexpected API response format: keys={list(data.keys())}. '
@@ -294,9 +287,7 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
             resp.raise_for_status()
             return resp.content
 
-        raise ValueError(
-            f'Cannot extract media from response: keys={list(item.keys())}'
-        )
+        raise ValueError(f'Cannot extract media from response: keys={list(item.keys())}')
 
     def _extract_by_path(self, data: Dict[str, Any], path: str) -> bytes:
         """Simple dot-notation path extraction: 'data.0.b64_json'."""
@@ -327,9 +318,7 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
             return self.api_base.rstrip('/') + '/' + template.replace('{id}', task_id).lstrip('/')
         return super()._resolve_poll_url(post_url, task_id)
 
-    def _fetch_async_content(
-        self, data: Dict[str, Any], task_id: str, headers: Dict[str, str]
-    ) -> Dict[str, Any]:
+    def _fetch_async_content(self, data: Dict[str, Any], task_id: str, headers: Dict[str, str]) -> Dict[str, Any]:
         """Download content from custom content URL template."""
         template = self.config.get('async_content_url')
         if template:
@@ -344,9 +333,7 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
 
     # ── Retry ─────────────────────────────────────────────────────
 
-    def _handle_retry(
-        self, response, url: str, headers: dict, payload: dict, **params
-    ) -> requests.Response:
+    def _handle_retry(self, response, url: str, headers: dict, payload: dict, **params) -> requests.Response:
         """On 400 response, try falling back size from WxH to resolution string."""
         if response.status_code == 400:
             err_text = response.text.lower()
@@ -361,8 +348,159 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# DashScope video generation adapter (Aliyun 百炼, kling / wanx 等视频模型)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class DashScopeVideoAdapter(AIGCApiAdapter):
+    """Aliyun DashScope video generation API (video-synthesis).
+
+    Wire protocol (https://help.aliyun.com/zh/model-studio/text-to-video):
+      POST {api_root}/services/aigc/video-generation/video-synthesis
+        headers: X-DashScope-Async: enable + Authorization: Bearer <key>
+        body: {"model": ..., "input": {"prompt": ...},
+               "parameters": {"mode": "std", "aspect_ratio": "16:9",
+                              "duration": 5, "audio": False, "watermark": True}}
+        resp: {"output": {"task_id": ..., "task_status": "PENDING"}, "request_id": ...}
+      GET  {api_root}/tasks/{task_id}
+        resp: {"output": {"task_id": ..., "task_status": "SUCCEEDED", "video_url": ...}}
+
+    Differs from OpenAI-compatible APIs in 5 ways (each handled below):
+      1. nested payload (input.prompt / parameters.*) instead of flat prompt/size
+      2. async detection via output.task_id + output.task_status (not top-level)
+      3. response wrapped in `output` (not `data`)
+      4. requires X-DashScope-Async: enable header
+      5. aspect_ratio + duration semantics instead of size/num_frames
+    """
+
+    SYNTHESIS_PATH = 'services/aigc/video-generation/video-synthesis'
+    SUCCESS_STATUSES = ('SUCCEEDED', )
+    FAILURE_STATUSES = ('FAILED', 'CANCELED', 'UNKNOWN')
+
+    # ── URL resolution ────────────────────────────────────────────
+
+    def _api_root(self) -> str:
+        """Return the API root (host + /api/v1).
+
+        Tolerates both ``https://dashscope.aliyuncs.com/api/v1`` and the full
+        synthesis endpoint being pasted into api_base.
+        """
+        base = self.api_base.rstrip('/')
+        marker = '/' + self.SYNTHESIS_PATH
+        if base.endswith(marker):
+            return base[:-len(marker)]
+        return base
+
+    def _resolve_url(self, tool: str) -> str:
+        return self._api_root() + '/' + self.SYNTHESIS_PATH
+
+    # ── Headers ───────────────────────────────────────────────────
+
+    def _build_headers(self) -> Dict[str, str]:
+        headers = super()._build_headers()
+        headers['X-DashScope-Async'] = 'enable'
+        return headers
+
+    # ── Payload construction ──────────────────────────────────────
+
+    def _build_payload(self, prompt: str, **params) -> Dict[str, Any]:
+        tool = params.get('tool', 'txt2video')
+        if tool != 'txt2video':
+            raise ValueError(f'DashScope adapter only supports txt2video, got tool={tool!r}')
+
+        parameters: Dict[str, Any] = {
+            'mode': 'std',
+            'watermark': True,
+        }
+
+        # aspect_ratio: prefer explicit ratio param, fall back to WxH → ratio
+        ratio = params.get('ratio', '')
+        if ratio:
+            parameters['aspect_ratio'] = str(ratio)
+        else:
+            parameters['aspect_ratio'] = _wh_to_aspect_ratio(params.get('width', 1280), params.get('height', 720))
+
+        # duration: DashScope kling only supports 5s/10s — snap num_frames//fps
+        num_frames = params.get('num_frames', 16)
+        fps = params.get('fps', 8)
+        duration = int(num_frames) // int(fps) if int(fps) > 0 else 5
+        parameters['duration'] = _nearest_dashscope_duration(duration)
+
+        return {
+            'model': self.model_name,
+            'input': {
+                'prompt': prompt
+            },
+            'parameters': parameters,
+        }
+
+    # ── Async detection / polling ─────────────────────────────────
+
+    def _is_async_response(self, data: Dict[str, Any]) -> bool:
+        out = data.get('output') or {}
+        return bool(out.get('task_id')) and bool(out.get('task_status'))
+
+    def _resolve_poll_url(self, post_url: str, task_id: str) -> str:
+        # DashScope polls at {api_root}/tasks/{id}, unrelated to the create path
+        return self._api_root() + '/tasks/' + task_id
+
+    def _poll_async(self, data: Dict[str, Any], post_url: str, headers: Dict[str, str]) -> Dict[str, Any]:
+        out = data.get('output') or {}
+        task_id = out.get('task_id', '')
+        status = out.get('task_status', '')
+        logger.info('DashScope task %s: status=%s', task_id, status)
+
+        if status in self.SUCCESS_STATUSES:
+            return data
+
+        poll_url = self._resolve_poll_url(post_url, task_id)
+        max_attempts = 60  # 5 minutes max
+
+        for attempt in range(max_attempts):
+            _time.sleep(5)
+            resp = requests.get(poll_url, headers=headers, timeout=30)
+            if not resp.ok:
+                logger.warning('Poll %d: HTTP %d', attempt + 1, resp.status_code)
+                continue
+            data = resp.json()
+            out = data.get('output') or {}
+            status = out.get('task_status', '')
+            logger.info('DashScope task %s: status=%s', task_id, status)
+
+            if status in self.SUCCESS_STATUSES:
+                logger.info('DashScope task %s completed', task_id)
+                return data
+            if status in self.FAILURE_STATUSES:
+                out = data.get('output') or {}
+                fail_msg = out.get('message') or out.get('reason') or data.get('message') or ''
+                logger.error('DashScope task %s failed: %s', task_id, fail_msg or data)
+                raise RuntimeError(f'DashScope task {task_id} failed: {fail_msg or data}')
+
+        raise TimeoutError(f'DashScope task {task_id} did not complete within {max_attempts * 5}s')
+
+    # ── Response extraction ───────────────────────────────────────
+
+    def _extract_bytes(self, data: Dict[str, Any]) -> bytes:
+        out = data.get('output') or {}
+        video_url = out.get('video_url') or out.get('url')
+        if not video_url:
+            raise ValueError(
+                f'Cannot extract video URL from DashScope response: keys={list(data.keys())}. '
+                f'First 200 chars: {str(data)[:200]}'
+            )
+        resp = requests.get(video_url, timeout=120)
+        resp.raise_for_status()
+        return resp.content
+
+    def _handle_retry(self, response, url: str, headers: dict, payload: dict, **params) -> requests.Response:
+        # DashScope uses aspect_ratio, not size — the OpenAI size-format retry is irrelevant.
+        return response
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Factory
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def create_adapter(config: Dict[str, Any]) -> AIGCApiAdapter:
     """Factory: create the appropriate API adapter from model config.
@@ -378,6 +516,9 @@ def create_adapter(config: Dict[str, Any]) -> AIGCApiAdapter:
     if provider in ('openai', 'custom'):
         return OpenAICompatibleAdapter(config)
 
+    if provider == 'dashscope':
+        return DashScopeVideoAdapter(config)
+
     raise ValueError(f'Unsupported AIGC API provider: {provider}')
 
 
@@ -388,3 +529,43 @@ def _w_h_to_resolution(width: int, height: int) -> str:
     if height <= 720:
         return '720p'
     return '1080p'
+
+
+_ASPECT_RATIO_PRESETS = {
+    (16, 9): '16:9',
+    (9, 16): '9:16',
+    (4, 3): '4:3',
+    (3, 4): '3:4',
+    (1, 1): '1:1',
+}
+
+
+def _wh_to_aspect_ratio(width: int, height: int) -> str:
+    """Convert WxH to the nearest standard aspect ratio string (16:9 / 9:16 / 4:3 / 3:4 / 1:1).
+
+    Used when the frontend did not pass an explicit ``ratio`` (e.g. 1280x720 → 16:9).
+    """
+    if width <= 0 or height <= 0:
+        return '16:9'
+    import math
+    g = math.gcd(width, height)
+    w, h = width // g, height // g
+    if (w, h) in _ASPECT_RATIO_PRESETS:
+        return _ASPECT_RATIO_PRESETS[(w, h)]
+    # Fallback: nearest preset by decimal ratio
+    ratio = width / height
+    best, best_diff = '16:9', float('inf')
+    for (pw, ph), name in _ASPECT_RATIO_PRESETS.items():
+        diff = abs(pw / ph - ratio)
+        if diff < best_diff:
+            best, best_diff = name, diff
+    return best
+
+
+def _nearest_dashscope_duration(duration: int) -> int:
+    """Snap a requested duration to the values DashScope kling supports (5s / 10s)."""
+    if duration <= 0:
+        return 5
+    if duration <= 7:
+        return 5
+    return 10

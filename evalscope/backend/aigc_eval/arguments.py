@@ -18,7 +18,8 @@ class AIGCModelConfig(BaseArgument):
     provider: Optional[str] = Field(
         None,
         description='API provider. None for local models, "openai" for OpenAI-compatible, '
-                    '"custom" for custom endpoint mapping',
+        '"custom" for custom endpoint mapping, "dashscope" for Aliyun DashScope '
+        'video generation (kling/wanx)',
     )
     api_base: Optional[str] = Field(None, description='API base URL for remote models')
     api_key: Optional[str] = Field(None, description='API key for remote models')
@@ -28,17 +29,17 @@ class AIGCModelConfig(BaseArgument):
     endpoint_template: Optional[str] = Field(
         None,
         description='Custom endpoint path template, e.g. /video/generations. '
-                    'Use "passthrough" to skip path appending entirely.',
+        'Use "passthrough" to skip path appending entirely.',
     )
     param_aliases: Optional[dict] = Field(
         None,
         description='JSON dict mapping standard param names to provider-specific names, '
-                    'e.g. {"duration": "seconds"}',
+        'e.g. {"duration": "seconds"}',
     )
     response_path: Optional[str] = Field(
         None,
         description='JMESPath-style response extraction path, '
-                    'e.g. data[0].b64_json. If unset, auto-detect OpenAI format.',
+        'e.g. data[0].b64_json. If unset, auto-detect OpenAI format.',
     )
     async_poll_url: Optional[str] = Field(
         None,
