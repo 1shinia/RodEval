@@ -11,7 +11,7 @@ import Tabs from '@/components/ui/Tabs'
 import Badge from '@/components/ui/Badge'
 import { BookOpen, X, Database, Layers, FlaskConical, Tag, ExternalLink } from 'lucide-react'
 
-type TabKey = 'all' | 'text' | 'agent' | 'multimodal' | 'rag'
+type TabKey = 'all' | 'text' | 'agent' | 'multimodal' | 'rag' | 'aigc'
 
 /** Strip markdown formatting for a plain-text preview */
 function stripMarkdown(md: string): string {
@@ -40,7 +40,7 @@ export default function BenchmarksPage() {
   // Normalise a raw API entry so all new fields have safe defaults
   // inferCategory: when the backend hasn't been restarted (no `category` field),
   // infer from which list the item came from.
-  const normalize = (e: BenchmarkEntry, inferCategory?: 'llm' | 'vlm'): BenchmarkEntry => ({
+  const normalize = (e: BenchmarkEntry, inferCategory?: 'llm' | 'vlm' | 'aigc'): BenchmarkEntry => ({
     ...e,
     pretty_name: e.pretty_name ?? e.meta?.pretty_name ?? e.name,
     tags: Array.isArray(e.tags) ? e.tags : Array.isArray((e.meta as Record<string, unknown>)?.tags) ? (e.meta as Record<string, unknown>).tags as string[] : [],
@@ -65,7 +65,8 @@ export default function BenchmarksPage() {
             const bMteb = b.name.startsWith('mteb_') ? 0 : b.name === 'ragas' ? 1 : 2
             return aMteb - bMteb || a.name.localeCompare(b.name)
           })
-        setAllBenchmarks([...textList, ...mmList, ...ragList])
+        const aigcList = (res.aigc ?? []).map((e) => normalize(e, 'aigc'))
+        setAllBenchmarks([...textList, ...mmList, ...ragList, ...aigcList])
       })
       .catch((e) => { toast.error(e instanceof Error ? e.message : 'Failed to load benchmarks') })
       .finally(() => setLoading(false))
@@ -93,6 +94,7 @@ export default function BenchmarksPage() {
   const agentCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'agent').length, [allBenchmarks])
   const mmCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'vlm').length, [allBenchmarks])
   const ragCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'rag').length, [allBenchmarks])
+  const aigcCount = useMemo(() => allBenchmarks.filter((b) => b.category === 'aigc').length, [allBenchmarks])
 
   // Filter by tab
   const tabFiltered = useMemo(() => {
@@ -100,6 +102,7 @@ export default function BenchmarksPage() {
     if (tab === 'agent') return allBenchmarks.filter((b) => b.category === 'agent')
     if (tab === 'multimodal') return allBenchmarks.filter((b) => b.category === 'vlm')
     if (tab === 'rag') return allBenchmarks.filter((b) => b.category === 'rag')
+    if (tab === 'aigc') return allBenchmarks.filter((b) => b.category === 'aigc')
     return allBenchmarks
   }, [allBenchmarks, tab])
 
@@ -157,6 +160,7 @@ export default function BenchmarksPage() {
     { key: 'multimodal', label: `${t('benchmarks.multimodal')} (${mmCount})` },
     { key: 'agent', label: `${t('benchmarks.agent')} (${agentCount})` },
     { key: 'rag', label: `${t('benchmarks.rag')} (${ragCount})` },
+    { key: 'aigc', label: `${t('benchmarks.aigc')} (${aigcCount})` },
   ]
 
   if (loading) return <LoadingSpinner />

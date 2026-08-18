@@ -230,7 +230,7 @@ export interface BenchmarkEntry {
   name: string
   pretty_name: string
   tags: string[]
-  category: 'llm' | 'vlm' | 'rag'
+  category: 'llm' | 'vlm' | 'rag' | 'agent' | 'aigc'
   subset_list: string[]
   total_samples: number
   few_shot_num: number
@@ -248,6 +248,7 @@ export interface BenchmarksResponse {
   text?: BenchmarkEntry[]
   multimodal?: BenchmarkEntry[]
   rag?: BenchmarkEntry[]
+  aigc?: BenchmarkEntry[]
 }
 
 export type InvokeStatus = 'ok' | 'error' | 'stopped'

@@ -58,7 +58,7 @@ export async function resumeEvalTask(taskId: string, apiKey?: string): Promise<E
   return apiPost<EvalInvokeResponse>('/api/v1/eval/resume/invoke', body, undefined, 0)
 }
 
-export async function listBenchmarks(type?: 'text' | 'multimodal', all?: boolean): Promise<BenchmarksResponse> {
+export async function listBenchmarks(type?: 'text' | 'multimodal' | 'aigc', all?: boolean): Promise<BenchmarksResponse> {
   const params: Record<string, string> = {}
   if (type) params.type = type
   if (all) params.all = 'true'

@@ -458,7 +458,8 @@ export default function LLMEvalForm({ context }: Props) {
       const jma: Record<string, unknown> = {}
       if (judgeModel.trim()) jma.model_id = judgeModel.trim()
       if (judgeApiUrl.trim()) jma.api_url = judgeApiUrl.trim()
-      if (judgeApiKey.trim()) jma.api_key = judgeApiKey
+      // Fall back to the main API key so a partial judge config never sends a blank key.
+      jma.api_key = judgeApiKey.trim() || apiKey || ''
       jma.eval_type = evalType === 'anthropic' ? 'anthropic_api' : 'openai_api'
       config.judge_model_args = jma
     }

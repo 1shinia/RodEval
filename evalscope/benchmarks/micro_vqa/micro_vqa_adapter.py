@@ -5,7 +5,7 @@ from evalscope.api.dataset import Sample
 from evalscope.api.messages import ChatMessageUser, Content, ContentImage, ContentText
 from evalscope.api.registry import register_benchmark
 from evalscope.constants import Tags
-from evalscope.utils.io_utils import bytes_to_base64
+from evalscope.utils.io_utils import PIL_to_base64, bytes_to_base64
 from evalscope.utils.logger import get_logger
 from evalscope.utils.multi_choices import MultipleChoiceTemplate, answer_character, prompt
 
@@ -68,7 +68,11 @@ class MicroVQAAdapter(VisionLanguageAdapter, MultiChoiceAdapter):
         images = record.get('images_list')
         if len(images) > 0:
             for image in images:
-                image_base64 = bytes_to_base64(image['bytes'], format='png', add_header=True)
+                if isinstance(image, dict):
+                    image_base64 = bytes_to_base64(image['bytes'], format='png', add_header=True)
+                else:
+                    # PIL Image object (e.g. PngImageFile) — encode directly
+                    image_base64 = PIL_to_base64(image, format='png', add_header=True)
                 content_list.append(ContentImage(image=image_base64))
 
         target = answer_character(record['correct_index'])

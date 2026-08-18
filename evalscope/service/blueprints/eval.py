@@ -227,6 +227,14 @@ def _build_task_config_openai(data: dict) -> TaskConfig:
             'api_key': data.get('api_key'),
             'eval_type': api_eval_type,
         }
+    else:
+        # Defensive: ensure the judge always carries an api_key — partial judge
+        # configs from the frontend may omit it (e.g. judge model/url filled but
+        # key left blank), which caused 401 on judge calls.
+        judge_args = data['judge_model_args']
+        if not judge_args.get('api_key'):
+            judge_args['api_key'] = data.get('api_key')
+        data['judge_model_args'] = judge_args
     task_config = TaskConfig.from_dict(data)
     task_config.no_timestamp = True
     task_config.enable_progress_tracker = True
@@ -1087,11 +1095,14 @@ def list_benchmarks():
                 result = {'multimodal': [e for e in all_entries if e.get('category') == 'vlm']}
             elif filter_type == 'rag':
                 result = {'rag': [e for e in all_entries if e.get('category') == 'rag']}
+            elif filter_type == 'aigc':
+                result = {'aigc': [e for e in all_entries if e.get('category') == 'aigc']}
             else:
                 result = {
                     'text': [e for e in all_entries if e.get('category') in ('llm', 'agent')],
                     'multimodal': [e for e in all_entries if e.get('category') == 'vlm'],
                     'rag': [e for e in all_entries if e.get('category') == 'rag'],
+                    'aigc': [e for e in all_entries if e.get('category') == 'aigc'],
                 }
         else:
             # Use the curated default lists (backward-compatible)
@@ -1108,7 +1119,7 @@ def list_benchmarks():
             if filter_type in ('', 'rag'):
                 result['rag'] = [build_benchmark_entry(name) for name in rag_names]
 
-        if filter_type and filter_type not in ('text', 'multimodal', 'rag'):
+        if filter_type and filter_type not in ('text', 'multimodal', 'rag', 'aigc'):
             return jsonify({'error': f"Unknown type '{filter_type}'. Use 'text', 'multimodal', or 'rag'."}), 400
 
         return jsonify(result), 200
