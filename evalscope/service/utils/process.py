@@ -389,77 +389,15 @@ def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwarg
 
 
 def run_eval_wrapper(task_config: TaskConfig):
-    """Run an evaluation task and return the result."""
-    result = run_task(task_config)
-    _persist_eval_report(task_config)
-    return result
+    """Run an evaluation task and return the result.
 
-
-def _persist_eval_report(task_config: TaskConfig) -> None:
-    """Write the evaluation report from disk into the SQLite metadata DB."""
-    try:
-        import time as _time
-        from datetime import datetime
-
-        from evalscope.report.combinator import get_report_list
-        from evalscope.service import db as _db
-        from evalscope.service.db import upsert_eval_report
-
-        # In a spawned subprocess, _db_path is None because init_db() was
-        # only called in the parent.  Initialise it here using the outputs
-        # root (parent of the task's work_dir).
-        if _db._db_path is None:
-            outputs_root = os.path.dirname(task_config.work_dir.rstrip('/'))
-            _db.init_db(outputs_root)
-
-        reports_dir = os.path.join(task_config.work_dir, 'reports')
-        if not os.path.isdir(reports_dir):
-            return
-        report_list = get_report_list([reports_dir])
-        if not report_list:
-            return
-        first = report_list[0]
-        task_id = os.path.basename(task_config.work_dir.rstrip('/'))
-        # Read existing user_id from DB (set by parent process) instead of defaulting
-        existing_uid = _db._get_conn().execute(
-            'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
-        ).fetchone()
-        user_id = existing_uid[0] if existing_uid else 1
-        total_num = sum(r.num or 0 for r in report_list)
-        dataset_names = [r.dataset_name for r in report_list]
-        score_sum = sum(r.score for r in report_list if r.score is not None)
-        avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
-        dataset_scores = {}
-        for r in report_list:
-            score = r.score
-            if score is not None and score > 1:
-                score = score / 100
-            dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
-        for attempt in range(15):
-            try:
-                upsert_eval_report(
-                    task_id=task_id,
-                    model_name=first.model_name,
-                    dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else
-                    (dataset_names[0] if dataset_names else ''),
-                    score=avg_score,
-                    num_samples=total_num,
-                    timestamp=datetime.now().isoformat(),
-                    dataset_scores=dataset_scores,
-                    eval_backend=getattr(task_config, 'eval_backend', ''),
-                    user_id=user_id,
-                )
-                return
-            except Exception as e:
-                if 'locked' not in str(e).lower() or attempt == 14:
-                    raise
-                _time.sleep(1 + attempt * 2 + _time.time() % 2)
-    except Exception as e:
-        from evalscope.utils.logger import get_logger
-        if 'locked' in str(e).lower():
-            get_logger().warning(f'Failed to persist eval report to SQLite after 15 retries (database locked): {e}')
-        else:
-            get_logger().warning(f'Failed to persist eval report to SQLite (non-fatal): {e}')
+    NOTE: report persistence is deliberately NOT done here. The child
+    process only runs the evaluation; the service parent writes the
+    report into SQLite via _execute_task. This keeps SQLite writes at a
+    single point (parent process) so concurrent task completions cannot
+    deadlock on the database write lock.
+    """
+    return run_task(task_config)
 
 
 def run_perf_wrapper(perf_args: PerfArguments):

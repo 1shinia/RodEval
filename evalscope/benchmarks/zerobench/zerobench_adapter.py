@@ -20,6 +20,25 @@ like this: {{final answer}}"
 SUBSET_LIST = ['default']
 
 
+def _guess_image_format(path: Any, image_bytes: bytes) -> str:
+    """Best-effort image format detection from path suffix or bytes magic."""
+    if path:
+        ext = str(path).lower().rsplit('.', 1)[-1]
+        if ext in ('jpg', 'jpeg'):
+            return 'jpeg'
+        if ext in ('png', 'webp', 'gif'):
+            return ext
+    if image_bytes[:4].startswith(b'\xff\xd8'):
+        return 'jpeg'
+    if image_bytes[:4].startswith(b'\x89PNG'):
+        return 'png'
+    if image_bytes[:4] == b'RIFF' and image_bytes[8:12] == b'WEBP':
+        return 'webp'
+    if image_bytes[:3] == b'GIF':
+        return 'gif'
+    return 'png'
+
+
 @register_benchmark(
     BenchmarkMeta(
         name='zerobench',
@@ -74,8 +93,25 @@ class ZeroBenchAdapter(VisionLanguageAdapter):
         image = record['question_images_decoded']
         if len(image) > 0:
             for img in image:
+                # question_images_decoded may arrive either as raw arrow structs
+                # ({'bytes': ..., 'path': ...}) or as PIL Images after dataset
+                # decoding — normalise both to bytes before compression.
+                if isinstance(img, dict):
+                    image_bytes = img['bytes']
+                    default_fmt = _guess_image_format(img.get('path'), image_bytes)
+                else:
+                    import io as _io
+                    buf = _io.BytesIO()
+                    fmt_name = (getattr(img, 'format', None) or 'JPEG').upper()
+                    img.save(buf, format=fmt_name)
+                    image_bytes = buf.getvalue()
+                    default_fmt = fmt_name.lower()
                 # Ensure image is under OpenAI's 10MB data-URI limit by compressing if needed
-                processed_bytes, fmt = compress_image_to_limit(img['bytes'], 10_000_000)
+                processed_bytes, fmt = compress_image_to_limit(image_bytes, 10_000_000)
+                # compress_image_to_limit returns fmt='png' as sentinel when no
+                # compression was applied — fall back to the real format then.
+                if fmt == 'png':
+                    fmt = default_fmt
                 image_base64 = bytes_to_base64(processed_bytes, format=fmt, add_header=True)
                 content_list.append(ContentImage(image=image_base64))
 

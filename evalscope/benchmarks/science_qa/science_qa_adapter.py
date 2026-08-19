@@ -44,14 +44,15 @@ ScienceQA is a multimodal benchmark consisting of multiple-choice science questi
 
 ## Evaluation Notes
 
-- Default evaluation uses the **test** split
+- Default evaluation uses the **validation** split (the AI-ModelScope mirror
+  exposes the ScienceQA test set as ``validation``; there is no ``test`` split)
 - Primary metric: **Accuracy** on multiple-choice questions
 - Uses Chain-of-Thought (CoT) prompting for reasoning
 - Metadata includes solution explanations for analysis
 - Questions span grades from elementary to high school
 """,  # noqa: E501
         metric_list=['acc'],
-        eval_split='test',
+        eval_split='validation',
         prompt_template=MULT_CHOICE_PROMPT,
     )
 )

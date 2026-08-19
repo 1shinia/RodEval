@@ -18,6 +18,12 @@ logger = get_logger()
 _local = threading.local()
 _db_path: str | None = None
 
+# Process-wide write lock. All SQLite write operations (upserts, deletes,
+# task-state mutations) go through this lock so that concurrent request
+# threads (waitress workers) cannot deadlock on the database write lock
+# when multiple tasks complete at the same time. Reads are lock-free.
+_write_lock = threading.Lock()
+
 # ---------------------------------------------------------------------------
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
@@ -249,19 +255,20 @@ def upsert_eval_report(
     eval_backend: str = '',
     user_id: int = 1,
 ) -> None:
-    conn = _get_conn()
-    conn.execute(
-        '''INSERT OR REPLACE INTO eval_reports
-           (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores, eval_backend, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (
-            task_id, model_name, dataset_name, score, num_samples, timestamp,
-            json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
-            eval_backend,
-            user_id,
-        ),
-    )
-    conn.commit()
+    with _write_lock:
+        conn = _get_conn()
+        conn.execute(
+            '''INSERT OR REPLACE INTO eval_reports
+               (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores, eval_backend, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                task_id, model_name, dataset_name, score, num_samples, timestamp,
+                json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
+                eval_backend,
+                user_id,
+            ),
+        )
+        conn.commit()
 
 
 def query_eval_reports(
@@ -388,12 +395,13 @@ def query_eval_reports(
 
 
 def delete_eval_report(task_id: str, user_id: int | None = None) -> None:
-    conn = _get_conn()
-    if user_id is not None:
-        conn.execute('DELETE FROM eval_reports WHERE task_id = ? AND user_id = ?', (task_id, user_id))
-    else:
-        conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id,))
-    conn.commit()
+    with _write_lock:
+        conn = _get_conn()
+        if user_id is not None:
+            conn.execute('DELETE FROM eval_reports WHERE task_id = ? AND user_id = ?', (task_id, user_id))
+        else:
+            conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id,))
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -411,23 +419,24 @@ def upsert_perf_task(
     timestamp: str,
     user_id: int = 1,
 ) -> None:
-    conn = _get_conn()
-    for attempt in range(5):
-        try:
-            conn.execute(
-                '''INSERT OR REPLACE INTO perf_tasks
-                   (task_id, model, api, dataset, runs, has_report, timestamp, user_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                (task_id, model, api, dataset, runs, int(has_report), timestamp, user_id),
-            )
-            conn.commit()
-            return
-        except sqlite3.OperationalError as e:
-            if 'locked' in str(e) and attempt < 4:
-                import time
-                time.sleep(0.1 * (attempt + 1))
-                continue
-            raise
+    with _write_lock:
+        conn = _get_conn()
+        for attempt in range(5):
+            try:
+                conn.execute(
+                    '''INSERT OR REPLACE INTO perf_tasks
+                       (task_id, model, api, dataset, runs, has_report, timestamp, user_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (task_id, model, api, dataset, runs, int(has_report), timestamp, user_id),
+                )
+                conn.commit()
+                return
+            except sqlite3.OperationalError as e:
+                if 'locked' in str(e) and attempt < 4:
+                    import time
+                    time.sleep(0.1 * (attempt + 1))
+                    continue
+                raise
 
 
 def cleanup_perf_tasks(output_dir: str, user_id: int | None = None) -> int:
@@ -435,19 +444,20 @@ def cleanup_perf_tasks(output_dir: str, user_id: int | None = None) -> int:
 
     Returns the number of rows removed.
     """
-    conn = _get_conn()
-    if user_id is not None:
-        rows = conn.execute('SELECT task_id FROM perf_tasks WHERE user_id = ?', (user_id,)).fetchall()
-    else:
-        rows = conn.execute('SELECT task_id FROM perf_tasks').fetchall()
-    stale: list[str] = []
-    for (tid,) in rows:
-        if not os.path.isdir(os.path.join(output_dir, tid)):
-            stale.append(tid)
-    if stale:
-        conn.executemany('DELETE FROM perf_tasks WHERE task_id = ?', [(t,) for t in stale])
-        conn.commit()
-    return len(stale)
+    with _write_lock:
+        conn = _get_conn()
+        if user_id is not None:
+            rows = conn.execute('SELECT task_id FROM perf_tasks WHERE user_id = ?', (user_id,)).fetchall()
+        else:
+            rows = conn.execute('SELECT task_id FROM perf_tasks').fetchall()
+        stale: list[str] = []
+        for (tid,) in rows:
+            if not os.path.isdir(os.path.join(output_dir, tid)):
+                stale.append(tid)
+        if stale:
+            conn.executemany('DELETE FROM perf_tasks WHERE task_id = ?', [(t,) for t in stale])
+            conn.commit()
+        return len(stale)
 
 
 def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
@@ -455,19 +465,20 @@ def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
 
     Returns the number of rows removed.
     """
-    conn = _get_conn()
-    if user_id is not None:
-        rows = conn.execute('SELECT task_id FROM eval_reports WHERE user_id = ?', (user_id,)).fetchall()
-    else:
-        rows = conn.execute('SELECT task_id FROM eval_reports').fetchall()
-    stale: list[str] = []
-    for (tid,) in rows:
-        if not os.path.isdir(os.path.join(output_dir, tid)):
-            stale.append(tid)
-    if stale:
-        conn.executemany('DELETE FROM eval_reports WHERE task_id = ?', [(t,) for t in stale])
-        conn.commit()
-    return len(stale)
+    with _write_lock:
+        conn = _get_conn()
+        if user_id is not None:
+            rows = conn.execute('SELECT task_id FROM eval_reports WHERE user_id = ?', (user_id,)).fetchall()
+        else:
+            rows = conn.execute('SELECT task_id FROM eval_reports').fetchall()
+        stale: list[str] = []
+        for (tid,) in rows:
+            if not os.path.isdir(os.path.join(output_dir, tid)):
+                stale.append(tid)
+        if stale:
+            conn.executemany('DELETE FROM eval_reports WHERE task_id = ?', [(t,) for t in stale])
+            conn.commit()
+        return len(stale)
 
 
 def upsert_aigc_audio_report(output_dir: str, task_id: str, user_id: int = 1) -> bool:
@@ -616,12 +627,13 @@ def query_perf_tasks(
 
 
 def delete_perf_task(task_id: str, user_id: int | None = None) -> None:
-    conn = _get_conn()
-    if user_id is not None:
-        conn.execute('DELETE FROM perf_tasks WHERE task_id = ? AND user_id = ?', (task_id, user_id))
-    else:
-        conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id,))
-    conn.commit()
+    with _write_lock:
+        conn = _get_conn()
+        if user_id is not None:
+            conn.execute('DELETE FROM perf_tasks WHERE task_id = ? AND user_id = ?', (task_id, user_id))
+        else:
+            conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id,))
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -640,24 +652,26 @@ def upsert_task_state(
 
     Status values: 'running', 'completed', 'failed', 'stopped', 'orphaned'.
     """
-    conn = _get_conn()
-    now = datetime.now().isoformat()
-    conn.execute(
-        '''INSERT INTO task_state (task_id, task_type, status, pid, model, started_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(task_id) DO UPDATE SET
-               status = excluded.status,
-               pid = excluded.pid,
-               updated_at = excluded.updated_at''',
-        (task_id, task_type, status, pid, model, now, now),
-    )
-    conn.commit()
+    with _write_lock:
+        conn = _get_conn()
+        now = datetime.now().isoformat()
+        conn.execute(
+            '''INSERT INTO task_state (task_id, task_type, status, pid, model, started_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(task_id) DO UPDATE SET
+                   status = excluded.status,
+                   pid = excluded.pid,
+                   updated_at = excluded.updated_at''',
+            (task_id, task_type, status, pid, model, now, now),
+        )
+        conn.commit()
 
 
 def delete_task_state(task_id: str) -> None:
-    conn = _get_conn()
-    conn.execute('DELETE FROM task_state WHERE task_id = ?', (task_id, ))
-    conn.commit()
+    with _write_lock:
+        conn = _get_conn()
+        conn.execute('DELETE FROM task_state WHERE task_id = ?', (task_id, ))
+        conn.commit()
 
 
 def list_running_tasks() -> list[dict]:
@@ -783,6 +797,68 @@ def _pid_alive(pid: int) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _parse_mteb_results_dir(work_dir: str) -> list:
+    """Parse MTEB JSON results from a RAG task's results/ directory.
+
+    Mirrors ``evalscope.service.blueprints.eval._parse_mteb_results`` so the
+    backfill path indexes RAG tasks identically to live evaluation.  Returns
+    a list of SimpleNamespace objects with model_name/dataset_name/score/num.
+    """
+    from types import SimpleNamespace
+
+    results_dir = os.path.join(work_dir, 'results')
+    reports: list = []
+    if not os.path.isdir(results_dir):
+        return reports
+
+    # Sample count: prefer eval_config.eval.limits, else -1 (full dataset)
+    num_samples = -1
+    try:
+        import yaml as _yaml
+        config_path = os.path.join(work_dir, 'configs', 'task_config.yaml')
+        if os.path.isfile(config_path):
+            with open(config_path) as cf:
+                cfg = _yaml.safe_load(cf) or {}
+            limits = cfg.get('eval_config', {}).get('eval', {}).get('limits')
+            if limits is not None:
+                num_samples = int(limits)
+    except Exception:
+        pass
+
+    for root, dirs, files in os.walk(results_dir):
+        for fname in files:
+            if not fname.endswith('.json') or fname == 'model_meta.json':
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                task_name = data.get('task_name', fname.replace('.json', ''))
+                scores = data.get('scores', {})
+                # Model name from path: results/eval__model_name/master/...
+                rel_path = os.path.relpath(fpath, results_dir)
+                parts = rel_path.split(os.sep)
+                model_name = parts[0].replace('eval__', '') if parts else 'unknown'
+                # main_score from first split (usually 'test')
+                main_score = None
+                for split_data in scores.values():
+                    if isinstance(split_data, list) and split_data:
+                        main_score = split_data[0].get('main_score')
+                        break
+                if main_score is not None:
+                    reports.append(
+                        SimpleNamespace(
+                            model_name=model_name,
+                            dataset_name=task_name,
+                            score=main_score,
+                            num=num_samples,
+                        )
+                    )
+            except Exception as e:
+                logger.warning(f'Backfill: failed to parse MTEB result {fpath}: {e}')
+    return reports
+
+
 def backfill(output_dir: str) -> None:
     """Scan existing output directories and populate the metadata DB.
 
@@ -899,6 +975,79 @@ def backfill(output_dir: str) -> None:
     except Exception as e:
         logger.warning(f'Backfill: AIGC/Audio reports failed: {e}')
 
+    # --- Backfill RAG (MTEB) reports from results/ directories ---
+    # RAG tasks store MTEB JSON under <task_dir>/results/ (no reports/ dir),
+    # so the generic scan_for_report_folders path above never indexes them.
+    try:
+        rag_count = 0
+        rag_skipped = 0
+        existing_rag = {r[0] for r in conn.execute("SELECT task_id FROM eval_reports").fetchall()}
+        for entry in sorted(os.listdir(output_dir)):
+            if entry in existing_rag:
+                continue
+            task_dir = os.path.join(output_dir, entry)
+            if not os.path.isdir(task_dir):
+                continue
+            results_dir = os.path.join(task_dir, 'results')
+            if not os.path.isdir(results_dir):
+                continue
+            # Only index tasks that are actually RAG evals
+            backend = ''
+            try:
+                import yaml as _yaml
+                config_path = os.path.join(task_dir, 'configs', 'task_config.yaml')
+                if os.path.isfile(config_path):
+                    with open(config_path) as cf:
+                        cfg = _yaml.safe_load(cf) or {}
+                    backend = cfg.get('eval_backend', '')
+            except Exception:
+                pass
+            if backend != 'RAGEval':
+                continue
+            report_list = _parse_mteb_results_dir(task_dir)
+            if not report_list:
+                rag_skipped += 1
+                continue
+            first = report_list[0]
+            total_num = sum(r.num or 0 for r in report_list)
+            dataset_names = [r.dataset_name for r in report_list]
+            score_sum = sum(r.score for r in report_list if r.score is not None)
+            avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
+            dataset_scores = {}
+            for r in report_list:
+                score = r.score
+                if score is not None and score > 1:
+                    score = score / 100
+                dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
+            # Timestamp from directory name (eval_<ts>) or mtime
+            timestamp = ''
+            try:
+                import re as _re
+                m = _re.search(r'(\d{14})', entry)
+                if m:
+                    timestamp = datetime.strptime(m.group(1), '%Y%m%d%H%M%S').isoformat()
+            except ValueError:
+                pass
+            if not timestamp:
+                timestamp = datetime.fromtimestamp(os.path.getmtime(task_dir)).isoformat()
+            upsert_eval_report(
+                task_id=entry,
+                model_name=first.model_name,
+                dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else
+                (dataset_names[0] if dataset_names else ''),
+                score=avg_score,
+                num_samples=total_num,
+                timestamp=timestamp,
+                dataset_scores=dataset_scores,
+                eval_backend='RAGEval',
+                user_id=1,  # backfill: all existing data → admin
+            )
+            rag_count += 1
+        if rag_count:
+            logger.info(f'Backfill: indexed {rag_count} RAG reports ({rag_skipped} skipped)')
+    except Exception as e:
+        logger.warning(f'Backfill: RAG reports failed: {e}')
+
     # --- Backfill perf tasks ---
     try:
         perf_count = 0
@@ -998,14 +1147,15 @@ def save_compare_report(name: str, task_ids_json: str, task_count: int, backend:
     """Save a compare report and return its ID."""
     from datetime import datetime
 
-    conn = _get_conn()
-    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    conn.execute(
-        'INSERT INTO compare_reports (name, task_ids, created_at, task_count, backend, root_path, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        (name, task_ids_json, created_at, task_count, backend, root_path, user_id),
-    )
-    conn.commit()
-    return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+    with _write_lock:
+        conn = _get_conn()
+        created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute(
+            'INSERT INTO compare_reports (name, task_ids, created_at, task_count, backend, root_path, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (name, task_ids_json, created_at, task_count, backend, root_path, user_id),
+        )
+        conn.commit()
+        return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
 
 
 def list_compare_reports(user_id: int = 1) -> list[dict]:

@@ -12,7 +12,7 @@
       "acc"
     ],
     "few_shot_num": 0,
-    "eval_split": "test",
+    "eval_split": "validation",
     "train_split": "",
     "subset_list": [
       "default"
