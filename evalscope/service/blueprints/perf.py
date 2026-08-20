@@ -60,6 +60,31 @@ BATCH_CSV_TEMPLATE = os.path.join(os.path.dirname(OUTPUT_DIR), 'data', 'model_li
 BATCH_UPLOAD_DIR = os.path.join(OUTPUT_DIR, '_batch_uploads')
 
 
+def _mark_perf_completed(task_id: str) -> None:
+    """Write a ``completed`` progress.json marker for a finished perf task.
+
+    Perf task dirs do not otherwise write progress.json, so the startup
+    retention cleanup (log.py ``cleanup_old_task_logs``) treats every perf
+    dir as incomplete and deletes it after the 7-day retention window.
+    This marker aligns perf dirs with completed eval dirs, which are kept
+    forever. Called after a perf task finishes successfully.
+    """
+    from datetime import datetime
+
+    try:
+        pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+        os.makedirs(os.path.dirname(pj), exist_ok=True)
+        with open(pj, 'w', encoding='utf-8') as f:
+            json.dump({
+                'status': 'completed',
+                'phase': 'completed',
+                'pipeline': 'perf',
+                'updated_at': datetime.now().isoformat(),
+            }, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f'[{task_id}] Failed to write perf completion marker: {e}')
+
+
 @bp_perf.route('/template', methods=['GET'])
 def download_template():
     """Download the model list CSV template."""
@@ -689,6 +714,7 @@ def run_performance_test():
             )
             table_str = _build_perf_table(result, api_type=perf_args.api)
             logger.info(f'[{task_id}] Task completed successfully')
+            _mark_perf_completed(task_id)
 
             # Write to SQLite
             try:
@@ -815,6 +841,7 @@ def launch_performance_test():
                     )
                     table_str = _build_perf_table(result, api_type=perf_args.api)
                     logger.info(f'[{task_id}] Task completed successfully')
+                    _mark_perf_completed(task_id)
 
                     try:
                         from datetime import datetime
@@ -971,6 +998,7 @@ def resume_performance_test():
             )
             table_str = _build_perf_table(result, api_type=perf_args.api)
             logger.info(f'[{task_id}] Task completed successfully')
+            _mark_perf_completed(task_id)
 
             # Update SQLite
             try:

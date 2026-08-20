@@ -316,8 +316,8 @@ class Arguments(BaseArgument):
     stream: Optional[bool] = True
     """Whether to stream the response."""
 
-    temperature: float = 0.0
-    """Temperature setting for the response."""
+    temperature: Optional[float] = None
+    """Temperature setting for the response. None = omit from request, use gateway default."""
 
     top_p: Optional[float] = None
     """Top-p (nucleus) sampling setting for the response."""
@@ -693,7 +693,7 @@ def add_argument(parser: argparse.ArgumentParser):
     parser.add_argument('--stop', nargs='*', help='The stop tokens', default=None)
     parser.add_argument('--stop-token-ids', nargs='*', help='Set the stop token IDs', default=None)
     parser.add_argument('--stream', action=argparse.BooleanOptionalAction, help='Stream output with SSE', default=True)
-    parser.add_argument('--temperature', type=float, help='The sample temperature', default=0.0)
+    parser.add_argument('--temperature', type=float, help='The sample temperature (omit to use gateway default)', default=None)
     parser.add_argument('--top-p', type=float, help='Sampling top p', default=None)
     parser.add_argument('--top-k', type=int, help='Sampling top k', default=None)
     parser.add_argument('--extra-args', type=json.loads, default='{}', help='Extra arguments, should in JSON format',)

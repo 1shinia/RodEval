@@ -237,6 +237,13 @@ def cleanup_old_task_logs() -> dict:
             skipped_completed += 1
             continue
 
+        # Perf tasks never write progress.json; a finished run is marked by
+        # its generated report. Treat it as completed so the retention
+        # cleanup keeps perf results instead of deleting them after 7 days.
+        if os.path.isfile(os.path.join(entry.path, 'perf', 'perf_report.html')):
+            skipped_completed += 1
+            continue
+
         # Determine age: prefer progress.json updated_at, fall back to mtime.
         ts = _parse_timestamp(updated_at)
         if ts is None:
