@@ -7,6 +7,8 @@ Implements the MTEB 2.x evaluation flow with optional two-stage
 """
 import mteb
 import os
+import sys
+from contextlib import contextmanager
 from datasets import DatasetDict
 from pathlib import Path
 from tabulate import tabulate
@@ -17,6 +19,31 @@ from evalscope.backend.rag_eval.mteb.arguments import CustomTaskConfig, MTEBEval
 from evalscope.utils.logger import get_logger
 
 logger = get_logger()
+
+
+@contextmanager
+def _redirect_stderr_to_logger():
+    """Forward mteb/tqdm stderr progress output into the eval logger.
+
+    mteb.evaluate() prints its progress bars (tqdm) to stderr, which is
+    captured by the service pipe and never reaches eval_log.log.  Tee stderr
+    lines through the logger so progress is visible in task logs.
+    """
+    class _Tee:
+        def write(self, message: str):
+            if message and message.strip():
+                logger.info(message.rstrip('\n'))
+            return len(message)
+
+        def flush(self):
+            pass
+
+    old_stderr = sys.stderr
+    try:
+        sys.stderr = _Tee()  # type: ignore[assignment]
+        yield
+    finally:
+        sys.stderr = old_stderr
 
 
 def run_mteb_eval(config: MTEBToolConfig):
@@ -35,18 +62,19 @@ def run_mteb_eval(config: MTEBToolConfig):
     encoders = [m for m in models if not m.is_cross_encoder]
     rerankers = [m for m in models if m.is_cross_encoder]
 
-    if len(encoders) == 1 and len(rerankers) == 1:
-        tasks = resolve_tasks(eval_args)
-        has_retrieval = any(getattr(t.metadata, 'type', None) == 'Retrieval' for t in tasks)
-        if has_retrieval:
-            return two_stage_eval(encoders[0], rerankers[0], eval_args)
-        else:
-            return one_stage_eval(rerankers[0], eval_args)
+    with _redirect_stderr_to_logger():
+        if len(encoders) == 1 and len(rerankers) == 1:
+            tasks = resolve_tasks(eval_args)
+            has_retrieval = any(getattr(t.metadata, 'type', None) == 'Retrieval' for t in tasks)
+            if has_retrieval:
+                return two_stage_eval(encoders[0], rerankers[0], eval_args)
+            else:
+                return one_stage_eval(rerankers[0], eval_args)
 
-    results = None
-    for model_config in models:
-        results = one_stage_eval(model_config, eval_args)
-    return results
+        results = None
+        for model_config in models:
+            results = one_stage_eval(model_config, eval_args)
+        return results
 
 
 def resolve_tasks(eval_args: MTEBEvalConfig) -> list:
@@ -148,6 +176,12 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
     work_dir = eval_args.output_folder
     task_names = [t.metadata.name for t in tasks]
     total_tasks = len(tasks)
+
+    # Enable incremental encode progress (writes percent into progress.json)
+    try:
+        model.progress_path = os.path.join(work_dir, 'progress.json')
+    except Exception:
+        pass
 
     # ── Write initial progress ──────────────────────────────────────
     _write_progress(
@@ -268,6 +302,13 @@ def two_stage_eval(
     stage1_path = os.path.join(eval_args.output_folder, 'stage1')
     stage2_path = os.path.join(eval_args.output_folder, 'stage2')
     stage1_predictions = Path(stage1_path) / 'predictions'
+
+    # Enable incremental encode progress
+    try:
+        encoder.progress_path = os.path.join(eval_args.output_folder, 'progress.json')
+        reranker.progress_path = os.path.join(eval_args.output_folder, 'progress.json')
+    except Exception:
+        pass
 
     logger.info('=== Stage 1: Encoder retrieval ===')
     eval_kwargs_s1 = _build_evaluate_kwargs(

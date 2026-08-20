@@ -26,6 +26,40 @@ except ImportError:
     _PROMPT_TYPE_QUERY = 'query'
 
 
+def _update_progress(progress_path: Optional[str], done_batches: int, total_batches: int) -> None:
+    """Incrementally update progress.json percent from the encode loop.
+
+    mteb calls encode() in batches; each completed batch refreshes the
+    percent field so the frontend/SSE can show live encode progress.
+    Non-fatal: any failure just skips the write.
+    """
+    if not progress_path:
+        return
+    try:
+        import json as _json
+        import os
+        percent = min(round(done_batches / max(1, total_batches) * 100, 2), 100.0)
+        state = None
+        if os.path.exists(progress_path):
+            with open(progress_path, 'r') as f:
+                state = _json.load(f)
+        if state is None or not isinstance(state, dict):
+            state = {}
+        state['status'] = 'running'
+        state['phase'] = 'evaluating'
+        state['processed_count'] = done_batches
+        state['total_count'] = total_batches
+        state['percent'] = percent
+        from evalscope.utils.io_utils import current_time
+        state['updated_at'] = current_time().isoformat()
+        tmp = progress_path + '.tmp'
+        with open(tmp, 'w') as f:
+            _json.dump(state, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, progress_path)
+    except Exception:
+        pass
+
+
 class SentenceTransformerEncoder(BaseEncoder):
     """Encoder wrapping sentence-transformers SentenceTransformer.
 
@@ -228,8 +262,11 @@ class APIEncoder(BaseEncoder):
         self.prompt = prompt
         self.prompts = prompts or {}
         self.framework = ['API']
-        self.batch_size = batch_size
+        # unitoken 等网关限制单次 embeddings 请求 batch 上限 20，超限报 400
+        self.batch_size = min(batch_size, 20) if batch_size else 20
         self.max_seq_length = max_seq_length
+        # Optional path to progress.json for incremental encode progress
+        self.progress_path: Optional[str] = None
 
         self._client = OpenAIEmbeddings(
             model=model_name,
@@ -282,10 +319,12 @@ class APIEncoder(BaseEncoder):
                 encode_kwargs[key] = val
 
         embeddings: List[List[float]] = []
-        for i in tqdm(range(0, len(texts), self.batch_size)):
-            batch_texts = texts[i:i + self.batch_size]
+        total_batches = max(1, (len(texts) + self.batch_size - 1) // self.batch_size)
+        for i, _ in enumerate(tqdm(range(0, len(texts), self.batch_size))):
+            batch_texts = texts[i * self.batch_size:(i + 1) * self.batch_size]
             if prompt is not None:
                 batch_texts = [prompt + text for text in batch_texts]
             response = self._client.embed_documents(batch_texts, chunk_size=self.batch_size, **encode_kwargs)
             embeddings.extend(response)
+            _update_progress(self.progress_path, i + 1, total_batches)
         return torch.tensor(embeddings)

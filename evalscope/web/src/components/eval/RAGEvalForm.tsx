@@ -230,9 +230,10 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
     } else {
       modelConfig.model_name_or_path = ragModelPath.trim()
       if (ragMaxSeqLen) modelConfig.max_seq_length = Number(ragMaxSeqLen)
-      if (ragBatchSize) modelConfig.encode_kwargs = { batch_size: Number(ragBatchSize) }
       if (ragTool === 'embedding' && ragPooling) modelConfig.pooling_mode = ragPooling
     }
+    // API 与本地模式均生效：encode batch_size
+    if (ragBatchSize) modelConfig.encode_kwargs = { batch_size: Number(ragBatchSize) }
 
     const models: Record<string, unknown>[] = [modelConfig]
     if (ragTwoStage && ragEncoderModel.trim()) {
@@ -318,7 +319,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
                 <FormField label={t('eval.ragBatchSize')}>
                   <input type="number" value={ragBatchSize}
                     onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
-                    className={FORM_INPUT_CLASS} placeholder="1" />
+                    className={FORM_INPUT_CLASS} placeholder="20（网关上限）" />
                 </FormField>
               </>
             )}
@@ -338,7 +339,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
                 <FormField label={t('eval.ragBatchSize')}>
                   <input type="number" value={ragBatchSize}
                     onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
-                    className={FORM_INPUT_CLASS} placeholder="1" />
+                    className={FORM_INPUT_CLASS} placeholder="20（网关上限）" />
                 </FormField>
                 {ragTool === 'embedding' && (
                   <FormField label={t('eval.ragPoolingMode')}>

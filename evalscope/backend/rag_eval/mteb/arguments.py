@@ -22,7 +22,7 @@ class MTEBModelConfig(BaseArgument):
     prompt: Optional[str] = None
     prompts: Optional[Dict[str, str]] = None
     model_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    encode_kwargs: Dict[str, Any] = Field(default_factory=lambda: {'batch_size': 1})
+    encode_kwargs: Dict[str, Any] = Field(default_factory=lambda: {'batch_size': 20})
     hub: str = 'modelscope'
     # API model fields
     model_name: Optional[str] = None

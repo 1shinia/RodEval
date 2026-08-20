@@ -26,6 +26,7 @@ class BaseEncoder(ABC):
     model_name_or_path: str
     revision: Optional[str]
     framework: List[str]
+    progress_path: Optional[str] = None  # optional progress.json path for live percent updates
 
     @abstractmethod
     def encode(self, texts: Union[str, List[str]], **kwargs: Any) -> Array:
@@ -146,6 +147,7 @@ class BaseReranker(ABC):
     model_name_or_path: str
     revision: Optional[str]
     framework: List[str]
+    progress_path: Optional[str] = None  # optional progress.json path for live percent updates
 
     @abstractmethod
     def predict(self, sentences: List[List[str]], **kwargs: Any) -> Array:
