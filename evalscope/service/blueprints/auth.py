@@ -38,8 +38,8 @@ def _create_token(user: dict) -> str:
         'sub': str(user['id']),
         'username': user['username'],
         'role': user['role'],
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=_JWT_EXPIRY_HOURS),
-        'iat': datetime.datetime.utcnow(),
+        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=_JWT_EXPIRY_HOURS),
+        'iat': datetime.datetime.now(datetime.timezone.utc),
     }
     return jwt.encode(payload, _JWT_SECRET, algorithm='HS256')
 
@@ -54,7 +54,7 @@ def _is_blacklisted(jti: str) -> bool:
 def _blacklist_token(jti: str, exp: float) -> None:
     """Add a token jti to the blacklist with its expiry for cleanup."""
     conn = _get_conn()
-    exp_str = datetime.datetime.utcfromtimestamp(exp).isoformat()
+    exp_str = datetime.datetime.fromtimestamp(exp, datetime.timezone.utc).isoformat()
     conn.execute('INSERT OR IGNORE INTO token_blacklist (jti, expires_at) VALUES (?, ?)', (jti, exp_str))
     conn.commit()
 
@@ -62,7 +62,7 @@ def _blacklist_token(jti: str, exp: float) -> None:
 def _cleanup_expired_tokens() -> None:
     """Remove expired tokens from the blacklist."""
     conn = _get_conn()
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn.execute('DELETE FROM token_blacklist WHERE expires_at < ?', (now,))
     conn.commit()
 
@@ -147,7 +147,7 @@ def register():
         return jsonify({'error': '用户名已存在'}), 409
 
     pw_hash = generate_password_hash(password)
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn.execute(
         'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
         (username, pw_hash, 'user', now),
@@ -275,7 +275,7 @@ def create_user():
     if existing:
         return jsonify({'error': '用户名已存在'}), 409
     pw_hash = generate_password_hash(password)
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn.execute(
         'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
         (username, pw_hash, role, now),

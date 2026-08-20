@@ -7,6 +7,16 @@ export function getAuthHeaders(): Record<string, string> {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    // 401 = 会话失效（token 过期/被吊销/无效）。登录请求走 AuthContext 的
+    // 原生 fetch，不经过这里，所以此处 401 一律视为会话死亡：
+    // 清掉本地会话并跳回登录页。
+    if (res.status === 401) {
+      localStorage.removeItem('evalscope_token')
+      localStorage.removeItem('evalscope_user')
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login'
+      }
+    }
     const body = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(body.error || `HTTP ${res.status}`)
   }
