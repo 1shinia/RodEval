@@ -100,6 +100,74 @@ def _parse_mteb_results(work_dir: str) -> List:
     return reports
 
 
+def _parse_clip_results(work_dir: str) -> List:
+    """Parse CLIP Benchmark JSON results from <task_dir>/<model_name>/*.json.
+
+    CLIP format (one file per model/dataset/task combination):
+    {
+      "dataset": "mnist",
+      "model": "chinese-clip-vit-base-patch16",
+      "task": "zeroshot_classification",
+      "metrics": {"acc1": 1.0, "acc5": 1.0, "mean_per_class_recall": 1.0},
+      "num_samples": N
+    }
+
+    Metrics are nested under ``metrics`` with keys like acc1 / acc5 /
+    mean_average_precision / recall_at_k, so the primary score is picked by
+    priority (acc1 → mean_average_precision → recall_at_1 → recall_at_5 →
+    first numeric metric).  Tasks without any numeric metric (e.g. image
+    caption data conversion) are skipped.
+
+    Returns a list of objects with model_name, dataset_name, score, num.
+    """
+    from types import SimpleNamespace
+
+    reports: List = []
+    if not os.path.isdir(work_dir):
+        return reports
+
+    _SKIP_DIRS = {'configs', 'logs', 'predictions', 'reviews', 'reports', 'results'}
+    for model_dir_name in sorted(os.listdir(work_dir)):
+        model_dir = os.path.join(work_dir, model_dir_name)
+        if not os.path.isdir(model_dir) or model_dir_name.startswith('.') or model_dir_name in _SKIP_DIRS:
+            continue
+        for fname in sorted(os.listdir(model_dir)):
+            if not fname.endswith('.json'):
+                continue
+            fpath = os.path.join(model_dir, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                metrics = data.get('metrics') or {}
+                score = None
+                for key in ('acc1', 'mean_average_precision', 'recall_at_1', 'recall_at_5', 'acc5'):
+                    if key in metrics and isinstance(metrics[key], (int, float)) and not isinstance(metrics[key], bool):
+                        score = float(metrics[key])
+                        break
+                if score is None:
+                    for v in metrics.values():
+                        if isinstance(v, (int, float)) and not isinstance(v, bool):
+                            score = float(v)
+                            break
+                if score is None:
+                    logger.warning(f'Skip CLIP result {fpath}: no numeric metric in {metrics}')
+                    continue
+                if score > 1:
+                    score = score / 100
+                reports.append(
+                    SimpleNamespace(
+                        model_name=data.get('model', model_dir_name),
+                        dataset_name=data.get('dataset', fname.replace('.json', '')),
+                        score=score,
+                        num=data.get('num_samples', -1),
+                    )
+                )
+            except Exception as e:
+                logger.warning(f'Failed to parse CLIP result {fpath}: {e}')
+
+    return reports
+
+
 def _read_mteb_sample_count(work_dir: str) -> int:
     """Read sample count from MTEB task config.
 
@@ -324,8 +392,19 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             current_uid = user_id if user_id is not None else get_current_user_id()
 
             if task_config.eval_backend == EvalBackend.RAG_EVAL:
-                # MTEB results are in results/ with MTEB JSON format
-                report_list = _parse_mteb_results(task_config.work_dir)
+                # RAG backend hosts multiple tools with different result layouts:
+                # mteb → results/ with MTEB JSON format, clip_benchmark →
+                # <model_name>/<dataset>_<task>.json.  Route by tool so each
+                # format is parsed correctly.
+                try:
+                    rag_cfg = task_config.eval_config
+                    rag_tool = rag_cfg.get('tool', 'mteb') if isinstance(rag_cfg, dict) else 'mteb'
+                except Exception:
+                    rag_tool = 'mteb'
+                if rag_tool == 'clip_benchmark':
+                    report_list = _parse_clip_results(task_config.work_dir)
+                else:
+                    report_list = _parse_mteb_results(task_config.work_dir)
             else:
                 from evalscope.report.combinator import get_report_list
                 reports_dir = os.path.join(task_config.work_dir, 'reports')

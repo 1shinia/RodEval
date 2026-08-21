@@ -859,6 +859,61 @@ def _parse_mteb_results_dir(work_dir: str) -> list:
     return reports
 
 
+def _parse_clip_results_dir(work_dir: str) -> list:
+    """Parse CLIP Benchmark JSON results from <task_dir>/<model_name>/*.json.
+
+    Mirrors ``evalscope.service.blueprints.eval._parse_clip_results`` so the
+    backfill path indexes CLIP tasks identically to live evaluation.  Returns
+    a list of SimpleNamespace objects with model_name/dataset_name/score/num.
+    """
+    from types import SimpleNamespace
+
+    reports: list = []
+    if not os.path.isdir(work_dir):
+        return reports
+
+    _SKIP_DIRS = {'configs', 'logs', 'predictions', 'reviews', 'reports', 'results'}
+    for model_dir_name in sorted(os.listdir(work_dir)):
+        model_dir = os.path.join(work_dir, model_dir_name)
+        if not os.path.isdir(model_dir) or model_dir_name.startswith('.') or model_dir_name in _SKIP_DIRS:
+            continue
+        for fname in sorted(os.listdir(model_dir)):
+            if not fname.endswith('.json'):
+                continue
+            fpath = os.path.join(model_dir, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                metrics = data.get('metrics') or {}
+                score = None
+                for key in ('acc1', 'mean_average_precision', 'recall_at_1', 'recall_at_5', 'acc5'):
+                    if key in metrics and isinstance(metrics[key], (int, float)) and not isinstance(metrics[key], bool):
+                        score = float(metrics[key])
+                        break
+                if score is None:
+                    for v in metrics.values():
+                        if isinstance(v, (int, float)) and not isinstance(v, bool):
+                            score = float(v)
+                            break
+                if score is None:
+                    logger.warning(f'Backfill: skip CLIP result {fpath}: no numeric metric in {metrics}')
+                    continue
+                if score > 1:
+                    score = score / 100
+                reports.append(
+                    SimpleNamespace(
+                        model_name=data.get('model', model_dir_name),
+                        dataset_name=data.get('dataset', fname.replace('.json', '')),
+                        score=score,
+                        num=data.get('num_samples', -1),
+                    )
+                )
+            except Exception as e:
+                logger.warning(f'Backfill: failed to parse CLIP result {fpath}: {e}')
+
+    return reports
+
+
 def backfill(output_dir: str) -> None:
     """Scan existing output directories and populate the metadata DB.
 
@@ -1047,6 +1102,72 @@ def backfill(output_dir: str) -> None:
             logger.info(f'Backfill: indexed {rag_count} RAG reports ({rag_skipped} skipped)')
     except Exception as e:
         logger.warning(f'Backfill: RAG reports failed: {e}')
+
+    # --- Backfill CLIP Benchmark reports from <model_name>/*.json ---
+    # CLIP tasks write results to <task_dir>/<model_name>/<dataset>_<task>.json
+    # (no reports/, results.json or MTEB results/ dir), so none of the paths
+    # above index them.  Detect via progress.json pipeline == clip_benchmark.
+    try:
+        clip_count = 0
+        existing_clip = {r[0] for r in conn.execute('SELECT task_id FROM eval_reports').fetchall()}
+        for entry in sorted(os.listdir(output_dir)):
+            if entry in existing_clip:
+                continue
+            task_dir = os.path.join(output_dir, entry)
+            if not os.path.isdir(task_dir):
+                continue
+            pj_path = os.path.join(task_dir, 'progress.json')
+            if not os.path.isfile(pj_path):
+                continue
+            try:
+                with open(pj_path, encoding='utf-8') as f:
+                    pj = json.load(f)
+            except Exception:
+                continue
+            if pj.get('pipeline') != 'clip_benchmark' or pj.get('status') != 'completed':
+                continue
+            report_list = _parse_clip_results_dir(task_dir)
+            if not report_list:
+                continue
+            first = report_list[0]
+            total_num = sum(r.num or 0 for r in report_list)
+            dataset_names = [r.dataset_name for r in report_list]
+            score_sum = sum(r.score for r in report_list if r.score is not None)
+            avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
+            dataset_scores = {}
+            for r in report_list:
+                score = r.score
+                if score is not None and score > 1:
+                    score = score / 100
+                dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
+            # Timestamp from directory name (eval_<ts>) or mtime
+            timestamp = ''
+            try:
+                import re as _re
+                m = _re.search(r'(\d{14})', entry)
+                if m:
+                    timestamp = datetime.strptime(m.group(1), '%Y%m%d%H%M%S').isoformat()
+            except ValueError:
+                pass
+            if not timestamp:
+                timestamp = datetime.fromtimestamp(os.path.getmtime(task_dir)).isoformat()
+            upsert_eval_report(
+                task_id=entry,
+                model_name=first.model_name,
+                dataset_name=', '.join(dataset_names) if len(dataset_names) > 1 else
+                (dataset_names[0] if dataset_names else ''),
+                score=avg_score,
+                num_samples=total_num,
+                timestamp=timestamp,
+                dataset_scores=dataset_scores,
+                eval_backend='RAGEval',
+                user_id=1,  # backfill: all existing data → admin
+            )
+            clip_count += 1
+        if clip_count:
+            logger.info(f'Backfill: indexed {clip_count} CLIP Benchmark reports')
+    except Exception as e:
+        logger.warning(f'Backfill: CLIP reports failed: {e}')
 
     # --- Backfill perf tasks ---
     try:
