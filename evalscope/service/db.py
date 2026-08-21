@@ -227,16 +227,22 @@ def checkpoint_db() -> dict:
 
     Returns a dict with ``busy``, ``log``, ``checkpointed`` page counts.
     Call after bulk writes (e.g. backfill) or periodically on a busy server.
+    Never raises: a failed checkpoint (e.g. a reader holding a snapshot)
+    is a non-fatal condition — the WAL is simply kept for later.
     """
-    conn = _get_conn()
-    # TRUNCATE: reset the WAL file to zero bytes after checkpoint
-    row = conn.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
-    result = {'busy': row[0], 'log': row[1], 'checkpointed': row[2]}
-    if result['checkpointed'] > 0:
-        logger.debug(
-            'WAL checkpoint: %d pages moved, %d in log, %d busy', result['checkpointed'], result['log'], result['busy']
-        )
-    return result
+    try:
+        conn = _get_conn()
+        # TRUNCATE: reset the WAL file to zero bytes after checkpoint
+        row = conn.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
+        result = {'busy': row[0], 'log': row[1], 'checkpointed': row[2]}
+        if result['checkpointed'] > 0:
+            logger.debug(
+                'WAL checkpoint: %d pages moved, %d in log, %d busy', result['checkpointed'], result['log'], result['busy']
+            )
+        return result
+    except Exception as e:
+        logger.warning(f'WAL checkpoint skipped (non-fatal): {e}')
+        return {'busy': -1, 'log': 0, 'checkpointed': 0}
 
 
 # ---------------------------------------------------------------------------
@@ -257,18 +263,34 @@ def upsert_eval_report(
 ) -> None:
     with _write_lock:
         conn = _get_conn()
-        conn.execute(
-            '''INSERT OR REPLACE INTO eval_reports
-               (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores, eval_backend, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (
-                task_id, model_name, dataset_name, score, num_samples, timestamp,
-                json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
-                eval_backend,
-                user_id,
-            ),
-        )
-        conn.commit()
+        for attempt in range(5):
+            try:
+                conn.execute(
+                    '''INSERT OR REPLACE INTO eval_reports
+                       (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores, eval_backend, user_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (
+                        task_id, model_name, dataset_name, score, num_samples, timestamp,
+                        json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
+                        eval_backend,
+                        user_id,
+                    ),
+                )
+                conn.commit()
+                return
+            except sqlite3.OperationalError as e:
+                # Roll back any half-open implicit transaction so the
+                # thread-local connection isn't left holding a stale write
+                # intent after a busy/lock failure.
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                if 'locked' in str(e) and attempt < 4:
+                    import time
+                    time.sleep(1 * (attempt + 1))
+                    continue
+                raise
 
 
 def query_eval_reports(

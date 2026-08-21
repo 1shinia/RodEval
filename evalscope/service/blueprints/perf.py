@@ -395,7 +395,7 @@ def launch_batch_perf():
                                 user_id=shared_config['user_id'],
                             )
                         except Exception as e:
-                            logger.warning(f'Failed to write perf to SQLite (non-fatal): {e}')
+                            logger.error(f'Failed to write perf to SQLite (data remains on disk, will backfill on restart): {e}')
 
                         state['completed'] += 1
                         state['results'].append({'task_id': task_id, 'name': model_name, 'model': model_name, 'status': 'completed'})
@@ -863,7 +863,7 @@ def launch_performance_test():
                             user_id=uid,
                         )
                     except Exception as e:
-                        logger.warning(f'[{task_id}] Failed to write perf to SQLite (non-fatal): {e}')
+                        logger.error(f'[{task_id}] Failed to write perf to SQLite (data remains on disk, will backfill on restart): {e}')
             except Exception as e:
                 logger.error(f'[{task_id}] Background perf failed: {e}', exc_info=True)
 

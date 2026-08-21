@@ -431,7 +431,8 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                     if score is not None and score > 1:
                         score = score / 100
                     dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
-                # Retry up to 3 times on lock, with backoff
+                # Retry on lock, with backoff (upsert_eval_report itself
+                # retries 5x internally; this outer loop is a final shield).
                 last_err = None
                 for attempt in range(3):
                     try:
@@ -452,14 +453,17 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                         last_err = e
                         if 'locked' not in str(e).lower() or attempt == 2:
                             raise
-                        _time.sleep(1 + attempt * 2)
+                        _time.sleep(2 + attempt * 3)
                 else:
                     raise last_err  # type: ignore[misc]
             elif task_config.eval_backend in (EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
                 # AIGC/Audio don't produce reports/ dir — read from results.json
                 _db.upsert_aigc_audio_report(os.path.dirname(task_config.work_dir), task_id, user_id=current_uid)
         except Exception as e:
-            logger.warning(f'Failed to write eval to SQLite (non-fatal): {e}')
+            # Data is safe on disk (reports/ + progress.json); it will be
+            # picked up by the next startup backfill.  Log loudly so it is
+            # not silently lost from the UI.
+            logger.error(f'[{task_id}] Failed to write eval to SQLite (data remains on disk, will backfill on restart): {e}')
 
         return jsonify({
             'status': 'completed',
