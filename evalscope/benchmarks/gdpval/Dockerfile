@@ -21,7 +21,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # - libgl1, libglib2.0-0, libsm6, libxext6, libxrender1: OpenCV/gui-less rendering
 # - fonts-dejavu-core: sane default fonts for matplotlib/wordcloud
 # - LibreOffice (headless-friendly subsets)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Switch apt sources to the Tsinghua mirror (GFW-friendly) before update.
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g; s|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true \
+    && apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl git \
     ffmpeg \
     libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev \
@@ -48,7 +50,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Prefer CPU wheels for PyTorch (keeps image smaller and avoids CUDA in slim)
-RUN python -m pip config set global.index-url https://pypi.org/simple \
+# pip index pinned to the Tsinghua mirror; PyTorch CPU wheels stay upstream.
+RUN python -m pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
     && python -m pip config set global.extra-index-url https://download.pytorch.org/whl/cpu
 
 # Copy requirements and install
