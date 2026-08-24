@@ -68,12 +68,34 @@ def run_once(func: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 
+def _is_retryable_error(e: Exception) -> bool:
+    """True for transient errors worth retrying; False for client errors.
+
+    4xx responses (other than 429 rate-limit) are deterministic — retrying
+    them just wastes time and can mask an *expected* rejection (vendor
+    verifiers probe that the API rejects non-default immutable parameters
+    with HTTP 400).  Network errors, 5xx and 429 stay retryable.
+    """
+    code = None
+    status = getattr(e, 'status_code', None)
+    if status is not None:
+        code = int(status)
+    else:
+        resp = getattr(e, 'response', None)
+        code = int(getattr(resp, 'status_code', 0))
+    if code is None:
+        return True  # non-HTTP error (timeout, connection, ...) -> retry
+    return not (400 <= code < 500 and code != 429)
+
+
 def retry_call(func, *args, retries=3, sleep_interval=0, **kwargs):
     """Function that retries a function call up to `retries` times if an exception occurs."""
     for attempt in range(retries):
         try:
             return func(*args, **kwargs)
         except Exception as e:
+            if not _is_retryable_error(e):
+                raise
             if attempt < retries - 1:
                 if sleep_interval > 0:
                     logger.warning(f'Attempt {attempt + 1} / {retries} failed: {e}. Retrying...')
@@ -90,6 +112,8 @@ async def async_retry_call(
         try:
             return await func(*args, **kwargs)
         except Exception as e:
+            if not _is_retryable_error(e):
+                raise
             if attempt < retries - 1:
                 if sleep_interval > 0:
                     logger.warning(f'Attempt {attempt + 1} / {retries} failed: {e}. Retrying...')
