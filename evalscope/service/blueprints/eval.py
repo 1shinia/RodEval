@@ -411,17 +411,9 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                 report_list = get_report_list([reports_dir])
             if report_list:
                 first = report_list[0]
-                # Compute total_num: -1 sentinel = 全量 (limits was null)
-                full_dataset = False
-                total_num = 0
-                for r in report_list:
-                    n = r.num or 0
-                    if n <= 0:
-                        full_dataset = True
-                    else:
-                        total_num += n
-                if full_dataset:
-                    total_num = -1
+                # Sample count: max of positive per-metric counts, -1 (全量)
+                # only when none is > 0 (see db._compute_total_num).
+                total_num = _db._compute_total_num(report_list)
                 dataset_names = [r.dataset_name for r in report_list]
                 score_sum = sum(r.score for r in report_list if r.score is not None)
                 avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0

@@ -148,16 +148,21 @@ class Report(BaseModel):
     @computed_field
     @property
     def num(self) -> int:
-        """Total sample count derived from the first metric's subsets.
+        """Total sample count derived from the metrics' subsets.
 
-        Using the first metric avoids double-counting datasets that have
-        multiple metrics over the same sample set (e.g. multi_if has 12
-        metrics all evaluated on the same 6 samples).
+        Take the max across metrics instead of only the first: datasets with
+        multiple metrics over the same sample set (e.g. multi_if: 12 metrics
+        on the same 6 samples) report equal per-metric counts, so max == any
+        of them (no double-counting); multi-validator reports (e.g. vendor
+        verifiers) trigger different rows per metric, where the first metric
+        may legitimately be 0 while others have real samples.
         """
-        first = self.metrics[0] if self.metrics else None
-        if first is None:
+        if not self.metrics:
             return 0
-        return sum(s.num for c in first.categories for s in c.subsets if not s.is_aggregate)
+        return max(
+            sum(s.num for c in m.categories for s in c.subsets if not s.is_aggregate)
+            for m in self.metrics
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         # model_dump includes computed_field 'num' automatically

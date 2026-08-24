@@ -250,6 +250,19 @@ def checkpoint_db() -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _compute_total_num(report_list) -> int:
+    """Sample count for a report list, shared by live eval and backfill.
+
+    Multi-metric reports (e.g. vendor verifiers) carry one entry per metric
+    whose ``num`` is the count of rows that triggered that validator (0 = not
+    triggered).  Summing them over-counts and treating any 0 row as "full
+    dataset" would wrongly yield the -1 sentinel.  Return the max positive
+    count, or -1 (全量, limits was null) only when nothing is > 0.
+    """
+    positive = [r.num for r in report_list if (r.num or 0) > 0]
+    return max(positive) if positive else -1
+
+
 def upsert_eval_report(
     task_id: str,
     model_name: str,
@@ -969,13 +982,14 @@ def backfill(output_dir: str) -> None:
                 if not report_list:
                     continue
                 first = report_list[0]
-                total_num = 0
+                # Same policy as live eval (eval.py _execute_task): max of
+                # positive per-metric counts, -1 (全量) only if all are <= 0.
+                total_num = _compute_total_num(report_list)
                 dataset_names: list[str] = []
                 score_sum = 0.0
                 dataset_scores: dict[str, float | None] = {}
                 for r in report_list:
                     dataset_names.append(r.dataset_name)
-                    total_num += r.num or 0
                     score_sum += r.score
                     score = r.score
                     if score is not None and score > 1:
