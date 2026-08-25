@@ -3,7 +3,7 @@ import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
 import { useCompare } from '@/contexts/CompareContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
-import { getPredictions, getChartUrl } from '@/api/reports'
+import { getPredictions, getDataFrame } from '@/api/reports'
 import { comparePerfReports, type PerfCompareResponse, saveCompareReport, listSavedCompareReports, deleteCompareReport, type SavedCompareReport } from '@/api/perf'
 import { listBenchmarks } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
@@ -37,9 +37,8 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Skeleton from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
-import PlotlyChart from '@/components/charts/PlotlyChart'
 import ChatView from '@/components/single/ChatView'
-import { ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX, ExternalLink, Trash2, Download, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX, ExternalLink, Trash2, Download } from 'lucide-react'
 import { BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 
 // ------------------------------------------------------------------ //
@@ -52,6 +51,8 @@ interface MergedPrediction {
   Gold: string
   models: Record<string, PredictionRow>
 }
+
+const PRED_PAGE_SIZE = 10
 
 type PerModelFilter = 'any' | 'pass' | 'fail'
 
@@ -78,7 +79,7 @@ export default function ComparePage() {
   const { t } = useLocale()
   const qp = useQueryParams()
   const { selection, clearCompareSelection } = useCompare()
-  const { rootPath: ctxRootPath, setRootPath, loadMultiReports, loading, reportCache } = useReports()
+  const { rootPath: ctxRootPath, setRootPath, loadMultiReports, loading } = useReports()
 
   const rootPath = qp.get('root_path') || selection?.rootPath || ctxRootPath
 
@@ -98,6 +99,8 @@ export default function ComparePage() {
   const [threshold, setThreshold] = useState(0.99)
   const [page, setPage] = useState(1)
   const [predictionsLoading, setPredictionsLoading] = useState(false)
+  const [predictionsByReport, setPredictionsByReport] = useState<Record<string, PredictionRow[]>>({})
+  const [predSubsets, setPredSubsets] = useState<string[]>([])
 
   const reportNamesKey = reportNames.join(';')
   useEffect(() => { setPerModelFilter({}) }, [reportNamesKey])
@@ -167,6 +170,100 @@ export default function ComparePage() {
     return { scoreTableData: rows, scoreTableColumns: columns, displayNames }
   }, [reports, reportNames, t])
 
+  // ── Prediction comparison ─────────────────────────────────────────
+  // Common datasets = the ones shared by all reports' score tables.
+  const predCommonDatasets = useMemo(
+    () => scoreTableData.filter((r) => r.dataset !== t('compare.average')).map((r) => r.dataset as string),
+    [scoreTableData, t],
+  )
+
+  // Default to the first common dataset once scores are ready.
+  useEffect(() => {
+    if (predCommonDatasets.length > 0 && !selectedDs) setSelectedDs(predCommonDatasets[0])
+  }, [predCommonDatasets, selectedDs])
+
+  // Probe subsets of the selected dataset (from the first report).
+  useEffect(() => {
+    if (!selectedDs || reportNames.length === 0) return
+    let cancelled = false
+    getDataFrame(rootPath, reportNames[0], 'dataset', selectedDs)
+      .then((dfRes) => {
+        if (cancelled) return
+        const subNames: string[] = []
+        for (const row of dfRes.data) {
+          const catCol = Object.keys(row).find((k) => k.startsWith('Cat.'))
+          if (catCol && row[catCol] === '-') continue
+          const name = String(row['Subset'] ?? '')
+          if (name && !subNames.includes(name)) subNames.push(name)
+        }
+        setPredSubsets(subNames)
+        setSelectedSubset((prev) => (prev && subNames.includes(prev) ? prev : (subNames[0] ?? '')))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedDs, reportNames, rootPath])
+
+  // Load predictions for every report on the current dataset + subset, merge by index.
+  useEffect(() => {
+    if (reportNames.length < 2 || !selectedDs || !selectedSubset) return
+    let cancelled = false
+    setPredictionsLoading(true)
+    Promise.all(
+      reportNames.map(async (name) => {
+        try {
+          const res = await getPredictions(rootPath, name, selectedDs, selectedSubset)
+          return [name, res.predictions] as const
+        } catch {
+          return [name, [] as PredictionRow[]] as const
+        }
+      }),
+    ).then((pairs) => {
+      if (cancelled) return
+      const byReport = Object.fromEntries(pairs) as Record<string, PredictionRow[]>
+      const indexSet = new Set<string>()
+      for (const rows of Object.values(byReport)) for (const r of rows) indexSet.add(r.Index)
+      const merged: MergedPrediction[] = [...indexSet].map((idx) => {
+        const models: Record<string, PredictionRow> = {}
+        let first: PredictionRow | null = null
+        for (const [name, rows] of Object.entries(byReport)) {
+          const row = rows.find((x) => x.Index === idx)
+          if (row) { models[name] = row; if (!first) first = row }
+        }
+        return { Index: idx, Input: first?.Input ?? '', Gold: first?.Gold ?? '', models }
+      })
+      setPredictionsByReport(byReport)
+      setMergedPredictions(merged)
+      setPage(1)
+      setPredictionsLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [reportNames, selectedDs, selectedSubset, rootPath])
+
+  const passRates = useMemo(() => {
+    const rates: Record<string, number> = {}
+    for (const name of reportNames) {
+      const rows = predictionsByReport[name] || []
+      rates[name] = rows.length > 0 ? rows.filter((r) => r.NScore >= threshold).length / rows.length : 0
+    }
+    return rates
+  }, [predictionsByReport, reportNames, threshold])
+
+  const filtered = useMemo(() => {
+    const hasFilter = reportNames.some((n) => (perModelFilter[n] ?? 'any') !== 'any')
+    if (!hasFilter) return mergedPredictions
+    return mergedPredictions.filter((row) =>
+      reportNames.every((n) => {
+        const f = perModelFilter[n] ?? 'any'
+        if (f === 'any') return true
+        const pass = (row.models[n]?.NScore ?? 0) >= threshold
+        return f === 'pass' ? pass : !pass
+      }),
+    )
+  }, [mergedPredictions, perModelFilter, reportNames, threshold])
+
+  const currentRow = filtered.length > 0 ? (filtered[page - 1] ?? null) : null
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PRED_PAGE_SIZE))
+
   // ── Benchmarks for dataset descriptions (module-cached, survives remounts) ──
   const [benchDescs, setBenchDescs] = useState<Record<string, string>>(() => _benchDescsCache || {})
   useEffect(() => {
@@ -212,7 +309,7 @@ export default function ComparePage() {
 
   // ── Early returns (all hooks called above) ──
   if (selection?.backend === 'Perf') {
-    return <PerfCompareView taskIds={selection.reports} rootPath={rootPath} />
+    return <PerfCompareView taskIds={selection.reports} />
   }
 
   if (!selection || selection.reports.length === 0) {
@@ -266,19 +363,56 @@ export default function ComparePage() {
         </div>
       </Card>
 
-      {/* Score Content */}
-      {loading && !dataLoaded ? (
+      {/* Score / Prediction Tabs */}
+      <Tabs
+        tabs={[
+          { key: 'score', label: t('compare.scoreComparison') },
+          { key: 'prediction', label: t('compare.predictionComparison') },
+        ]}
+        activeKey={activeTab}
+        onChange={(k) => setActiveTab(k as 'score' | 'prediction')}
+      />
+
+      {activeTab === 'score' ? (
+        loading && !dataLoaded ? (
+          <div className="flex flex-col gap-4">
+            <Skeleton height={450} />
+            <Skeleton height={300} />
+          </div>
+        ) : (
+          <ScoreTab
+            scoreTableColumns={scoreTableColumns}
+            scoreTableData={scoreTableData}
+            displayNames={displayNames}
+            t={t}
+          />
+        )
+      ) : loading && !dataLoaded ? (
         <div className="flex flex-col gap-4">
           <Skeleton height={450} />
-          <Skeleton height={300} />
         </div>
       ) : (
-        <ScoreTab
-          rootPath={rootPath}
+        <PredictionTab
           reportNames={reportNames}
-          scoreTableColumns={scoreTableColumns}
-          scoreTableData={scoreTableData}
           displayNames={displayNames}
+          predCommonDatasets={predCommonDatasets}
+          selectedDs={selectedDs}
+          setSelectedDs={setSelectedDs}
+          subsets={predSubsets}
+          selectedSubset={selectedSubset}
+          setSelectedSubset={setSelectedSubset}
+          perModelFilter={perModelFilter}
+          setPerModelFilter={setPerModelFilter}
+          threshold={threshold}
+          setThreshold={setThreshold}
+          passRates={passRates}
+          mergedPredictions={mergedPredictions}
+          filtered={filtered}
+          currentRow={currentRow}
+          page={page}
+          setPage={setPage}
+          totalPages={totalPages}
+          predictionsLoading={predictionsLoading}
           t={t}
         />
       )}
@@ -349,15 +483,11 @@ export default function ComparePage() {
 // ------------------------------------------------------------------ //
 
 function ScoreTab({
-  rootPath,
-  reportNames,
   scoreTableColumns,
   scoreTableData,
   displayNames,
   t,
 }: {
-  rootPath: string
-  reportNames: string[]
   scoreTableColumns: { key: string; label: string }[]
   scoreTableData: Record<string, unknown>[]
   displayNames: Record<string, string>
@@ -634,7 +764,6 @@ function PredictionTab({
         <div className="flex flex-col gap-2.5">
           {reportNames.map((name, idx) => {
             const color = modelColor(idx)
-            const bg = modelBg(idx)
             const cur = perModelFilter[name] ?? 'any'
             const rate = passRates[name]
             const chips: { key: PerModelFilter; label: string; icon?: ReactNode; activeBg: string }[] = [
@@ -646,10 +775,10 @@ function PredictionTab({
               <div key={name} className="flex items-center gap-3 flex-wrap">
                 {/* Model label */}
                 <div className="flex items-center gap-1.5 w-36 shrink-0">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: palette.dot }} />
+                  <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
                   <span
                     className="text-xs font-medium truncate"
-                    style={{ color: palette.dot }}
+                    style={{ color }}
                     title={displayNames[name] ?? (parseReportName(name).model || name)}
                   >
                     {displayNames[name] ?? (parseReportName(name).model || name)}
@@ -806,8 +935,7 @@ function PredictionTab({
 // Perf Comparison View                                                //
 // ------------------------------------------------------------------ //
 
-function PerfCompareView({ taskIds, rootPath }: { taskIds: string[]; rootPath: string }) {
-  const { t } = useLocale()
+function PerfCompareView({ taskIds }: { taskIds: string[] }) {
   const { clearCompareSelection } = useCompare()
   const [data, setData] = useState<PerfCompareResponse | null>(null)
   const [loading, setLoading] = useState(true)
