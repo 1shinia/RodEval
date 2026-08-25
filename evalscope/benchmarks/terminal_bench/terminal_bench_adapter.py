@@ -172,6 +172,26 @@ class _TerminalBenchBase(AgentAdapter):
             raise e
 
         result_dict = result.model_dump(mode='json')
+
+        # Fail fast on infrastructure errors (e.g. docker image pull / container
+        # startup failures). Harbor catches these internally and returns them in
+        # the result instead of raising; without this check the sample silently
+        # scores 0 and produces a misleading report. Only raise when the
+        # environment failed BEFORE the agent ever started - if agent_execution
+        # is present, the score below reflects real model work.
+        exception_info = result_dict.get('exception_info') or {}
+        if exception_info and result_dict.get('agent_execution') is None:
+            exc_type = exception_info.get('exception_type', 'UnknownError')
+            exc_msg = str(exception_info.get('exception_message', '')).strip()
+            if len(exc_msg) > 500:
+                exc_msg = exc_msg[:500] + '...'
+            trial_uri = result_dict.get('trial_uri', '')
+            raise RuntimeError(
+                f'Terminal-bench trial infrastructure failure '
+                f'(task={result_dict.get("task_name")}, agent never started): '
+                f'{exc_type}: {exc_msg}. Full details: {trial_uri or "(no trial dir)"}/exception.txt'
+            )
+
         sample.metadata['result'] = result_dict
 
         output = ModelOutput.from_content(
