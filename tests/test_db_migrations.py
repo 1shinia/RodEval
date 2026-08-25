@@ -157,6 +157,31 @@ RELEASED: list[tuple[int, str, str]] = [
         UPDATE eval_reports SET error_note = '' WHERE error_note IS NULL;
     '''
     ),
+    (
+        11, 'add status CHECK to task_state', '''
+        -- SQLite cannot ALTER a CHECK constraint, so rebuild the runtime
+        -- table. Normalize any out-of-spec status first so the copy cannot
+        -- fail on the new constraint.
+        UPDATE task_state SET status = 'failed'
+            WHERE status NOT IN ('running', 'completed', 'failed', 'stopped', 'orphaned');
+        CREATE TABLE task_state_new (
+            task_id    TEXT PRIMARY KEY,
+            task_type  TEXT NOT NULL,
+            status     TEXT NOT NULL DEFAULT 'running'
+                       CHECK (status IN ('running', 'completed', 'failed', 'stopped', 'orphaned')),
+            pid        INTEGER,
+            model      TEXT DEFAULT '',
+            started_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        INSERT INTO task_state_new (task_id, task_type, status, pid, model, started_at, updated_at)
+            SELECT task_id, task_type, status, pid, model, started_at, updated_at FROM task_state;
+        DROP TABLE task_state;
+        ALTER TABLE task_state_new RENAME TO task_state;
+        CREATE INDEX IF NOT EXISTS idx_task_state_status ON task_state(status);
+        CREATE INDEX IF NOT EXISTS idx_task_state_task_type ON task_state(task_type);
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -242,9 +267,9 @@ def test_released_migrations_immutable():
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 10
+    assert len(RELEASED) == 11
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 10
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 11
 
 
 def test_fresh_db_converges(tmp_path):

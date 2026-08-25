@@ -28,7 +28,7 @@ _write_lock = threading.Lock()
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 10  # Bump when adding migrations below
+SCHEMA_VERSION = 11  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -169,6 +169,31 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         ALTER TABLE eval_reports ADD COLUMN error_note TEXT NOT NULL DEFAULT '';
         UPDATE eval_reports SET has_errors = 0 WHERE has_errors IS NULL;
         UPDATE eval_reports SET error_note = '' WHERE error_note IS NULL;
+    '''
+    ),
+    (
+        11, 'add status CHECK to task_state', '''
+        -- SQLite cannot ALTER a CHECK constraint, so rebuild the runtime
+        -- table. Normalize any out-of-spec status first so the copy cannot
+        -- fail on the new constraint.
+        UPDATE task_state SET status = 'failed'
+            WHERE status NOT IN ('running', 'completed', 'failed', 'stopped', 'orphaned');
+        CREATE TABLE task_state_new (
+            task_id    TEXT PRIMARY KEY,
+            task_type  TEXT NOT NULL,
+            status     TEXT NOT NULL DEFAULT 'running'
+                       CHECK (status IN ('running', 'completed', 'failed', 'stopped', 'orphaned')),
+            pid        INTEGER,
+            model      TEXT DEFAULT '',
+            started_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        INSERT INTO task_state_new (task_id, task_type, status, pid, model, started_at, updated_at)
+            SELECT task_id, task_type, status, pid, model, started_at, updated_at FROM task_state;
+        DROP TABLE task_state;
+        ALTER TABLE task_state_new RENAME TO task_state;
+        CREATE INDEX IF NOT EXISTS idx_task_state_status ON task_state(status);
+        CREATE INDEX IF NOT EXISTS idx_task_state_task_type ON task_state(task_type);
     '''
     ),
 ]
@@ -592,6 +617,27 @@ def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
         return len(stale)
 
 
+def _read_aigc_expected_metrics(output_dir: str, task_id: str) -> list[str]:
+    """Expected AIGC metric names from the task config.
+
+    Reads ``configs/task_config.yaml`` -> ``eval_config.eval.metrics``.
+    Returns [] when the config is missing or unparsable (the caller then
+    falls back to conservative "empty metrics dict" detection instead of
+    guessing per-name — metrics like lpips are legitimate for img2img).
+    """
+    cfg_path = os.path.join(output_dir, task_id, 'configs', 'task_config.yaml')
+    try:
+        from evalscope.utils.io_utils import yaml_to_dict
+        cfg = yaml_to_dict(cfg_path)
+        ec = (cfg or {}).get('eval_config') or {}
+        metrics = (ec.get('eval') or {}).get('metrics') or []
+        if isinstance(metrics, list):
+            return [str(m) for m in metrics]
+    except Exception:
+        pass
+    return []
+
+
 def upsert_aigc_audio_report(output_dir: str, task_id: str, user_id: int = 1) -> bool:
     """Read AIGC/Audio results.json and upsert into eval_reports.
 
@@ -630,15 +676,36 @@ def upsert_aigc_audio_report(output_dir: str, task_id: str, user_id: int = 1) ->
     else:
         return False  # Not AIGC/Audio
 
-    # Determine primary score. A missing metric key would silently produce a
+    # Determine primary score. Expected metrics come from the task config
+    # (eval_config.eval.metrics); a missing expected metric silently yields a
     # fake 0.0 (indistinguishable from a genuine zero) — record it explicitly.
+    # Metric-name mapping: config name -> results.json key.
+    metric_key_map = {
+        'clip_score': 'clip_score_mean',
+        'fvd': 'fvd',
+        'lpips': 'lpips_mean',
+    }
     score = 0.0
     has_errors = 0
     error_note = ''
     if eval_backend == 'AIGC_EVAL':
-        score = metrics.get('clip_score_mean') or 0.0
-        if 'clip_score_mean' not in metrics:
-            has_errors, error_note = 1, 'missing clip_score_mean metric'
+        expected = _read_aigc_expected_metrics(output_dir, task_id)
+        if not expected:
+            # No config (e.g. legacy task): treat an empty metrics dict as
+            # the anomaly signal instead of guessing per-name.
+            if not metrics:
+                has_errors, error_note = 1, 'no metrics produced'
+        else:
+            missing = [m for m in expected if metric_key_map.get(m) not in metrics]
+            if missing:
+                has_errors, error_note = 1, f'missing metric(s): {", ".join(missing)}'
+        # Primary score: first expected metric with an actual value.
+        for m in expected:
+            key = metric_key_map.get(m)
+            v = metrics.get(key) if key else None
+            if v is not None:
+                score = float(v)
+                break
     elif tool == 'asr':
         wer = metrics.get('wer')
         score = (1.0 - wer) if wer is not None else 0.0
