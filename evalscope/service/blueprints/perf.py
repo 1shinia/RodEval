@@ -215,6 +215,14 @@ def launch_batch_perf():
         'extra_args': data.get('extra_args'),
         'warmup_num': data.get('warmup_num'),
         'duration': data.get('duration'),
+        'sla_auto_tune': data.get('sla_auto_tune'),
+        'sla_params': data.get('sla_params'),
+        'sla_variable': data.get('sla_variable'),
+        'sla_num_runs': data.get('sla_num_runs'),
+        'sla_upper_bound': data.get('sla_upper_bound'),
+        'sla_lower_bound': data.get('sla_lower_bound'),
+        'sla_fixed_parallel': data.get('sla_fixed_parallel'),
+        'sla_number_multiplier': data.get('sla_number_multiplier'),
     }
 
     def _run_batch():
@@ -303,6 +311,22 @@ def launch_batch_perf():
                     perf_data['warmup_num'] = shared_config['warmup_num']
                 if shared_config.get('duration'):
                     perf_data['duration'] = shared_config['duration']
+                if shared_config.get('sla_auto_tune'):
+                    perf_data['sla_auto_tune'] = shared_config['sla_auto_tune']
+                if shared_config.get('sla_params'):
+                    perf_data['sla_params'] = shared_config['sla_params']
+                if shared_config.get('sla_variable'):
+                    perf_data['sla_variable'] = shared_config['sla_variable']
+                if shared_config.get('sla_num_runs'):
+                    perf_data['sla_num_runs'] = shared_config['sla_num_runs']
+                if shared_config.get('sla_upper_bound'):
+                    perf_data['sla_upper_bound'] = shared_config['sla_upper_bound']
+                if shared_config.get('sla_lower_bound'):
+                    perf_data['sla_lower_bound'] = shared_config['sla_lower_bound']
+                if shared_config.get('sla_fixed_parallel') is not None:
+                    perf_data['sla_fixed_parallel'] = shared_config['sla_fixed_parallel']
+                if shared_config.get('sla_number_multiplier') is not None:
+                    perf_data['sla_number_multiplier'] = shared_config['sla_number_multiplier']
 
                 if not try_reserve_slot(task_id, 'perf', model=model_name, user_id=shared_config['user_id']):
                     state['errors'] += 1
@@ -317,7 +341,7 @@ def launch_batch_perf():
                     perf_args.outputs_dir = os.path.join(OUTPUT_DIR, task_id)
                     perf_args.name = 'perf'
                     perf_args.enable_progress_tracker = True
-                    perf_args.no_test_connection = True
+                    perf_args.no_test_connection = False
                     # Default read timeout: prevent hanging on stalled streams
                     if perf_args.read_timeout is None:
                         perf_args.read_timeout = 300
@@ -385,7 +409,9 @@ def launch_batch_perf():
                         try:
                             from .. import db as _db
                             perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
-                            has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                            has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
+                    os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
+                )
                             runs = 0
                             for sd in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
                                 if os.path.isdir(sd):
@@ -694,7 +720,7 @@ def run_performance_test():
         perf_args.outputs_dir = os.path.join(OUTPUT_DIR, task_id)
         perf_args.name = 'perf'
         perf_args.enable_progress_tracker = True
-        perf_args.no_test_connection = True
+        perf_args.no_test_connection = False
         # Default read timeout: prevent hanging on stalled streams
         if perf_args.read_timeout is None:
             perf_args.read_timeout = 300
@@ -729,7 +755,9 @@ def run_performance_test():
                 from .. import db as _db
                 from .auth import get_current_user_id
                 perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
-                has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
+                    os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
+                )
                 runs = 0
                 for search_dir in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
                     if os.path.isdir(search_dir):
@@ -816,7 +844,7 @@ def launch_performance_test():
         perf_args.outputs_dir = os.path.join(OUTPUT_DIR, task_id)
         perf_args.name = 'perf'
         perf_args.enable_progress_tracker = True
-        perf_args.no_test_connection = True
+        perf_args.no_test_connection = False
         if perf_args.read_timeout is None:
             perf_args.read_timeout = 300
 
@@ -853,7 +881,9 @@ def launch_performance_test():
                         from datetime import datetime
                         from .. import db as _db
                         perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
-                        has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                        has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
+                    os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
+                )
                         runs = 0
                         for search_dir in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
                             if os.path.isdir(search_dir):
@@ -978,7 +1008,7 @@ def resume_performance_test():
         perf_args.outputs_dir = work_dir
         perf_args.name = 'perf'
         perf_args.enable_progress_tracker = True
-        perf_args.no_test_connection = True
+        perf_args.no_test_connection = False
 
         logger.info(
             f'[{task_id}] Resuming: model={perf_args.model} '
@@ -1013,7 +1043,9 @@ def resume_performance_test():
                 from .. import db as _db
                 from .auth import get_current_user_id
                 perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
-                has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
+                    os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
+                )
                 runs = 0
                 for search_dir in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
                     if os.path.isdir(search_dir):
@@ -1117,6 +1149,34 @@ def get_performance_report():
         return jsonify({'error': f'Report not found for task_id: {task_id}'}), 404
 
     return send_file(report_file, mimetype='text/html')
+
+
+@bp_perf.route('/sla', methods=['GET'])
+def get_perf_sla():
+    """Get SLA auto-tuning summary for a completed task.
+
+    Query params:
+        task_id (str): the task identifier
+    """
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    sla_file = os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
+    if not os.path.exists(sla_file):
+        return jsonify({'error': f'SLA data not found for task_id: {task_id}'}), 404
+
+    try:
+        with open(sla_file, 'r') as f:
+            data = json.load(f)
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to read SLA data: {e}'}), 500
 
 
 @bp_perf.route('/log', methods=['GET'])

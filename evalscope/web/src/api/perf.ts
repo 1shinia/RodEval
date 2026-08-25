@@ -58,6 +58,32 @@ export function getPerfReportUrl(taskId: string): string {
   return `/api/v1/perf/report?task_id=${encodeURIComponent(taskId)}`
 }
 
+export interface SlaResultRow {
+  Criteria: string
+  Variable: string
+  'Max Satisfied': number | string
+  Note: string
+}
+
+export interface SlaRunMetrics {
+  avg_latency?: number
+  avg_ttft?: number
+  avg_tpot?: number
+  request_throughput?: number
+  output_token_throughput?: number
+  success_rate?: number
+  [key: string]: number | undefined
+}
+
+export interface SlaSummaryResponse {
+  sla_results: SlaResultRow[]
+  runs: Record<string, { metrics: SlaRunMetrics; percentiles?: Record<string, unknown> }>
+}
+
+export async function getPerfSlaData(taskId: string): Promise<SlaSummaryResponse> {
+  return api<SlaSummaryResponse>('/api/v1/perf/sla', { task_id: taskId })
+}
+
 export async function stopPerfTask(taskId: string): Promise<{ status: string; task_id: string }> {
   return apiPost<{ status: string; task_id: string }>(`/api/v1/perf/stop?task_id=${encodeURIComponent(taskId)}`, {})
 }

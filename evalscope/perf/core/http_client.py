@@ -140,8 +140,13 @@ async def test_connection(args: Arguments, api_plugin: 'ApiPluginBase') -> bool:
                     f'Non-retryable error (HTTP {output.status_code}): {output.error}. '
                     'Please check your --url and --api settings.'
                 )
-                return False
+                raise RuntimeError(
+                    f'连接测试失败 (HTTP {output.status_code}): {output.error}'
+                )
             logger.warning(f'Retrying... <{output.error}>')
+        except RuntimeError:
+            # 4xx client-side configuration errors: never succeed on retry — surface immediately.
+            raise
         except Exception as e:
             logger.warning(f'Retrying... <{e}>')
 

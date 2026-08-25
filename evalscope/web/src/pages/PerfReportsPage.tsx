@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
-import { listPerfTasks, deletePerfTask, getPerfReportUrl, type PerfTaskMeta } from '@/api/perf'
+import { listPerfTasks, deletePerfTask, getPerfReportUrl, getPerfSlaData, type PerfTaskMeta, type SlaSummaryResponse } from '@/api/perf'
 import { toast } from '@/components/common/Toast'
 import { api } from '@/api/client'
 import Breadcrumb from '@/components/ui/Breadcrumb'
@@ -36,6 +36,9 @@ export default function PerfReportsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [selectAllLoading, setSelectAllLoading] = useState(false)
   const allPageIds = useMemo(() => history.map((item) => item.task_id), [history])
+
+  // SLA tuning result modal
+  const [slaData, setSlaData] = useState<(SlaSummaryResponse & { taskId: string }) | null>(null)
 
   useEffect(() => {
     searchTimer.current = setTimeout(() => {
@@ -85,7 +88,14 @@ export default function PerfReportsPage() {
   // Reset page when filters change
   useEffect(() => { setPage(1) }, [filterModel, filterDataset, sortOrder, debouncedSearch])
 
-  const handleViewReport = (tid: string) => window.open(getPerfReportUrl(tid), '_blank')
+  const handleViewReport = async (tid: string) => {
+    try {
+      const sla = await getPerfSlaData(tid)
+      setSlaData({ taskId: tid, ...sla })
+    } catch {
+      window.open(getPerfReportUrl(tid), '_blank')
+    }
+  }
 
   const handleDelete = useCallback(async (tid: string) => {
     if (!window.confirm(t('perf.confirmDelete'))) return
@@ -281,6 +291,81 @@ export default function PerfReportsPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {/* ── SLA Tuning Result Modal ── */}
+      {slaData && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/40 overflow-y-auto"
+          onClick={() => setSlaData(null)}>
+          <div className="w-full max-w-4xl rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--shadow-lg)] mt-8"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)]">
+              <h3 className="text-base font-semibold text-[var(--text)]">{t('perf.slaResults')}</h3>
+              <button onClick={() => setSlaData(null)}
+                className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer">✕</button>
+            </div>
+            <div className="p-5 space-y-5">
+              {/* Conclusion table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border)]">
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.slaCriteria')}</th>
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.slaVariableCol')}</th>
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.slaMaxSatisfied')}</th>
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.slaNote')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {slaData.sla_results.length === 0 && (
+                      <tr><td colSpan={4} className="py-6 text-center text-sm text-[var(--text-dim)]">{t('common.noData')}</td></tr>
+                    )}
+                    {slaData.sla_results.map((r, i) => (
+                      <tr key={i} className="border-b border-[var(--border)] last:border-0">
+                        <td className="py-2 px-3 font-mono text-xs text-[var(--text)]">{r.Criteria}</td>
+                        <td className="py-2 px-3 text-[var(--text-muted)]">{r.Variable}</td>
+                        <td className="py-2 px-3 font-mono font-medium text-[var(--accent)]">{String(r['Max Satisfied'])}</td>
+                        <td className="py-2 px-3 text-[var(--text-muted)]">{r.Note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Per-level metrics table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border)]">
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.slaLevel')}</th>
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">TTFT (s)</th>
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.slaMetric')} (Latency s)</th>
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.slaRps')}</th>
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">{t('perf.slaTps')}</th>
+                      <th className="text-left py-2 px-3 text-xs text-[var(--text-muted)] font-medium">Success %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(slaData.runs).map(([key, run]) => {
+                      const m = run.metrics || {}
+                      const fmt = (v: number | undefined, digits = 4) => (v == null ? '—' : Number(v).toFixed(digits))
+                      return (
+                        <tr key={key} className="border-b border-[var(--border)] last:border-0">
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--text)]">{key}</td>
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--text-muted)]">{fmt(m.avg_ttft)}</td>
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--text-muted)]">{fmt(m.avg_latency)}</td>
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--text-muted)]">{fmt(m.request_throughput)}</td>
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--text-muted)]">{fmt(m.output_token_throughput)}</td>
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--text-muted)]">{fmt(m.success_rate, 2)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

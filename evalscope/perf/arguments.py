@@ -157,6 +157,20 @@ class Arguments(BaseArgument):
     sla_params: Optional[List[Dict[str, Any]]] = None
     """SLA constraints in JSON format."""
 
+    @field_validator('sla_params', mode='before')
+    @classmethod
+    def _parse_sla_params(cls, v):
+        """Accept JSON string (CLI) or dict/list (API) for sla_params."""
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                raise ValueError(f'Invalid JSON for sla_params: {v}')
+            return parsed if isinstance(parsed, list) else [parsed]
+        if isinstance(v, dict):
+            return [v]
+        return v
+
     sla_num_runs: int = 3
     """Number of runs to average for each configuration in SLA auto-tuning."""
 

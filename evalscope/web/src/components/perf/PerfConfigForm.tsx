@@ -23,6 +23,24 @@ const EMBEDDING_DATASETS = ['random_embedding', 'embedding', 'random_embedding_b
 const RERANK_DATASETS = ['random_rerank', 'rerank']
 const LLM_DATASETS = ['openqa', 'random', 'random_vl', 'random_multi_turn', 'share_gpt_zh', 'share_gpt_en', 'longalpaca', 'line_by_line', 'speed_benchmark']
 
+// SLA auto-tuning metric options (metric values must match sla_run.get_metric_values)
+const SLA_METRICS = [
+  { value: 'avg_ttft', label: '平均首字延迟(s)' },
+  { value: 'avg_latency', label: '平均延迟(s)' },
+  { value: 'avg_tpot', label: '平均每Token延迟(s)' },
+  { value: 'p99_latency', label: 'P99 延迟(s)' },
+  { value: 'p99_ttft', label: 'P99 首字延迟(s)' },
+  { value: 'p99_tpot', label: 'P99 每Token延迟(s)' },
+  { value: 'rps', label: '每秒请求数' },
+  { value: 'tps', label: '输出 Token/s' },
+]
+
+interface SlaRule {
+  metric: string
+  op: string
+  value: string
+}
+
 export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit, onModeChange }: Props) {
   const { t } = useLocale()
   const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
@@ -75,6 +93,20 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   const [thinkingMode, setThinkingMode] = useState('auto')
   const [extraArgs, setExtraArgs] = useState('')
   const [readTimeout, setReadTimeout] = useState('')
+
+  // SLA auto-tuning state
+  const [slaEnabled, setSlaEnabled] = useState(false)
+  const [slaVariable, setSlaVariable] = useState<'parallel' | 'rate'>('parallel')
+  const [slaRules, setSlaRules] = useState<SlaRule[]>([{ metric: 'avg_ttft', op: '<=', value: '' }])
+  const [slaLower, setSlaLower] = useState('')
+  const [slaUpper, setSlaUpper] = useState('')
+  const [slaNumRuns, setSlaNumRuns] = useState('')
+
+  const updateSlaRule = (i: number, field: keyof SlaRule, v: string) => {
+    setSlaRules((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: v } : r)))
+  }
+  const addSlaRule = () => setSlaRules((prev) => [...prev, { metric: 'avg_latency', op: '<=', value: '' }])
+  const removeSlaRule = (i: number) => setSlaRules((prev) => prev.filter((_, idx) => idx !== i))
 
   // Batch state
   const [batchFile, setBatchFile] = useState<File | null>(null)
@@ -158,6 +190,22 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       catch { /* handled in validation */ }
     }
     if (readTimeout) config.read_timeout = Number(readTimeout)
+    if (slaEnabled) {
+      config.sla_auto_tune = true
+      config.sla_variable = slaVariable
+      const groups = slaRules.filter((r) => r.metric && r.op && r.value.trim() !== '')
+      if (groups.length > 0) {
+        const params: Record<string, string> = {}
+        for (const r of groups) params[r.metric] = `${r.op}${r.value.trim()}`
+        config.sla_params = [params]
+      }
+      if (slaLower) config.sla_lower_bound = Number(slaLower)
+      else config.sla_lower_bound = 1
+      if (slaUpper) config.sla_upper_bound = Number(slaUpper)
+      else config.sla_upper_bound = 64
+      if (slaNumRuns) config.sla_num_runs = Number(slaNumRuns)
+      else config.sla_num_runs = 1
+    }
     return config
   }
 
@@ -229,6 +277,12 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     if (duration) {
       const d = Number(duration)
       if (!Number.isInteger(d) || d < 1) newErrors.duration = '运行时长预算必须为正整数'
+    }
+
+    // SLA: at least one complete constraint when enabled
+    if (slaEnabled) {
+      const hasRule = slaRules.some((r) => r.metric && r.op && r.value.trim() !== '')
+      if (!hasRule) newErrors.slaRules = t('perf.slaNoRules')
     }
 
     // Token / prompt length fields: positive integers
@@ -557,6 +611,69 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
               onChange={(e) => { setPrefixLength(e.target.value.replace(/[^0-9]/g, '')); if (errors.prefixLength) setErrors((p) => ({ ...p, prefixLength: '' })) }}
               className={inputClass(errors.prefixLength)} placeholder="0" />
           </FormField>
+
+          {/* ── SLA Auto-tuning ── */}
+          <div className="md:col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)] p-3 space-y-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={slaEnabled} onChange={(e) => setSlaEnabled(e.target.checked)}
+                className="accent-[var(--accent)]" />
+              <span className="text-sm text-[var(--text)]">{t('perf.slaAutoTune')}</span>
+            </label>
+            {slaEnabled && (
+              <>
+                <div className="flex items-center gap-3">
+                  <label className="text-xs text-[var(--text-muted)] shrink-0">{t('perf.slaVariable')}</label>
+                  <select value={slaVariable} onChange={(e) => setSlaVariable(e.target.value as 'parallel' | 'rate')} className={FORM_INPUT_CLASS}>
+                    <option value="parallel">{t('perf.slaConcurrency')}</option>
+                    <option value="rate">{t('perf.slaRate')}</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs text-[var(--text-muted)]">{t('perf.slaRules')}</div>
+                  {slaRules.map((r, i) => (
+                    <div key={i} className="flex items-center gap-1.5 flex-wrap">
+                      <select value={r.metric} onChange={(e) => updateSlaRule(i, 'metric', e.target.value)} className={`${FORM_INPUT_CLASS} flex-1 min-w-[150px]`}>
+                        {SLA_METRICS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                      </select>
+                      <select value={r.op} onChange={(e) => updateSlaRule(i, 'op', e.target.value)} className={`${FORM_INPUT_CLASS} !w-16 shrink-0 px-1 text-center`}>
+                        <option value="<=">≤</option>
+                        <option value=">=">≥</option>
+                        <option value="<">&lt;</option>
+                        <option value=">">&gt;</option>
+                      </select>
+                      <input type="number" step="any" value={r.value}
+                        onChange={(e) => updateSlaRule(i, 'value', e.target.value)}
+                        className={`${FORM_INPUT_CLASS} w-28 shrink-0`} placeholder="2.0" />
+                      <button type="button" onClick={() => removeSlaRule(i)}
+                        className="text-xs text-[var(--danger)] shrink-0 cursor-pointer">✕</button>
+                    </div>
+                  ))}
+                  {errors.slaRules && <p className="text-xs text-[var(--danger)]">{errors.slaRules}</p>}
+                  <button type="button" onClick={addSlaRule}
+                    className="text-xs text-[var(--accent)] cursor-pointer">+ {t('perf.slaAddRule')}</button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <FormField label={t('perf.slaLower')}>
+                    <input type="number" value={slaLower}
+                      onChange={(e) => setSlaLower(e.target.value.replace(/[^0-9]/g, ''))}
+                      className={FORM_INPUT_CLASS} placeholder="默认 1" />
+                  </FormField>
+                  <FormField label={t('perf.slaUpper')}>
+                    <input type="number" value={slaUpper}
+                      onChange={(e) => setSlaUpper(e.target.value.replace(/[^0-9]/g, ''))}
+                      className={FORM_INPUT_CLASS} placeholder="默认 64" />
+                  </FormField>
+                  <FormField label={t('perf.slaNumRuns')}>
+                    <input type="number" value={slaNumRuns}
+                      onChange={(e) => setSlaNumRuns(e.target.value.replace(/[^0-9]/g, ''))}
+                      className={FORM_INPUT_CLASS} placeholder="默认 1" />
+                  </FormField>
+                </div>
+              </>
+            )}
+          </div>
 
           <FormField label="Extra Args (JSON)" className="md:col-span-2" error={errors.extra_args}>
             <textarea
