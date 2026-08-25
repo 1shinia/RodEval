@@ -451,6 +451,20 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             elif task_config.eval_backend in (EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
                 # AIGC/Audio don't produce reports/ dir — read from results.json
                 _db.upsert_aigc_audio_report(os.path.dirname(task_config.work_dir), task_id, user_id=current_uid)
+
+            # AIGC/Audio/RAG backends don't emit progress.json from their subprocess;
+            # write the terminal state here so the frontend stops polling (percent 0.0
+            # with no status keeps it stuck at "运行中").
+            try:
+                _pj = os.path.join(task_config.work_dir, 'progress.json')
+                with open(_pj, 'w') as _f:
+                    json.dump(
+                        {'status': 'completed', 'percent': 100.0, 'processed': 1, 'total': 1, 'pipeline': 'eval'},
+                        _f,
+                        ensure_ascii=False,
+                    )
+            except Exception:
+                pass
         except Exception as e:
             # Data is safe on disk (reports/ + progress.json); it will be
             # picked up by the next startup backfill.  Log loudly so it is
