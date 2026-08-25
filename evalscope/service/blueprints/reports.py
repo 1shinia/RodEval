@@ -7,6 +7,7 @@ direct filesystem access.
 import json
 import mimetypes
 import os
+import re
 import plotly.express as px
 import plotly.graph_objects as go
 import uuid
@@ -687,6 +688,8 @@ def get_html_report():
     Query params:
         root_path   (str): output root directory
         report_name (str): report identifier
+        download    (str): when '1'/'true'/'yes', send the file as an
+                           attachment instead of rendering it inline
     """
     report_name = request.args.get('report_name')
     if not report_name:
@@ -694,7 +697,7 @@ def get_html_report():
 
     try:
         root = os.path.abspath(_root_path())
-        prefix, model_name, _ = process_report_name(report_name)
+        prefix, model_name, datasets = process_report_name(report_name)
         report_html = os.path.realpath(os.path.join(root, prefix, OutputsStructure.REPORTS_DIR, 'report.html'))
         # Security: ensure resolved path is within root
         if not report_html.startswith(root + os.sep):
@@ -705,6 +708,12 @@ def get_html_report():
                 'error': 'Report not yet generated',
                 'message': 'The HTML report has not been generated for this evaluation. It may still be in progress.',
             }), 404
+
+        if request.args.get('download', '').lower() in ('1', 'true', 'yes'):
+            # Build a clean filename from the report identity, e.g.
+            #   eval_1787630356193@@ox-alpha::gsm8k -> eval_1787630356193_ox-alpha_gsm8k.html
+            safe_name = re.sub(r'[\\/:*?"<>|]', '_', f'{prefix}_{model_name}_{"_".join(datasets)}.html')
+            return send_file(report_html, mimetype='text/html', as_attachment=True, download_name=safe_name)
 
         return send_file(report_html, mimetype='text/html')
     except Exception as e:

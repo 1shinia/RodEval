@@ -233,12 +233,15 @@ def list_aigc_reports():
     from ..db import _get_conn
     current_uid = get_current_user_id()
     conn = _get_conn()
-    user_task_ids = {
-        r[0] for r in conn.execute(
-            "SELECT task_id FROM eval_reports WHERE user_id = ? AND eval_backend = 'AIGC_EVAL'",
+    # task_id -> (has_errors, error_note) from the reconciled metadata store
+    task_meta = {
+        r[0]: (r[1] or 0, r[2] or '') for r in conn.execute(
+            "SELECT task_id, has_errors, error_note FROM eval_reports "
+            "WHERE user_id = ? AND eval_backend = 'AIGC_EVAL'",
             (current_uid,)
         ).fetchall()
     }
+    user_task_ids = set(task_meta)
 
     # Scan only user's task directories
     for task_dir in OUTPUT_DIR.iterdir():
@@ -262,6 +265,7 @@ def list_aigc_reports():
 
             # Extract summary info
             metrics = results.get('metrics', {})
+            has_errors, error_note = task_meta.get(task_dir.name, (0, ''))
             report = {
                 'task_id': task_dir.name,
                 'model_name': results.get('model', 'unknown'),
@@ -271,6 +275,8 @@ def list_aigc_reports():
                 'lpips_mean': metrics.get('lpips_mean'),
                 'fvd': metrics.get('fvd'),
                 'inception_score': metrics.get('inception_score'),
+                'has_errors': has_errors,
+                'error_note': error_note,
                 'created_at': datetime.fromtimestamp(float(results.get('timestamp')
                                                            or task_dir.stat().st_mtime)).isoformat(),
             }

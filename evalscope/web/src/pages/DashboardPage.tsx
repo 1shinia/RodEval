@@ -69,7 +69,15 @@ function CompactRunRow({ report, onClick }: CompactRunRowProps) {
           <span className="type-caption-mono text-[var(--text-muted)]">{report.dataset_name}</span>
         )}
       </div>
-      <ScoreBadge score={report.score} className="shrink-0 !text-xs !px-2" />
+      <div className="flex items-center gap-2 shrink-0">
+        {report.has_errors ? (
+          <span
+            title={report.error_note || '失败/不完整结果'}
+            className="w-2 h-2 rounded-full bg-amber-500 cursor-help shrink-0"
+          />
+        ) : null}
+        <ScoreBadge score={report.score} className="!text-xs !px-2" />
+      </div>
     </button>
   )
 }

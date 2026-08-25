@@ -8,7 +8,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from evalscope.utils.logger import get_logger
@@ -28,7 +28,7 @@ _write_lock = threading.Lock()
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 8  # Bump when adding migrations below
+SCHEMA_VERSION = 10  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -91,6 +91,14 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         SELECT 1;
     '''
     ),
+    # NOTE (2026-08, history drift): this migration entry was originally
+    # "add COLLATE NOCASE index for model_name" (applied 2026-07-03). Its SQL
+    # was later REWRITTEN IN PLACE to add eval_backend instead, and the column
+    # was manually ALTERed onto the then-live DB — producing a "ghost column"
+    # with no migration record, and a NOCASE index with a mismatched record.
+    # Historical DBs keep both; fresh DBs lost the index (restored by v9).
+    # Released migrations are IMMUTABLE — append-only from here on (guarded by
+    # tests/test_db_migrations.py fingerprint test).
     (
         3, 'add eval_backend column', '''
         ALTER TABLE eval_reports ADD COLUMN eval_backend TEXT DEFAULT '';
@@ -145,6 +153,24 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         );
     '''
     ),
+    (
+        9, 'ensure model_name NOCASE index', '''
+        -- Reconciles schema drift with historical DBs: IF NOT EXISTS is a
+        -- no-op (silent SKIP) on DBs that already carry this index from the
+        -- pre-drift v3, and creates it on fresh DBs. Definition must stay in
+        -- sync with the original: model_name COLLATE NOCASE.
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_model_nocase
+            ON eval_reports(model_name COLLATE NOCASE);
+    '''
+    ),
+    (
+        10, 'add has_errors/error_note to eval_reports', '''
+        ALTER TABLE eval_reports ADD COLUMN has_errors INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE eval_reports ADD COLUMN error_note TEXT NOT NULL DEFAULT '';
+        UPDATE eval_reports SET has_errors = 0 WHERE has_errors IS NULL;
+        UPDATE eval_reports SET error_note = '' WHERE error_note IS NULL;
+    '''
+    ),
 ]
 
 
@@ -197,6 +223,49 @@ def _migrate(conn: sqlite3.Connection) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _verify_schema() -> None:
+    """Post-migration sanity checks for known schema-drift points.
+
+    Two severity levels (NOT merged into one log line):
+    - Missing ``eval_backend`` column  -> structural drift: every eval write
+      (INSERT with explicit column names) would fail with OperationalError.
+      Logged as ERROR with a remediation hint.
+    - Missing / malformed NOCASE index -> query-plan degradation only (model
+      filter ``= ? COLLATE NOCASE`` falls back to a full scan). Logged as
+      WARNING.
+
+    Never raises: startup must not be blocked by incidental drift, and the
+    service stays available for diagnostics.
+    """
+    if _db_path is None:
+        return
+    conn = _get_conn()
+    try:
+        REQUIRED_COLUMNS = ('eval_backend', 'has_errors')
+        cols = {r['name'] for r in conn.execute('PRAGMA table_info(eval_reports)')}
+        missing = [c for c in REQUIRED_COLUMNS if c not in cols]
+        if missing:
+            logger.error(
+                f'Schema drift: eval_reports missing column(s): {", ".join(missing)}; '
+                'eval writes will fail with OperationalError. Remediation: delete '
+                'evalscope_meta.db and restart (backfill restores it), or run the '
+                'corresponding ALTER TABLE ADD COLUMN statements.'
+            )
+        rows = conn.execute("PRAGMA index_xinfo('idx_eval_reports_model_nocase')").fetchall()
+        if not rows:
+            logger.warning(
+                'Schema drift: idx_eval_reports_model_nocase index is missing; '
+                'model filters fall back to a full scan. Migration v9 should have created it.'
+            )
+        elif not any(r['name'] == 'model_name' and r['coll'] == 'NOCASE' and r['key'] == 1 for r in rows):
+            logger.warning(
+                'Schema drift: idx_eval_reports_model_nocase exists but is malformed '
+                '(expected model_name COLLATE NOCASE); model filters may not use it.'
+            )
+    except sqlite3.Error as e:
+        logger.warning(f'Schema verification skipped (non-fatal): {e}')
+
+
 def init_db(output_dir: str) -> None:
     """Initialise the database path and create tables if needed."""
     global _db_path
@@ -204,6 +273,7 @@ def init_db(output_dir: str) -> None:
     os.makedirs(output_dir, exist_ok=True)
     conn = _get_conn()
     _migrate(conn)
+    _verify_schema()
     logger.info(f'SQLite metadata DB ready: {_db_path}')
 
 
@@ -273,6 +343,8 @@ def upsert_eval_report(
     dataset_scores: dict | None = None,
     eval_backend: str = '',
     user_id: int = 1,
+    has_errors: int = 0,
+    error_note: str = '',
 ) -> None:
     with _write_lock:
         conn = _get_conn()
@@ -280,13 +352,15 @@ def upsert_eval_report(
             try:
                 conn.execute(
                     '''INSERT OR REPLACE INTO eval_reports
-                       (task_id, model_name, dataset_name, score, num_samples, timestamp, dataset_scores, eval_backend, user_id)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                       (task_id, model_name, dataset_name, score, num_samples, timestamp,
+                        dataset_scores, eval_backend, user_id, has_errors, error_note)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                     (
                         task_id, model_name, dataset_name, score, num_samples, timestamp,
                         json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
                         eval_backend,
                         user_id,
+                        has_errors, error_note,
                     ),
                 )
                 conn.commit()
@@ -391,7 +465,7 @@ def query_eval_reports(
     offset = (max(1, page) - 1) * page_size
     rows = conn.execute(
         f'''SELECT task_id, model_name, dataset_name, score, num_samples,
-                   timestamp, dataset_scores
+                   timestamp, dataset_scores, has_errors, error_note
             FROM eval_reports {where_sql}
             ORDER BY {col} {direction}
             LIMIT ? OFFSET ?''',
@@ -424,6 +498,8 @@ def query_eval_reports(
             'num_samples': row['num_samples'],
             'timestamp': row['timestamp'],
             'dataset_scores': ds_scores,
+            'has_errors': row['has_errors'],
+            'error_note': row['error_note'],
         })
 
     return items, total, avail_models, avail_datasets
@@ -554,16 +630,25 @@ def upsert_aigc_audio_report(output_dir: str, task_id: str, user_id: int = 1) ->
     else:
         return False  # Not AIGC/Audio
 
-    # Determine primary score
+    # Determine primary score. A missing metric key would silently produce a
+    # fake 0.0 (indistinguishable from a genuine zero) — record it explicitly.
     score = 0.0
+    has_errors = 0
+    error_note = ''
     if eval_backend == 'AIGC_EVAL':
         score = metrics.get('clip_score_mean') or 0.0
+        if 'clip_score_mean' not in metrics:
+            has_errors, error_note = 1, 'missing clip_score_mean metric'
     elif tool == 'asr':
         wer = metrics.get('wer')
         score = (1.0 - wer) if wer is not None else 0.0
+        if 'wer' not in metrics:
+            has_errors, error_note = 1, 'missing wer metric'
     elif tool == 'tts':
         wer = metrics.get('wer_avg')
         score = (1.0 - wer) if wer is not None else 0.0
+        if 'wer_avg' not in metrics:
+            has_errors, error_note = 1, 'missing wer_avg metric'
 
     # Timestamp
     ts = data.get('timestamp')
@@ -587,6 +672,8 @@ def upsert_aigc_audio_report(output_dir: str, task_id: str, user_id: int = 1) ->
         dataset_scores=None,
         eval_backend=eval_backend,
         user_id=user_id,
+        has_errors=has_errors,
+        error_note=error_note,
     )
     return True
 
@@ -789,6 +876,31 @@ def recover_stale_tasks() -> list[str]:
     conn.commit()
     logger.info(f'Recovered {len(orphaned)} stale tasks from dead service (PID {old_pid}): {orphaned}')
     return orphaned
+
+
+def cleanup_task_state(days: int = 7) -> int:
+    """Remove stale 'orphaned'/'failed' task_state rows older than *days*.
+
+    Rows accumulate because they are only deleted when the user explicitly
+    removes a task; a dead subprocess (OOM/segfault) or a failed run leaves a
+    row behind forever (current production DB had ~40 rows, oldest 2+ months).
+    Called on startup AFTER recover_stale_tasks() so freshly-orphaned rows are
+    still protected by the retention window. Retention matches the task-log
+    cleanup policy (incomplete task dirs older than 7 days).
+
+    Returns the number of rows removed.
+    """
+    with _write_lock:
+        conn = _get_conn()
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        cur = conn.execute(
+            "DELETE FROM task_state WHERE status IN ('orphaned', 'failed') AND updated_at < ?",
+            (cutoff,),
+        )
+        conn.commit()
+        if cur.rowcount:
+            logger.info(f'task_state cleanup: removed {cur.rowcount} stale rows (older than {days}d)')
+        return cur.rowcount
 
 
 def write_service_pid(output_dir: str) -> None:

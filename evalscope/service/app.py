@@ -92,9 +92,19 @@ def create_app(outputs: str = None):
         _db.init_db(outputs_root)
         _db.backfill(outputs_root)
         _db.recover_stale_tasks()
+        # Garbage-collect stale runtime rows AFTER recovery (freshly-orphaned
+        # tasks are protected by the 7-day retention window).
+        _db.cleanup_task_state()
         _db.write_service_pid(outputs_root)
     except Exception as e:
         logger.warning(f'SQLite metadata store init failed (non-fatal): {e}')
+
+    # --- Opportunistic cleanup: expired JWT blacklist entries --------------
+    try:
+        from .blueprints.auth import _cleanup_expired_tokens
+        _cleanup_expired_tokens()
+    except Exception as e:
+        logger.warning(f'Token blacklist cleanup failed (non-fatal): {e}')
 
     # --- Set up rotating file logging for the service --------------------
     try:

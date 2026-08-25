@@ -285,6 +285,8 @@ export interface ReportSummary {
   num_samples: number
   timestamp: string
   eval_type?: 'llm' | 'rag' | 'aigc'
+  has_errors?: number
+  error_note?: string
 }
 
 export interface ListReportsResponse {

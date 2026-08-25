@@ -423,6 +423,18 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                     if score is not None and score > 1:
                         score = score / 100
                     dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
+                # Partial-failure marker: datasets with empty results never
+                # generate a report file, so they vanish from report_list —
+                # but the in-memory result dict still carries them with an
+                # empty value. Flag the record so it is excluded from stats.
+                # (Explicit empty-container test: a genuine 0.0 is falsy too,
+                # so `not v` would misclassify real zeros as failures.)
+                def _is_empty(v) -> bool:
+                    return v is None or v == {} or v == []
+
+                empty_sets = [k for k, v in result.items() if _is_empty(v)] if isinstance(result, dict) else []
+                has_errors = 1 if empty_sets else 0
+                error_note = f'empty results for datasets: {", ".join(map(str, empty_sets))}' if empty_sets else ''
                 # Retry on lock, with backoff (upsert_eval_report itself
                 # retries 5x internally; this outer loop is a final shield).
                 last_err = None
@@ -439,6 +451,8 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                             dataset_scores=dataset_scores,
                             eval_backend=task_config.eval_backend or '',
                             user_id=current_uid,
+                            has_errors=has_errors,
+                            error_note=error_note,
                         )
                         break
                     except Exception as e:

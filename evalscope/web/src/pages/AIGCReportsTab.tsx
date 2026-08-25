@@ -17,6 +17,8 @@ interface AIGCReportSummary {
   total_images: number
   clip_score_mean?: number
   lpips_mean?: number
+  has_errors?: number
+  error_note?: string
   fvd?: number
   inception_score?: number
   created_at: string
@@ -237,6 +239,14 @@ export default function AIGCReportsTab() {
                         {report.lpips_mean != null && <span className="text-[var(--text)]">LPIPS: {report.lpips_mean.toFixed(4)}</span>}
                         {report.fvd != null && <span className="text-[var(--warning-color)]">FVD: {report.fvd.toFixed(2)}</span>}
                         {report.clip_score_mean == null && report.lpips_mean == null && report.fvd == null && <span className="text-[var(--text-dim)]">-</span>}
+                        {report.has_errors ? (
+                          <span
+                            title={report.error_note || '失败/不完整结果'}
+                            className="inline-flex items-center rounded px-1 py-px text-[10px] font-medium text-white bg-amber-500/90 cursor-help"
+                          >
+                            失败
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{new Date(report.created_at).toLocaleString()}</td>
@@ -259,7 +269,20 @@ export default function AIGCReportsTab() {
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 pt-2">
               <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>←</Button>
-              <span className="text-sm text-[var(--text-muted)]">{page} / {totalPages}</span>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((item, idx) =>
+                  item === 'ellipsis' ? (
+                    <span key={`e${idx}`} className="px-1 text-[var(--text-dim)]">...</span>
+                  ) : (
+                    <Button key={item} variant={item === page ? 'primary' : 'ghost'} size="sm" onClick={() => setPage(item as number)} className="!min-w-[32px]">{item}</Button>
+                  ),
+                )}
               <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>→</Button>
             </div>
           )}

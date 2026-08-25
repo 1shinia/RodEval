@@ -13,18 +13,22 @@ import pytest
 
 from evalscope.service import db as _db
 
-REAL_OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'outputs')
-
 
 @pytest.fixture()
 def iso_db():
-    """Point the db module at a fresh temp DB per test, then restore."""
+    """Point the db module at a fresh temp DB per test, then reset.
+
+    Teardown must NOT re-point at the real outputs DB: init_db() there would
+    run pending migrations against production during tests (a latent hazard
+    that surfaced with migration v9 — test teardown applied v9 to the live
+    evalscope_meta.db). Resetting to None keeps the module uninitialized.
+    """
     tmp = tempfile.mkdtemp()
     _db._local.conn = None
     _db.init_db(tmp)
     yield tmp
+    _db._db_path = None
     _db._local.conn = None
-    _db.init_db(REAL_OUT)
 
 
 def test_upsert_eval_report_basic(iso_db):

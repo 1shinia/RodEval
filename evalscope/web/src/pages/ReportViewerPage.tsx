@@ -1,3 +1,4 @@
+import { Download } from 'lucide-react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useQueryParams } from '@/hooks/useQueryParams'
 
@@ -15,6 +16,7 @@ export default function ReportViewerPage() {
   const { get } = useQueryParams()
   const rawUrl = get('url')
   const url = rawUrl && isSafeReportUrl(rawUrl) ? rawUrl : null
+  const downloadUrl = url ? `${url}${url.includes('?') ? '&' : '?'}download=1` : null
 
   if (!rawUrl) {
     return (
@@ -36,14 +38,25 @@ export default function ReportViewerPage() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Report Viewer</h1>
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="text-sm text-[var(--accent)] hover:underline"
-        >
-          {t('common.openNewTab')}
-        </a>
+        <div className="flex items-center gap-4">
+          {downloadUrl && (
+            <a
+              href={downloadUrl}
+              className="text-sm text-[var(--accent)] hover:underline"
+            >
+              <Download size={14} className="inline mr-1" />
+              {t('common.download')}
+            </a>
+          )}
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm text-[var(--accent)] hover:underline"
+          >
+            {t('common.openNewTab')}
+          </a>
+        </div>
       </div>
       <iframe
         src={url}

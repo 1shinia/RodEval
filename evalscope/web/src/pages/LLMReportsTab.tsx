@@ -229,7 +229,17 @@ export default function LLMReportsTab() {
                     <td className="px-4 py-3 text-[var(--text)]">{report.model_name}</td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">{report.dataset_name}</td>
                     <td className="px-4 py-3 text-right text-[var(--text)]">{report.num_samples}</td>
-                    <td className="px-4 py-3 text-right font-mono text-sm text-[var(--accent)]">{report.score.toFixed(4)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-[var(--accent)]">
+  {report.score.toFixed(4)}
+  {report.has_errors ? (
+    <span
+      title={report.error_note || '失败/不完整结果'}
+      className="ml-1.5 inline-flex items-center rounded px-1 py-px text-[10px] font-medium text-white bg-amber-500/90 align-middle cursor-help"
+    >
+      失败
+    </span>
+  ) : null}
+</td>
                     <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{report.timestamp ? new Date(report.timestamp).toLocaleString() : '-'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
