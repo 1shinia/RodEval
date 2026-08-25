@@ -61,6 +61,8 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   const [parallel, setParallel] = useState('1')
   const [number, setNumber] = useState('10')
   const [rate, setRate] = useState('')
+  const [warmupRatio, setWarmupRatio] = useState('')
+  const [duration, setDuration] = useState('')
   const [maxTokens, setMaxTokens] = useState('')
   const [minTokens, setMinTokens] = useState('')
   const [dataset, setDataset] = useState('openqa')
@@ -137,6 +139,8 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       number: number.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
     }
     if (rate) config.rate = Number(rate)
+    if (warmupRatio) config.warmup_num = Number(warmupRatio) / 100
+    if (duration) config.duration = Number(duration)
     if (maxTokens) config.max_tokens = Number(maxTokens)
     if (minTokens) config.min_tokens = Number(minTokens)
     if (dataset) config.dataset = dataset === 'custom' ? 'local_jsonl' : dataset
@@ -213,6 +217,18 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     if (rate) {
       const r = Number(rate)
       if (isNaN(r) || r <= 0) newErrors.rate = '请求速率必须为正数'
+    }
+
+    // Warmup ratio: integer 1-99 (percent of total requests)
+    if (warmupRatio) {
+      const w = Number(warmupRatio)
+      if (!Number.isInteger(w) || w < 1 || w > 99) newErrors.warmupRatio = '预热比例必须为 1-99 的整数'
+    }
+
+    // Duration budget: positive integer seconds
+    if (duration) {
+      const d = Number(duration)
+      if (!Number.isInteger(d) || d < 1) newErrors.duration = '运行时长预算必须为正整数'
     }
 
     // Token / prompt length fields: positive integers
@@ -474,6 +490,18 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
           <input value={number}
             onChange={(e) => { setNumber(e.target.value); if (errors.number) setErrors((p) => ({ ...p, number: '' })) }}
             className={inputClass(errors.number)} placeholder="10, 100" />
+        </FormField>
+
+        <FormField label={t('perf.warmupRatio')} error={errors.warmupRatio} hint={t('perf.warmupHint')}>
+          <input type="number" value={warmupRatio}
+            onChange={(e) => { setWarmupRatio(e.target.value.replace(/[^0-9]/g, '')); if (errors.warmupRatio) setErrors((p) => ({ ...p, warmupRatio: '' })) }}
+            className={inputClass(errors.warmupRatio)} placeholder="10" />
+        </FormField>
+
+        <FormField label={t('perf.durationBudget')} error={errors.duration} hint={t('perf.durationHint')}>
+          <input type="number" value={duration}
+            onChange={(e) => { setDuration(e.target.value.replace(/[^0-9]/g, '')); if (errors.duration) setErrors((p) => ({ ...p, duration: '' })) }}
+            className={inputClass(errors.duration)} placeholder={t('perf.placeholderNoLimit')} />
         </FormField>
 
         {/* ── Token / Prompt ── */}

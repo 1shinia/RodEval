@@ -213,6 +213,8 @@ def launch_batch_perf():
         'prefix_length': data.get('prefix_length'),
         'tokenizer_path': data.get('tokenizer_path'),
         'extra_args': data.get('extra_args'),
+        'warmup_num': data.get('warmup_num'),
+        'duration': data.get('duration'),
     }
 
     def _run_batch():
@@ -297,6 +299,10 @@ def launch_batch_perf():
                     perf_data['extra_args'] = shared_config['extra_args']
                 if shared_config.get('read_timeout'):
                     perf_data['read_timeout'] = shared_config['read_timeout']
+                if shared_config.get('warmup_num'):
+                    perf_data['warmup_num'] = shared_config['warmup_num']
+                if shared_config.get('duration'):
+                    perf_data['duration'] = shared_config['duration']
 
                 if not try_reserve_slot(task_id, 'perf', model=model_name, user_id=shared_config['user_id']):
                     state['errors'] += 1
