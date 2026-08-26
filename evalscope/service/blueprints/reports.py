@@ -478,13 +478,10 @@ def load_report():
         validate_report_name(report_name, root)
 
         # Verify ownership: task_id must belong to current user
-        from .auth import get_current_user_id
-        from .. import db as _db
+        from .auth import check_task_ownership
         prefix, _, _ = process_report_name(report_name)
-        owner = _db._get_conn().execute(
-            'SELECT user_id FROM eval_reports WHERE task_id = ?', (prefix,)
-        ).fetchone()
-        if owner and owner[0] != get_current_user_id():
+        allowed, _owner = check_task_ownership('eval_reports', prefix)
+        if not allowed:
             return jsonify({'error': 'Report not found'}), 404
 
         report_list, datasets, task_cfg = load_single_report(root, report_name)
@@ -654,13 +651,11 @@ def delete_report():
             return jsonify({'error': 'Report folder not found'}), 404
 
         # Verify ownership before deletion
-        from .auth import get_current_user_id
-        from .. import db as _db
+        # (exists + not owner -> deny; unindexed dir -> admin only)
+        from .auth import get_current_user_id, check_task_ownership
         task_id, _, _ = process_report_name(report_name)
-        owner = _db._get_conn().execute(
-            'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
-        ).fetchone()
-        if owner and owner[0] != get_current_user_id():
+        allowed, _owner = check_task_ownership('eval_reports', task_id)
+        if not allowed:
             return jsonify({'error': 'Report not found'}), 404
 
         import shutil
@@ -669,6 +664,7 @@ def delete_report():
 
         # Sync SQLite
         try:
+            from .. import db as _db
             _db.delete_eval_report(task_id, user_id=get_current_user_id())
             logger.info(f'Deleted from SQLite: {task_id}')
         except Exception as e:

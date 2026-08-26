@@ -53,7 +53,7 @@ def run_aigc_evaluation():
             try:
                 from .. import db as _db
                 logger.info(f'AIGC task {task_id} completed, syncing to SQLite...')
-                ok = _db.upsert_aigc_audio_report(str(OUTPUT_DIR), task_id)
+                ok = _db.upsert_aigc_audio_report(str(OUTPUT_DIR), task_id, user_id=get_current_user_id())
                 logger.info(f'AIGC SQLite sync result: {ok}')
             except Exception as e:
                 logger.warning(f'Failed to sync AIGC report to SQLite: {e}', exc_info=True)
@@ -485,12 +485,11 @@ def delete_aigc_report(task_id: str):
         return jsonify({'error': 'Report not found'}), 404
 
     # Verify ownership before deletion
-    from .auth import get_current_user_id
+    # (exists + not owner -> deny; unindexed dir -> admin only)
+    from .auth import get_current_user_id, check_task_ownership
     from .. import db as _db
-    owner = _db._get_conn().execute(
-        'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
-    ).fetchone()
-    if owner and owner[0] != get_current_user_id():
+    allowed, _owner = check_task_ownership('eval_reports', task_id)
+    if not allowed:
         return jsonify({'error': 'Report not found'}), 404
 
     shutil.rmtree(str(task_dir))

@@ -90,12 +90,19 @@ def create_app(outputs: str = None):
         # If we write the new PID first, it sees the new (alive) PID and
         # skips recovery — leaving zombie 'running' tasks forever.
         _db.init_db(outputs_root)
+        # Online snapshot of the meta DB at every start (bounded by keep=5).
+        # meta.db now holds users/ownership/compare_reports — not rebuildable.
+        _db.backup_db(outputs_root, reason='startup')
         _db.backfill(outputs_root)
         _db.recover_stale_tasks()
         # Garbage-collect stale runtime rows AFTER recovery (freshly-orphaned
         # tasks are protected by the 7-day retention window).
         _db.cleanup_task_state()
         _db.write_service_pid(outputs_root)
+        # Bootstrap an initial admin if none exists (safe after meta.db loss;
+        # never resets an existing admin's password).
+        from .blueprints.auth import ensure_admin_user
+        ensure_admin_user()
     except Exception as e:
         logger.warning(f'SQLite metadata store init failed (non-fatal): {e}')
 
@@ -175,9 +182,8 @@ def create_app(outputs: str = None):
     # --- JWT authentication -----------------------------------------------
     app.before_request(require_auth)
 
-    # Ensure default admin user exists with correct password
-    with app.app_context():
-        _ensure_default_admin()
+    # Admin bootstrap now lives in the init block above (ensure_admin_user):
+    # env-var or random password instead of a hardcoded default.
 
     # --- Access logging --------------------------------------------------
     _setup_access_logging(app, outputs_root)
@@ -256,8 +262,11 @@ def create_app(outputs: str = None):
         tasks = [t for t in _get_running_tasks() if t.get('user_id', 0) == uid]
         seen_ids = {t['task_id'] for t in tasks}
 
-        # Add SQLite-persisted tasks that are still marked 'running'
+        # Add SQLite-persisted tasks that are still marked 'running'.
+        # Sweep first (explicit write op) so dead-PID zombies disappear;
+        # list_running_tasks itself is a pure read.
         try:
+            _db.sweep_orphaned_tasks()
             db_tasks = _db.list_running_tasks()
             for dt in db_tasks:
                 if dt['task_id'] not in seen_ids and dt.get('user_id', 0) == uid:
@@ -428,20 +437,6 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
             logger.warning('waitress not installed, falling back to Flask dev server (single-threaded)')
             logger.warning('Install waitress for production use: pip install waitress')
             app.run(host=host, port=port, debug=False)
-
-
-def _ensure_default_admin() -> None:
-    """Ensure the default admin user exists (does not overwrite existing password)."""
-    from werkzeug.security import generate_password_hash
-
-    conn = _db._get_conn()
-    existing = conn.execute("SELECT password_hash FROM users WHERE username = 'admin'").fetchone()
-    if not existing:
-        conn.execute(
-            "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
-            ('admin', generate_password_hash('admin123'), 'admin', datetime.now().isoformat()),
-        )
-        conn.commit()
 
 
 if __name__ == '__main__':

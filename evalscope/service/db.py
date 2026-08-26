@@ -24,11 +24,52 @@ _db_path: str | None = None
 # when multiple tasks complete at the same time. Reads are lock-free.
 _write_lock = threading.Lock()
 
+
+def _write(fn, *, retries: int = 5, backoff: float = 0.2) -> Any:
+    """Serialise *fn* (a callable taking the thread-local connection) under
+    ``_write_lock`` with locked-error retry and rollback-on-failure.
+
+    This is the ONLY sanctioned way to mutate the database.  Every write
+    helper below routes through it so that lock discipline, retry policy and
+    half-open-transaction cleanup stay in one place.
+    """
+    with _write_lock:
+        conn = _get_conn()
+        last_err: Exception | None = None
+        for attempt in range(retries):
+            try:
+                result = fn(conn)
+                conn.commit()
+                return result
+            except sqlite3.OperationalError as e:
+                last_err = e
+                # Roll back any half-open implicit transaction so the
+                # thread-local connection isn't left holding a stale write
+                # intent after a busy/lock failure.
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                if 'locked' in str(e) and attempt < retries - 1:
+                    import time
+                    time.sleep(backoff * (attempt + 1))
+                    continue
+                raise
+            except Exception:
+                # Non-lock errors: still clean up a possible open transaction
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                raise
+        assert last_err is not None
+        raise last_err
+
 # ---------------------------------------------------------------------------
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 11  # Bump when adding migrations below
+SCHEMA_VERSION = 12  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -196,6 +237,12 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_task_state_task_type ON task_state(task_type);
     '''
     ),
+    (
+        12, 'add user_id to task_state', '''
+        ALTER TABLE task_state ADD COLUMN user_id INTEGER DEFAULT 0;
+        UPDATE task_state SET user_id = 0 WHERE user_id IS NULL;
+    '''
+    ),
 ]
 
 
@@ -208,8 +255,14 @@ def _get_schema_version(conn: sqlite3.Connection) -> int:
         return 0
 
 
-def _migrate(conn: sqlite3.Connection) -> None:
-    """Apply pending migrations to bring the schema up to SCHEMA_VERSION."""
+def _migrate(conn: sqlite3.Connection, pre_migration_backup=None) -> None:
+    """Apply pending migrations to bring the schema up to SCHEMA_VERSION.
+
+    If *pre_migration_backup* is provided it is called once before the first
+    pending migration runs (destructive migrations like v11 rebuild tables,
+    so a rollback point is mandatory). Skipped entirely when already at
+    SCHEMA_VERSION — normal restarts must not accumulate backups.
+    """
     # Ensure version tracking table exists
     conn.execute(
         '''
@@ -225,6 +278,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     current = _get_schema_version(conn)
     if current >= SCHEMA_VERSION:
         return
+
+    if pre_migration_backup is not None and current > 0:
+        try:
+            pre_migration_backup()
+        except Exception as e:
+            logger.warning(f'Pre-migration backup failed (non-fatal): {e}')
 
     for version, description, sql in _MIGRATIONS:
         if version <= current:
@@ -291,13 +350,62 @@ def _verify_schema() -> None:
         logger.warning(f'Schema verification skipped (non-fatal): {e}')
 
 
+def backup_db(output_dir: str | None = None, keep: int = 5, reason: str = 'startup') -> str | None:
+    """Online backup of the meta database via SQLite's backup API (WAL-safe).
+
+    Creates ``{output_dir}/backups/evalscope_meta_<reason>_<ts>.db`` and prunes
+    old backups beyond *keep* per reason prefix.  Never raises: a failed
+    backup must not block startup.
+    """
+    if _db_path is None:
+        return None
+    out_dir = output_dir or os.path.dirname(_db_path)
+    try:
+        if not os.path.isfile(_db_path):
+            # sqlite3.connect would silently create an empty source DB and
+            # "back it up" into a garbage snapshot — refuse instead.
+            logger.warning(f'DB backup skipped ({reason}): source {_db_path} does not exist')
+            return None
+        os.makedirs(os.path.join(out_dir, 'backups'), exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        dest_path = os.path.join(out_dir, 'backups', f'evalscope_meta_{reason}_{ts}.db')
+
+        src = sqlite3.connect(_db_path, timeout=30)
+        try:
+            dst = sqlite3.connect(dest_path)
+            try:
+                src.backup(dst)  # online: safe while service is running (WAL)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+
+        # Retention: keep newest *keep* files per reason prefix, by mtime.
+        # The snapshot just written is included (newest mtime → survives).
+        backups = sorted(
+            (f for f in os.listdir(os.path.join(out_dir, 'backups'))
+             if f.startswith(f'evalscope_meta_{reason}_') and f.endswith('.db')),
+            key=lambda f: os.path.getmtime(os.path.join(out_dir, 'backups', f)),
+        )
+        for old in backups[:-keep]:
+            try:
+                os.remove(os.path.join(out_dir, 'backups', old))
+            except OSError:
+                pass
+        logger.info(f'DB backup ({reason}): {dest_path}')
+        return dest_path
+    except Exception as e:
+        logger.warning(f'DB backup skipped ({reason}, non-fatal): {e}')
+        return None
+
+
 def init_db(output_dir: str) -> None:
     """Initialise the database path and create tables if needed."""
     global _db_path
     _db_path = os.path.join(output_dir, 'evalscope_meta.db')
     os.makedirs(output_dir, exist_ok=True)
     conn = _get_conn()
-    _migrate(conn)
+    _migrate(conn, pre_migration_backup=lambda: backup_db(output_dir, reason='pre-migration'))
     _verify_schema()
     logger.info(f'SQLite metadata DB ready: {_db_path}')
 
@@ -315,6 +423,39 @@ def _get_conn() -> sqlite3.Connection:
         conn.execute('PRAGMA wal_autocheckpoint=200')
         _local.conn = conn
     return conn
+
+
+# ---------------------------------------------------------------------------
+# Ownership markers — persist user_id next to the task directory so that
+# backfill can restore attribution after meta.db loss (meta.db is NOT the
+# only place ownership lives; see database-layer.md 三分法).
+# Subprocess-side progress.json writers do full-file overwrites, so an owner
+# field inside progress.json would be clobbered — hence a separate marker.
+
+
+def write_owner_marker(task_dir: str, user_id: int) -> None:
+    """Write ``<task_dir>/.owner`` containing the owning user id (atomic)."""
+    try:
+        os.makedirs(task_dir, exist_ok=True)
+        tmp = os.path.join(task_dir, '.owner.tmp')
+        with open(tmp, 'w') as f:
+            f.write(str(int(user_id)))
+        os.replace(tmp, os.path.join(task_dir, '.owner'))
+    except Exception as e:
+        logger.debug(f'Owner marker write failed for {task_dir}: {e}')
+
+
+def read_owner(task_dir: str) -> int:
+    """Read the owner user id from ``<task_dir>/.owner``; 1 (=admin) if absent.
+
+    Legacy directories created before markers existed fall back to 1,
+    matching the historical backfill policy (all existing data → admin).
+    """
+    try:
+        with open(os.path.join(task_dir, '.owner')) as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return 1
 
 
 def checkpoint_db() -> dict:
@@ -371,38 +512,22 @@ def upsert_eval_report(
     has_errors: int = 0,
     error_note: str = '',
 ) -> None:
-    with _write_lock:
-        conn = _get_conn()
-        for attempt in range(5):
-            try:
-                conn.execute(
-                    '''INSERT OR REPLACE INTO eval_reports
-                       (task_id, model_name, dataset_name, score, num_samples, timestamp,
-                        dataset_scores, eval_backend, user_id, has_errors, error_note)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                    (
-                        task_id, model_name, dataset_name, score, num_samples, timestamp,
-                        json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
-                        eval_backend,
-                        user_id,
-                        has_errors, error_note,
-                    ),
-                )
-                conn.commit()
-                return
-            except sqlite3.OperationalError as e:
-                # Roll back any half-open implicit transaction so the
-                # thread-local connection isn't left holding a stale write
-                # intent after a busy/lock failure.
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-                if 'locked' in str(e) and attempt < 4:
-                    import time
-                    time.sleep(1 * (attempt + 1))
-                    continue
-                raise
+    def _op(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            '''INSERT OR REPLACE INTO eval_reports
+               (task_id, model_name, dataset_name, score, num_samples, timestamp,
+                dataset_scores, eval_backend, user_id, has_errors, error_note)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                task_id, model_name, dataset_name, score, num_samples, timestamp,
+                json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
+                eval_backend,
+                user_id,
+                has_errors, error_note,
+            ),
+        )
+
+    _write(_op)
 
 
 def query_eval_reports(
@@ -465,17 +590,20 @@ def query_eval_reports(
     col = sort_map.get(sort_by, 'timestamp')
     direction = 'DESC' if sort_order == 'desc' else 'ASC'
 
-    # Available filter values (before filtering) — scoped to backend
+    # Available filter values (before filtering) — scoped to backend AND user
+    # (filter dropdowns must not leak other tenants' model/dataset names)
     _backend_where = 'AND eval_backend = ?' if backend else ''
     _backend_params = [backend] if backend else []
     avail_models = [
         r[0] for r in conn.
-        execute(f'SELECT DISTINCT model_name FROM eval_reports WHERE model_name != "" {_backend_where} ORDER BY model_name',
-                _backend_params).fetchall()
+        execute(f'SELECT DISTINCT model_name FROM eval_reports '
+                f'WHERE model_name != "" AND user_id = ? {_backend_where} ORDER BY model_name',
+                [user_id, *_backend_params]).fetchall()
     ]
     avail_datasets_raw = conn.execute(
-        f'SELECT DISTINCT dataset_name FROM eval_reports WHERE dataset_name != "" {_backend_where}',
-        _backend_params,
+        f'SELECT DISTINCT dataset_name FROM eval_reports '
+        f'WHERE dataset_name != "" AND user_id = ? {_backend_where}',
+        [user_id, *_backend_params],
     ).fetchall()
     avail_datasets: list[str] = []
     for r in avail_datasets_raw:
@@ -531,13 +659,13 @@ def query_eval_reports(
 
 
 def delete_eval_report(task_id: str, user_id: int | None = None) -> None:
-    with _write_lock:
-        conn = _get_conn()
+    def _op(conn: sqlite3.Connection) -> None:
         if user_id is not None:
             conn.execute('DELETE FROM eval_reports WHERE task_id = ? AND user_id = ?', (task_id, user_id))
         else:
             conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id,))
-        conn.commit()
+
+    _write(_op)
 
 
 # ---------------------------------------------------------------------------
@@ -555,24 +683,15 @@ def upsert_perf_task(
     timestamp: str,
     user_id: int = 1,
 ) -> None:
-    with _write_lock:
-        conn = _get_conn()
-        for attempt in range(5):
-            try:
-                conn.execute(
-                    '''INSERT OR REPLACE INTO perf_tasks
-                       (task_id, model, api, dataset, runs, has_report, timestamp, user_id)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                    (task_id, model, api, dataset, runs, int(has_report), timestamp, user_id),
-                )
-                conn.commit()
-                return
-            except sqlite3.OperationalError as e:
-                if 'locked' in str(e) and attempt < 4:
-                    import time
-                    time.sleep(0.1 * (attempt + 1))
-                    continue
-                raise
+    def _op(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            '''INSERT OR REPLACE INTO perf_tasks
+               (task_id, model, api, dataset, runs, has_report, timestamp, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (task_id, model, api, dataset, runs, int(has_report), timestamp, user_id),
+        )
+
+    _write(_op)
 
 
 def cleanup_perf_tasks(output_dir: str, user_id: int | None = None) -> int:
@@ -580,8 +699,8 @@ def cleanup_perf_tasks(output_dir: str, user_id: int | None = None) -> int:
 
     Returns the number of rows removed.
     """
-    with _write_lock:
-        conn = _get_conn()
+
+    def _op(conn: sqlite3.Connection) -> int:
         if user_id is not None:
             rows = conn.execute('SELECT task_id FROM perf_tasks WHERE user_id = ?', (user_id,)).fetchall()
         else:
@@ -592,8 +711,9 @@ def cleanup_perf_tasks(output_dir: str, user_id: int | None = None) -> int:
                 stale.append(tid)
         if stale:
             conn.executemany('DELETE FROM perf_tasks WHERE task_id = ?', [(t,) for t in stale])
-            conn.commit()
         return len(stale)
+
+    return _write(_op)
 
 
 def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
@@ -601,8 +721,8 @@ def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
 
     Returns the number of rows removed.
     """
-    with _write_lock:
-        conn = _get_conn()
+
+    def _op(conn: sqlite3.Connection) -> int:
         if user_id is not None:
             rows = conn.execute('SELECT task_id FROM eval_reports WHERE user_id = ?', (user_id,)).fetchall()
         else:
@@ -613,8 +733,9 @@ def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
                 stale.append(tid)
         if stale:
             conn.executemany('DELETE FROM eval_reports WHERE task_id = ?', [(t,) for t in stale])
-            conn.commit()
         return len(stale)
+
+    return _write(_op)
 
 
 def _read_aigc_expected_metrics(output_dir: str, task_id: str) -> list[str]:
@@ -778,14 +899,18 @@ def query_perf_tasks(
         order_col = 'timestamp'
     direction = 'DESC' if sort_order == 'desc' else 'ASC'
 
-    # Available filter values
+    # Available filter values — scoped to user (no cross-tenant leakage)
     avail_models = [
         r[0] for r in conn.
-        execute('SELECT DISTINCT model FROM perf_tasks WHERE model != "" AND model != "N/A" ORDER BY model').fetchall()
+        execute('SELECT DISTINCT model FROM perf_tasks '
+                'WHERE model != "" AND model != "N/A" AND user_id = ? ORDER BY model',
+                (user_id,)).fetchall()
     ]
     avail_datasets = [
         r[0] for r in conn.execute(
-            'SELECT DISTINCT dataset FROM perf_tasks WHERE dataset != "" AND dataset != "N/A" ORDER BY dataset'
+            'SELECT DISTINCT dataset FROM perf_tasks '
+            'WHERE dataset != "" AND dataset != "N/A" AND user_id = ? ORDER BY dataset',
+            (user_id,)
         ).fetchall()
     ]
 
@@ -816,13 +941,13 @@ def query_perf_tasks(
 
 
 def delete_perf_task(task_id: str, user_id: int | None = None) -> None:
-    with _write_lock:
-        conn = _get_conn()
+    def _op(conn: sqlite3.Connection) -> None:
         if user_id is not None:
             conn.execute('DELETE FROM perf_tasks WHERE task_id = ? AND user_id = ?', (task_id, user_id))
         else:
             conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id,))
-        conn.commit()
+
+    _write(_op)
 
 
 # ---------------------------------------------------------------------------
@@ -836,69 +961,89 @@ def upsert_task_state(
     status: str,
     pid: int | None = None,
     model: str = '',
+    user_id: int = 0,
 ) -> None:
     """Insert or update a task's runtime state.
 
     Status values: 'running', 'completed', 'failed', 'stopped', 'orphaned'.
     """
-    with _write_lock:
-        conn = _get_conn()
+
+    def _op(conn: sqlite3.Connection) -> None:
         now = datetime.now().isoformat()
         conn.execute(
-            '''INSERT INTO task_state (task_id, task_type, status, pid, model, started_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+            '''INSERT INTO task_state (task_id, task_type, status, pid, model, user_id, started_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(task_id) DO UPDATE SET
                    status = excluded.status,
                    pid = excluded.pid,
                    updated_at = excluded.updated_at''',
-            (task_id, task_type, status, pid, model, now, now),
+            (task_id, task_type, status, pid, model, user_id, now, now),
         )
-        conn.commit()
+
+    _write(_op)
 
 
 def delete_task_state(task_id: str) -> None:
-    with _write_lock:
-        conn = _get_conn()
-        conn.execute('DELETE FROM task_state WHERE task_id = ?', (task_id, ))
-        conn.commit()
+    _write(lambda conn: conn.execute('DELETE FROM task_state WHERE task_id = ?', (task_id, )))
 
 
-def list_running_tasks() -> list[dict]:
-    """Return all tasks with status='running'.
+def _mark_orphaned_tasks(task_ids: list[str]) -> int:
+    """Mark the given task_ids 'orphaned' (single locked write transaction)."""
+    now = datetime.now().isoformat()
 
-    As a safety net, any task whose child PID is no longer alive is
-    automatically marked 'orphaned' and excluded from the result.
-    This catches edge cases where the subprocess died without the
-    parent updating task_state (e.g. OOM kill, segfault).
+    def _op(conn: sqlite3.Connection) -> int:
+        conn.executemany(
+            "UPDATE task_state SET status = 'orphaned', updated_at = ? WHERE task_id = ?",
+            [(now, tid) for tid in task_ids],
+        )
+        return len(task_ids)
+
+    return _write(_op)
+
+
+def sweep_orphaned_tasks() -> list[dict]:
+    """Maintenance pass: mark dead-PID running tasks orphaned.
+
+    This is a WRITE operation and must not be called from read paths.
+    Returns the rows still alive after the sweep.
     """
     conn = _get_conn()
     rows = conn.execute(
-        '''SELECT task_id, task_type, status, pid, model, started_at, updated_at
+        '''SELECT task_id, task_type, status, pid, model, user_id, started_at, updated_at
            FROM task_state WHERE status = 'running'
            ORDER BY started_at DESC'''
     ).fetchall()
-    alive = []
-    now = datetime.now().isoformat()
-    for r in rows:
-        pid = r['pid']
-        if pid and _pid_alive(pid):
-            alive.append(dict(r))
-        else:
-            conn.execute(
-                "UPDATE task_state SET status = 'orphaned', updated_at = ? WHERE task_id = ?",
-                (now, r['task_id']),
-            )
-            logger.info(f"Auto-orphaned zombie task {r['task_id']} (PID {pid} dead)")
-    if alive and len(alive) < len(rows):
-        conn.commit()
-    return alive
+    dead = [r['task_id'] for r in rows if not (r['pid'] and _pid_alive(r['pid']))]
+    if dead:
+        for tid in dead:
+            logger.info(f'Auto-orphaned zombie task {tid}')
+        _mark_orphaned_tasks(dead)
+    return [dict(r) for r in rows if r['task_id'] not in set(dead)]
+
+
+def list_running_tasks() -> list[dict]:
+    """Return all tasks with status='running' whose PID is still alive.
+
+    Pure read: never mutates.  Zombie detection lives in
+    :func:`sweep_orphaned_tasks` so queries stay side-effect free.
+    """
+    conn = _get_conn()
+    rows = conn.execute(
+        '''SELECT task_id, task_type, status, pid, model, user_id, started_at, updated_at
+           FROM task_state WHERE status = 'running'
+           ORDER BY started_at DESC'''
+    ).fetchall()
+    return [
+        dict(r) for r in rows
+        if r['pid'] and _pid_alive(r['pid'])
+    ]
 
 
 def get_all_task_states() -> list[dict]:
     """Return all task states (for debugging / admin)."""
     conn = _get_conn()
     rows = conn.execute(
-        '''SELECT task_id, task_type, status, pid, model, started_at, updated_at
+        '''SELECT task_id, task_type, status, pid, model, user_id, started_at, updated_at
            FROM task_state ORDER BY started_at DESC'''
     ).fetchall()
     return [dict(r) for r in rows]
@@ -916,8 +1061,6 @@ def recover_stale_tasks() -> list[str]:
 
     Returns the list of task_ids that were marked orphaned.
     """
-    conn = _get_conn()
-
     if _db_path is None:
         return []
 
@@ -929,18 +1072,13 @@ def recover_stale_tasks() -> list[str]:
         logger.info(f'Previous service (PID {old_pid}) is still running — skipping stale task recovery.')
         return []
 
+    conn = _get_conn()
     rows = conn.execute("SELECT task_id FROM task_state WHERE status = 'running'").fetchall()
     if not rows:
         return []
 
     orphaned = [row['task_id'] for row in rows]
-    now = datetime.now().isoformat()
-    for tid in orphaned:
-        conn.execute(
-            "UPDATE task_state SET status = 'orphaned', updated_at = ? WHERE task_id = ?",
-            (now, tid),
-        )
-    conn.commit()
+    _mark_orphaned_tasks(orphaned)
     logger.info(f'Recovered {len(orphaned)} stale tasks from dead service (PID {old_pid}): {orphaned}')
     return orphaned
 
@@ -957,17 +1095,19 @@ def cleanup_task_state(days: int = 7) -> int:
 
     Returns the number of rows removed.
     """
-    with _write_lock:
-        conn = _get_conn()
-        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+
+    def _op(conn: sqlite3.Connection) -> int:
         cur = conn.execute(
             "DELETE FROM task_state WHERE status IN ('orphaned', 'failed') AND updated_at < ?",
             (cutoff,),
         )
-        conn.commit()
-        if cur.rowcount:
-            logger.info(f'task_state cleanup: removed {cur.rowcount} stale rows (older than {days}d)')
         return cur.rowcount
+
+    removed = _write(_op)
+    if removed:
+        logger.info(f'task_state cleanup: removed {removed} stale rows (older than {days}d)')
+    return removed
 
 
 def write_service_pid(output_dir: str) -> None:
@@ -1215,7 +1355,7 @@ def backfill(output_dir: str) -> None:
                     timestamp=timestamp,
                     dataset_scores=dataset_scores,
                     eval_backend=eval_backend,
-                    user_id=1,  # backfill: all existing data → admin
+                    user_id=read_owner(os.path.join(output_dir, prefix)),  # .owner marker; legacy dirs → admin
                 )
                 eval_count += 1
             except Exception as e:
@@ -1236,7 +1376,7 @@ def backfill(output_dir: str) -> None:
             task_dir = os.path.join(output_dir, entry)
             if not os.path.isdir(task_dir):
                 continue
-            if upsert_aigc_audio_report(output_dir, entry):
+            if upsert_aigc_audio_report(output_dir, entry, user_id=read_owner(task_dir)):
                 aigc_audio_count += 1
             elif os.path.isfile(os.path.join(task_dir, 'results.json')):
                 aigc_audio_skipped += 1
@@ -1310,7 +1450,7 @@ def backfill(output_dir: str) -> None:
                 timestamp=timestamp,
                 dataset_scores=dataset_scores,
                 eval_backend='RAGEval',
-                user_id=1,  # backfill: all existing data → admin
+                user_id=read_owner(task_dir),  # .owner marker; legacy dirs → admin
             )
             rag_count += 1
         if rag_count:
@@ -1376,7 +1516,7 @@ def backfill(output_dir: str) -> None:
                 timestamp=timestamp,
                 dataset_scores=dataset_scores,
                 eval_backend='RAGEval',
-                user_id=1,  # backfill: all existing data → admin
+                user_id=read_owner(task_dir),  # .owner marker; legacy dirs → admin
             )
             clip_count += 1
         if clip_count:
@@ -1455,7 +1595,7 @@ def backfill(output_dir: str) -> None:
                 runs=runs,
                 has_report=has_report,
                 timestamp=timestamp,
-                user_id=1,  # backfill: all existing data → admin
+                user_id=read_owner(task_dir),  # .owner marker; legacy dirs → admin
             )
             perf_count += 1
         if perf_count:
@@ -1483,15 +1623,16 @@ def save_compare_report(name: str, task_ids_json: str, task_count: int, backend:
     """Save a compare report and return its ID."""
     from datetime import datetime
 
-    with _write_lock:
-        conn = _get_conn()
-        created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    def _op(conn: sqlite3.Connection) -> int:
         conn.execute(
             'INSERT INTO compare_reports (name, task_ids, created_at, task_count, backend, root_path, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
             (name, task_ids_json, created_at, task_count, backend, root_path, user_id),
         )
-        conn.commit()
         return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+    return _write(_op)
 
 
 def list_compare_reports(user_id: int = 1) -> list[dict]:
@@ -1517,10 +1658,11 @@ def list_compare_reports(user_id: int = 1) -> list[dict]:
 
 def delete_compare_report(report_id: int, user_id: int | None = None) -> bool:
     """Delete a compare report by ID. Returns True if deleted."""
-    conn = _get_conn()
-    if user_id is not None:
-        cur = conn.execute('DELETE FROM compare_reports WHERE id = ? AND user_id = ?', (report_id, user_id))
-    else:
-        cur = conn.execute('DELETE FROM compare_reports WHERE id = ?', (report_id,))
-    conn.commit()
-    return cur.rowcount > 0
+    def _op(conn: sqlite3.Connection) -> int:
+        if user_id is not None:
+            cur = conn.execute('DELETE FROM compare_reports WHERE id = ? AND user_id = ?', (report_id, user_id))
+        else:
+            cur = conn.execute('DELETE FROM compare_reports WHERE id = ?', (report_id,))
+        return cur.rowcount
+
+    return _write(_op) > 0

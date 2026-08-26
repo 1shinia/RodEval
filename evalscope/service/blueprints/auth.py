@@ -8,19 +8,98 @@ import jwt
 from flask import Blueprint, current_app, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from ..db import _get_conn
+from ..db import _get_conn, _write
 
 logger = __import__('evalscope.utils.logger', fromlist=['get_logger']).get_logger()
 
 bp_auth = Blueprint('auth', __name__, url_prefix='/api/v1/auth')
 
-# Default admin password on first run
+# Default admin username (bootstrap only — see ensure_admin_user below)
 _DEFAULT_ADMIN = 'admin'
-_DEFAULT_PASSWORD = 'admin123'
 
-# JWT secret — fixed value (override with JWT_SECRET env var)
-_JWT_SECRET = os.environ.get('JWT_SECRET', 'rod-eval-jwt-secret-2024')
+# JWT secret. Resolution order:
+#   1. JWT_SECRET env var (explicit deployment config)
+#   2. persisted random secret in {OUTPUT_DIR}/.jwt_secret (created on first
+#      import with 0600 perms; survives restarts so tokens stay valid, and is
+#      NOT in the DB so a meta.db restore doesn't drag auth state along)
+# The old hardcoded 'rod-eval-jwt-secret-2024' is gone: existing tokens are
+# invalidated once on upgrade (users just log in again).
 _JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', '72'))
+
+
+def _load_or_create_jwt_secret() -> str:
+    env = os.environ.get('JWT_SECRET')
+    if env:
+        return env
+    try:
+        from ..utils.log import OUTPUT_DIR as _OUTPUT_DIR
+        secret_path = os.path.join(str(_OUTPUT_DIR), '.jwt_secret')
+    except Exception:
+        secret_path = os.path.join(os.getcwd(), 'outputs', '.jwt_secret')
+    try:
+        if os.path.isfile(secret_path):
+            with open(secret_path) as f:
+                secret = f.read().strip()
+            if secret:
+                return secret
+        os.makedirs(os.path.dirname(secret_path), exist_ok=True)
+        import secrets as _secrets
+        secret = _secrets.token_hex(32)
+        fd = os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            f.write(secret)
+        return secret
+    except Exception:
+        # Last resort: ephemeral per-process secret (all sessions invalidate
+        # on restart, but the service still works).
+        import secrets as _secrets
+        return _secrets.token_hex(32)
+
+
+_JWT_SECRET = _load_or_create_jwt_secret()
+
+
+def ensure_admin_user() -> None:
+    """Create the initial admin account if no admin exists yet.
+
+    Safe bootstrap after meta.db loss (previously nobody could log in).
+    Password source: EVALSCOPE_ADMIN_PASSWORD env var; if unset, a random
+    one is generated and printed ONCE to the service log.
+    Never resets an existing admin's password.
+    """
+    conn = _get_conn()
+    row = conn.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+    if row is not None:
+        return
+
+    password = os.environ.get('EVALSCOPE_ADMIN_PASSWORD', '')
+    generated = False
+    if not password:
+        import secrets as _secrets
+        password = _secrets.token_urlsafe(12)
+        generated = True
+
+    pw_hash = generate_password_hash(password)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    def _op(c) -> None:
+        c.execute(
+            "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'admin', ?)",
+            (_DEFAULT_ADMIN, pw_hash, now),
+        )
+
+    try:
+        _write(_op)
+    except Exception as e:
+        logger.warning(f'Admin bootstrap failed (non-fatal): {e}')
+        return
+    if generated:
+        logger.warning(
+            f'Bootstrapped admin user "{_DEFAULT_ADMIN}" with random password: {password} '
+            '(shown once — change it after first login, or set EVALSCOPE_ADMIN_PASSWORD)'
+        )
+    else:
+        logger.info(f'Bootstrapped admin user "{_DEFAULT_ADMIN}" from EVALSCOPE_ADMIN_PASSWORD')
 
 
 def _user_by_username(username: str) -> dict | None:
@@ -53,18 +132,15 @@ def _is_blacklisted(jti: str) -> bool:
 
 def _blacklist_token(jti: str, exp: float) -> None:
     """Add a token jti to the blacklist with its expiry for cleanup."""
-    conn = _get_conn()
     exp_str = datetime.datetime.fromtimestamp(exp, datetime.timezone.utc).isoformat()
-    conn.execute('INSERT OR IGNORE INTO token_blacklist (jti, expires_at) VALUES (?, ?)', (jti, exp_str))
-    conn.commit()
+    _write(lambda conn: conn.execute(
+        'INSERT OR IGNORE INTO token_blacklist (jti, expires_at) VALUES (?, ?)', (jti, exp_str)))
 
 
 def _cleanup_expired_tokens() -> None:
     """Remove expired tokens from the blacklist."""
-    conn = _get_conn()
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    conn.execute('DELETE FROM token_blacklist WHERE expires_at < ?', (now,))
-    conn.commit()
+    _write(lambda conn: conn.execute('DELETE FROM token_blacklist WHERE expires_at < ?', (now,)))
 
 
 def verify_token(token: str) -> dict | None:
@@ -125,6 +201,30 @@ def get_user_output_dir(user_id: int = None) -> str:
     return os.path.join(OUTPUT_DIR, str(uid))
 
 
+def get_current_role() -> str:
+    """Return the current user's role ('admin'/'user'); '' when unauthenticated."""
+    user = getattr(request, 'current_user', None)
+    return (user or {}).get('role', '')
+
+
+def check_task_ownership(table: str, task_id: str) -> tuple[bool, int | None]:
+    """Return ``(allowed, owner_user_id)`` for a task in *table*.
+
+    Rules:
+      - Row exists and belongs to the requester  -> allowed
+      - Row exists, belongs to someone else      -> denied
+      - No row (unindexed/legacy directory)      -> admin only
+    """
+    from ..db import _get_conn
+    uid = get_current_user_id()
+    row = _get_conn().execute(
+        f'SELECT user_id FROM {table} WHERE task_id = ?', (task_id,)
+    ).fetchone()
+    if row is None:
+        return get_current_role() == 'admin', None
+    return row[0] == uid, row[0]
+
+
 @bp_auth.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -148,11 +248,10 @@ def register():
 
     pw_hash = generate_password_hash(password)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    conn.execute(
+    _write(lambda conn: conn.execute(
         'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
         (username, pw_hash, 'user', now),
-    )
-    conn.commit()
+    ))
 
     user = _user_by_username(username)
     if not user:
@@ -223,10 +322,9 @@ def change_password():
     user = _user_by_username(payload['username'])
     if not user or not check_password_hash(user['password_hash'], old_password):
         return jsonify({'error': '当前密码错误'}), 401
-    conn = _get_conn()
-    conn.execute('UPDATE users SET password_hash = ? WHERE id = ?',
-                 (generate_password_hash(new_password), user['id']))
-    conn.commit()
+    _write(lambda conn: conn.execute(
+        'UPDATE users SET password_hash = ? WHERE id = ?',
+        (generate_password_hash(new_password), user['id'])))
     return jsonify({'ok': True}), 200
 
 
@@ -276,11 +374,10 @@ def create_user():
         return jsonify({'error': '用户名已存在'}), 409
     pw_hash = generate_password_hash(password)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    conn.execute(
+    _write(lambda conn: conn.execute(
         'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
         (username, pw_hash, role, now),
-    )
-    conn.commit()
+    ))
     new_user = _user_by_username(username)
     return jsonify({'user': {'id': new_user['id'], 'username': new_user['username'], 'role': new_user['role']}}), 201
 
@@ -293,10 +390,8 @@ def delete_user(user_id: int):
         return jsonify({'error': 'Admin access required'}), 403
     if int(admin['sub']) == user_id:
         return jsonify({'error': '不能删除自己'}), 400
-    conn = _get_conn()
-    cur = conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
-    conn.commit()
-    if cur.rowcount == 0:
+    removed = _write(lambda conn: conn.execute('DELETE FROM users WHERE id = ?', (user_id,)).rowcount)
+    if removed == 0:
         return jsonify({'error': '用户不存在'}), 404
     return jsonify({'ok': True}), 200
 
@@ -313,10 +408,9 @@ def reset_password(user_id: int):
     password = data['password'].strip()
     if len(password) < 6:
         return jsonify({'error': 'password must be at least 6 characters'}), 400
-    conn = _get_conn()
     pw_hash = generate_password_hash(password)
-    cur = conn.execute('UPDATE users SET password_hash = ? WHERE id = ?', (pw_hash, user_id))
-    conn.commit()
-    if cur.rowcount == 0:
+    updated = _write(lambda conn: conn.execute(
+        'UPDATE users SET password_hash = ? WHERE id = ?', (pw_hash, user_id)).rowcount)
+    if updated == 0:
         return jsonify({'error': '用户不存在'}), 404
     return jsonify({'ok': True}), 200

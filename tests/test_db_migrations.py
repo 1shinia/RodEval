@@ -182,6 +182,12 @@ RELEASED: list[tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_task_state_task_type ON task_state(task_type);
     '''
     ),
+    (
+        12, 'add user_id to task_state', '''
+        ALTER TABLE task_state ADD COLUMN user_id INTEGER DEFAULT 0;
+        UPDATE task_state SET user_id = 0 WHERE user_id IS NULL;
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -267,9 +273,9 @@ def test_released_migrations_immutable():
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 11
+    assert len(RELEASED) == 12
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 11
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 12
 
 
 def test_fresh_db_converges(tmp_path):

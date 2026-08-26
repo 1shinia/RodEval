@@ -60,6 +60,15 @@ BATCH_CSV_TEMPLATE = os.path.join(os.path.dirname(OUTPUT_DIR), 'data', 'model_li
 BATCH_UPLOAD_DIR = os.path.join(OUTPUT_DIR, '_batch_uploads')
 
 
+def _write_owner_marker(task_dir: str, user_id: int) -> None:
+    """Persist task ownership next to the task directory (survives meta.db loss)."""
+    try:
+        from ..db import write_owner_marker
+        write_owner_marker(task_dir, user_id)
+    except Exception as e:
+        logger.debug(f'Owner marker skipped for {task_dir}: {e}')
+
+
 def _mark_perf_completed(task_id: str) -> None:
     """Write a ``completed`` progress.json marker for a finished perf task.
 
@@ -351,6 +360,7 @@ def launch_batch_perf():
                     config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
                     with open(config_file, 'w') as cf:
                         json.dump(save_data, cf, ensure_ascii=False)
+                    _write_owner_marker(perf_args.outputs_dir, shared_config['user_id'])
 
                     create_log_file(task_id, os.path.join('perf', 'benchmark.log'))
 
@@ -732,6 +742,7 @@ def run_performance_test():
             config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
             with open(config_file, 'w') as f:
                 json.dump(save_data, f, ensure_ascii=False)
+            _write_owner_marker(perf_args.outputs_dir, uid)
         except Exception as e:
             logger.warning(f'[{task_id}] Failed to save task config: {e}')
 
@@ -854,6 +865,7 @@ def launch_performance_test():
             config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
             with open(config_file, 'w') as f:
                 json.dump(save_data, f, ensure_ascii=False)
+            _write_owner_marker(perf_args.outputs_dir, uid)
         except Exception as e:
             logger.warning(f'[{task_id}] Failed to save task config: {e}')
 
@@ -929,6 +941,12 @@ def stop_performance_test():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    # Ownership: cannot stop another user's task
+    from .auth import check_task_ownership
+    allowed, _owner = check_task_ownership('task_state', task_id)
+    if not allowed:
+        return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
+
     stopped = stop_process(task_id)
     if stopped:
         return jsonify({'status': 'stopped', 'task_id': task_id}), 200
@@ -973,6 +991,13 @@ def resume_performance_test():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
+
+    # Ownership: only the owner (or admin) may resume a task
+    from .auth import check_task_ownership
+    allowed, _owner = check_task_ownership('perf_tasks', task_id)
+    if not allowed:
+        return jsonify({'error': f'Task not found or not resumable: {task_id}'}), 404
+
     if not try_reserve_slot(task_id, 'perf', model=model, user_id=uid):
         max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
         slots = get_user_slots(uid)
@@ -1103,12 +1128,11 @@ def delete_performance_test():
         return jsonify({'error': f'Task not found: {task_id}'}), 404
 
     # Verify ownership
-    from .auth import get_current_user_id
+    # (exists + not owner -> deny; unindexed dir -> admin only)
+    from .auth import get_current_user_id, check_task_ownership
     from .. import db as _db
-    owner = _db._get_conn().execute(
-        'SELECT user_id FROM perf_tasks WHERE task_id = ?', (task_id,)
-    ).fetchone()
-    if owner and owner[0] != get_current_user_id():
+    allowed, _owner = check_task_ownership('perf_tasks', task_id)
+    if not allowed:
         return jsonify({'error': 'Task not found'}), 404
 
     try:

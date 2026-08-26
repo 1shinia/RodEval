@@ -356,6 +356,15 @@ def _all_results_empty(result) -> bool:
     return False
 
 
+def _write_owner_marker(task_dir: str, user_id: int) -> None:
+    """Persist task ownership next to the task directory (survives meta.db loss)."""
+    try:
+        from ..db import write_owner_marker
+        write_owner_marker(task_dir, user_id)
+    except Exception as e:
+        logger.debug(f'Owner marker skipped for {task_dir}: {e}')
+
+
 def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', use_direct: bool = False, user_id: int | None = None):
     """Run the evaluation and return a Flask response."""
     create_log_file(task_id, os.path.join('logs', 'eval_log.log'))
@@ -594,6 +603,7 @@ def run_evaluation():
             )
             task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
             os.makedirs(task_config.work_dir, exist_ok=True)
+            _write_owner_marker(task_config.work_dir, uid)
             try:
                 task_config.dump_yaml(task_config.work_dir)
             except Exception as e:
@@ -616,6 +626,7 @@ def run_evaluation():
             )
             task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
             os.makedirs(task_config.work_dir, exist_ok=True)
+            _write_owner_marker(task_config.work_dir, uid)
             try:
                 task_config.dump_yaml(task_config.work_dir)
             except Exception as e:
@@ -638,6 +649,7 @@ def run_evaluation():
             )
             task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
             os.makedirs(task_config.work_dir, exist_ok=True)
+            _write_owner_marker(task_config.work_dir, uid)
             try:
                 task_config.dump_yaml(task_config.work_dir)
             except Exception as e:
@@ -667,6 +679,7 @@ def run_evaluation():
 
         # Save task config for resume capability
         os.makedirs(task_config.work_dir, exist_ok=True)
+        _write_owner_marker(task_config.work_dir, uid)
         try:
             task_config.dump_yaml(task_config.work_dir)
         except Exception as e:
@@ -773,6 +786,7 @@ def launch_evaluation():
 
         task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
         os.makedirs(task_config.work_dir, exist_ok=True)
+        _write_owner_marker(task_config.work_dir, uid)
         try:
             task_config.dump_yaml(task_config.work_dir)
         except Exception as e:
@@ -871,6 +885,13 @@ def resume_evaluation():
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
     model = ''  # We'll extract this from the config after loading
+
+    # Ownership: only the owner (or admin) may resume a task
+    from .auth import check_task_ownership
+    allowed, _owner = check_task_ownership('eval_reports', task_id)
+    if not allowed:
+        return jsonify({'error': f'Task not found: {task_id}'}), 404
+
     if not try_reserve_slot(task_id, 'eval', model=model, user_id=uid):
         max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
         slots = get_user_slots(uid)
@@ -924,6 +945,12 @@ def stop_evaluation():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    # Ownership: cannot stop another user's task
+    from .auth import check_task_ownership
+    allowed, _owner = check_task_ownership('task_state', task_id)
+    if not allowed:
+        return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
 
     stopped = stop_process(task_id)
     if stopped:
@@ -1449,6 +1476,7 @@ def launch_eval_batch():
 
                     task_config.work_dir = os.path.join(OUTPUT_DIR, task_id)
                     os.makedirs(task_config.work_dir, exist_ok=True)
+                    _write_owner_marker(task_config.work_dir, shared_config['user_id'])
 
                     create_log_file(task_id, 'eval.log')
 
