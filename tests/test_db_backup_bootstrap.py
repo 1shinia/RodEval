@@ -2,12 +2,31 @@
 
 Covers the Phase-2 reliability work (2026-08-26):
 - backup_db: WAL-safe online copy + per-reason retention pruning
-- ensure_admin_user: creates admin only when none exists, never resets
+- ensure_admin_user: preserves active admins and reactivates a soft-deleted
+  default admin instead of colliding with the username UNIQUE constraint
 """
 import os
 import sqlite3
 
+import pytest
+
 from evalscope.service import db
+
+
+@pytest.fixture(autouse=True)
+def _reset_db_state():
+    """Keep module-global DB state from leaking between tmp_path tests."""
+    conn = getattr(db._local, 'conn', None)
+    if conn is not None:
+        conn.close()
+    db._local.conn = None
+    db._db_path = None
+    yield
+    conn = getattr(db._local, 'conn', None)
+    if conn is not None:
+        conn.close()
+    db._local.conn = None
+    db._db_path = None
 
 
 def test_backup_db_creates_snapshot_and_prunes(tmp_path):
@@ -65,3 +84,28 @@ def test_ensure_admin_user_create_once(tmp_path):
         "SELECT username, role FROM users WHERE username='admin'"
     ).fetchall()
     assert len(rows) == 1 and rows[0]['role'] == 'admin'
+
+
+def test_ensure_admin_user_reactivates_soft_deleted_default(tmp_path, monkeypatch):
+    from evalscope.service.blueprints.auth import ensure_admin_user
+
+    monkeypatch.setenv('EVALSCOPE_ADMIN_PASSWORD', 'restored-secret')
+    db.init_db(str(tmp_path))
+    conn = db._get_conn()
+    conn.execute(
+        "INSERT INTO users (username, password_hash, role, created_at, deleted_at) "
+        "VALUES ('admin', 'old-hash', 'admin', '2026-01-01T00:00:00+00:00', '2026-08-01T00:00:00+00:00')"
+    )
+    conn.commit()
+    admin_id = conn.execute("SELECT id FROM users WHERE username='admin'").fetchone()['id']
+
+    ensure_admin_user()
+
+    row = conn.execute(
+        "SELECT id, role, password_hash, deleted_at FROM users WHERE username='admin'"
+    ).fetchone()
+    assert row['id'] == admin_id
+    assert row['role'] == 'admin'
+    assert row['deleted_at'] is None
+    assert row['password_hash'] != 'old-hash'
+    assert conn.execute("SELECT COUNT(*) FROM users WHERE username='admin'").fetchone()[0] == 1

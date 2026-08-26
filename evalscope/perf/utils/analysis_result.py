@@ -1,9 +1,14 @@
-import base64
 import json
-import pickle
+import os
 import sqlite3
 
+from evalscope.perf.utils.db_util import decode_data
+
 db_path = 'your db path'
+# Primitive/container legacy pickles are decoded by the restricted compatibility
+# loader automatically.  This switch is only for unusual trusted legacy DBs
+# whose pickle payloads contain custom Python objects/classes.
+allow_legacy_pickle = os.getenv('EVALSCOPE_ALLOW_LEGACY_PICKLE') == '1'
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
@@ -18,10 +23,15 @@ print(f'len(rows): {len(rows)}')
 
 for row in rows:
     row_dict = dict(zip(columns, row))
-    # 解码request
-    row_dict['request'] = pickle.loads(base64.b64decode(row_dict['request']))
-    # 解码response_messages
-    row_dict['response_messages'] = pickle.loads(base64.b64decode(row_dict['response_messages']))
+    # request is plain JSON text in current DBs; legacy DBs may contain a
+    # base64/pickle payload, so use the compatibility decoder as fallback.
+    try:
+        row_dict['request'] = json.loads(row_dict['request'])
+    except (json.JSONDecodeError, TypeError):
+        row_dict['request'] = decode_data(row_dict['request'], allow_legacy_pickle=allow_legacy_pickle)
+    row_dict['response_messages'] = decode_data(
+        row_dict['response_messages'], allow_legacy_pickle=allow_legacy_pickle
+    )
     # print(row_dict)
     print(
         f"request_id: {json.loads(row_dict['response_messages'][0])['id']}, first_chunk_latency: {row_dict['first_chunk_latency']}"  # noqa: E501

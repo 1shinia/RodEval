@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryParams } from '@/hooks/useQueryParams'
 import { useSSE } from '@/hooks/useSSE'
 import { toast } from '@/components/common/Toast'
+import { createTaskId } from '@/utils/taskId'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/types'
 
 export interface TaskApi {
@@ -114,7 +115,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   }, [urlTaskId, api])
 
   const handleSubmit = async (config: Record<string, unknown>) => {
-    const id = `${taskPrefix}_${Date.now()}`
+    const id = createTaskId(taskPrefix)
     saveTaskId(id)
     setTaskId(id)
     setLogText('')

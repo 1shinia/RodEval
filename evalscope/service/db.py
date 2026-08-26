@@ -8,10 +8,12 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from evalscope.utils.logger import get_logger
+
+from .time_utils import (epoch_to_utc_iso, legacy_datetime_to_utc_iso, normalize_persisted_timestamp, utc_now_iso)
 
 logger = get_logger()
 
@@ -69,7 +71,7 @@ def _write(fn, *, retries: int = 5, backoff: float = 0.2) -> Any:
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 12  # Bump when adding migrations below
+SCHEMA_VERSION = 15  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -243,6 +245,41 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         UPDATE task_state SET user_id = 0 WHERE user_id IS NULL;
     '''
     ),
+    (
+        13, 'add tenant-aware composite indexes', '''
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_user_timestamp
+            ON eval_reports(user_id, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_user_backend_timestamp
+            ON eval_reports(user_id, eval_backend, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_user_model_nocase_timestamp
+            ON eval_reports(user_id, model_name COLLATE NOCASE, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_user_timestamp
+            ON perf_tasks(user_id, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_user_model_timestamp
+            ON perf_tasks(user_id, model, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_compare_reports_user_created
+            ON compare_reports(user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_task_state_user_status
+            ON task_state(user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires
+            ON token_blacklist(expires_at);
+    '''
+    ),
+    (
+        14, 'add soft-delete marker to users', '''
+        ALTER TABLE users ADD COLUMN deleted_at TEXT DEFAULT NULL;
+        CREATE INDEX IF NOT EXISTS idx_users_active_role
+            ON users(deleted_at, role);
+    '''
+    ),
+    (
+        15, 'normalize metadata timestamps to UTC', '''
+        -- The data rewrite is implemented by _migrate_v15_timestamps_to_utc
+        -- so offset-aware values can be preserved and legacy naive values can
+        -- be interpreted using EVALSCOPE_LEGACY_UTC_OFFSET_HOURS.
+        SELECT 1;
+    '''
+    ),
 ]
 
 
@@ -255,15 +292,109 @@ def _get_schema_version(conn: sqlite3.Connection) -> int:
         return 0
 
 
-def _migrate(conn: sqlite3.Connection, pre_migration_backup=None) -> None:
-    """Apply pending migrations to bring the schema up to SCHEMA_VERSION.
+def _iter_sql_statements(sql: str):
+    """Yield complete SQL statements without using ``executescript``.
 
-    If *pre_migration_backup* is provided it is called once before the first
-    pending migration runs (destructive migrations like v11 rebuild tables,
-    so a rollback point is mandatory). Skipped entirely when already at
-    SCHEMA_VERSION — normal restarts must not accumulate backups.
+    ``sqlite3.Connection.executescript`` may commit before running the script,
+    which makes a multi-statement migration vulnerable to partial application.
+    Feeding complete statements through ``execute`` keeps every migration
+    inside the explicit transaction started by :func:`_migrate`.
     """
-    # Ensure version tracking table exists
+    buf = ''
+    for line in sql.splitlines(keepends=True):
+        buf += line
+        if sqlite3.complete_statement(buf):
+            statement = buf.strip()
+            buf = ''
+            if statement:
+                yield statement
+    if buf.strip():
+        raise sqlite3.OperationalError('Incomplete SQL statement in migration')
+
+
+def _repair_partial_v11(conn: sqlite3.Connection) -> None:
+    """Recover shapes left by the legacy non-atomic v11 migration.
+
+    Before migrations became transactional, an interrupted table rebuild could
+    leave both ``task_state`` and ``task_state_new`` (failure before DROP), or
+    only ``task_state_new`` (failure after DROP but before RENAME). Normalize
+    either state so the immutable v11 script can be replayed safely.
+    """
+    tables = {
+        r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('task_state', 'task_state_new')"
+        ).fetchall()
+    }
+    if 'task_state_new' not in tables:
+        return
+    if 'task_state' in tables:
+        conn.execute('DROP TABLE task_state_new')
+    else:
+        conn.execute('ALTER TABLE task_state_new RENAME TO task_state')
+    conn.commit()
+    logger.warning('Recovered interrupted legacy v11 task_state rebuild before retrying migration')
+
+
+_V15_TIMESTAMP_COLUMNS: tuple[tuple[str, str], ...] = (
+    ('eval_reports', 'timestamp'),
+    ('perf_tasks', 'timestamp'),
+    ('compare_reports', 'created_at'),
+    ('task_state', 'started_at'),
+    ('task_state', 'updated_at'),
+    ('schema_version', 'applied_at'),
+)
+
+
+def _migrate_v15_timestamps_to_utc(conn: sqlite3.Connection) -> None:
+    """Convert pre-v15 naive metadata timestamps to timezone-aware UTC.
+
+    Historically the service wrote server-local naive strings.  The deployed
+    environment for those rows was Asia/Shanghai (UTC+08:00).  The conversion
+    offset is configurable via ``EVALSCOPE_LEGACY_UTC_OFFSET_HOURS`` so a fork
+    that historically ran elsewhere can set the correct value before its first
+    v15 startup.
+
+    Already offset-aware values are converted by instant, not shifted again;
+    empty or unparseable strings are intentionally preserved.
+    """
+    converted = 0
+    for table, column in _V15_TIMESTAMP_COLUMNS:
+        columns = {r[1] for r in conn.execute(f'PRAGMA table_info({table})').fetchall()}
+        if column not in columns:
+            continue
+        rows = conn.execute(
+            f'SELECT rowid, {column} FROM {table} '
+            f"WHERE {column} IS NOT NULL AND TRIM({column}) != ''"
+        ).fetchall()
+        updates: list[tuple[str, int]] = []
+        for rowid, value in rows:
+            normalized = normalize_persisted_timestamp(value)
+            if normalized is not None and normalized != value:
+                updates.append((normalized, rowid))
+        if updates:
+            conn.executemany(f'UPDATE {table} SET {column} = ? WHERE rowid = ?', updates)
+            converted += len(updates)
+    logger.info(f'DB migration v15: normalized {converted} legacy timestamp value(s) to UTC')
+
+
+_PYTHON_MIGRATIONS = {15: _migrate_v15_timestamps_to_utc}
+
+# v11 rebuilds a table; v15 rewrites historical timestamps.  Both should have
+# a rollback snapshot when upgrading an existing database.
+_DESTRUCTIVE_MIGRATIONS = {11, 15}
+
+
+def _migrate(conn: sqlite3.Connection, pre_migration_backup=None) -> None:
+    """Apply pending migrations atomically up to :data:`SCHEMA_VERSION`.
+
+    Every migration version is executed in its own ``BEGIN IMMEDIATE``
+    transaction, including the schema_version insert.  A failure therefore
+    rolls the whole version back instead of leaving a half-applied schema.
+
+    Destructive migrations require a successful pre-migration backup when
+    upgrading an existing database. Fresh databases do not need a rollback
+    snapshot because they contain no user data yet.
+    """
     conn.execute(
         '''
         CREATE TABLE IF NOT EXISTS schema_version (
@@ -279,24 +410,42 @@ def _migrate(conn: sqlite3.Connection, pre_migration_backup=None) -> None:
     if current >= SCHEMA_VERSION:
         return
 
+    pending = [m for m in _MIGRATIONS if current < m[0] <= SCHEMA_VERSION]
+    needs_destructive_backup = current > 0 and any(v in _DESTRUCTIVE_MIGRATIONS for v, _, _ in pending)
+
     if pre_migration_backup is not None and current > 0:
         try:
-            pre_migration_backup()
+            backup_path = pre_migration_backup()
         except Exception as e:
+            if needs_destructive_backup:
+                raise RuntimeError(f'Pre-migration backup failed before destructive migration: {e}') from e
             logger.warning(f'Pre-migration backup failed (non-fatal): {e}')
+        else:
+            if needs_destructive_backup and not backup_path:
+                raise RuntimeError('Pre-migration backup did not produce a snapshot before destructive migration')
+    elif needs_destructive_backup:
+        raise RuntimeError('Destructive migration requires a pre-migration backup callback')
 
-    for version, description, sql in _MIGRATIONS:
-        if version <= current:
-            continue
-        if version > SCHEMA_VERSION:
-            break
+    if current < 11:
+        _repair_partial_v11(conn)
+
+    for version, description, sql in pending:
         logger.info(f'DB migration v{current}→v{version}: {description}')
-        conn.executescript(sql)
-        conn.execute(
-            'INSERT INTO schema_version (version, description, applied_at) VALUES (?, ?, ?)',
-            (version, description, datetime.now().isoformat()),
-        )
-        conn.commit()
+        try:
+            conn.execute('BEGIN IMMEDIATE')
+            for statement in _iter_sql_statements(sql):
+                conn.execute(statement)
+            python_migration = _PYTHON_MIGRATIONS.get(version)
+            if python_migration is not None:
+                python_migration(conn)
+            conn.execute(
+                'INSERT INTO schema_version (version, description, applied_at) VALUES (?, ?, ?)',
+                (version, description, utc_now_iso()),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         current = version
 
     logger.info(f'DB schema at v{current}')
@@ -367,7 +516,7 @@ def backup_db(output_dir: str | None = None, keep: int = 5, reason: str = 'start
             logger.warning(f'DB backup skipped ({reason}): source {_db_path} does not exist')
             return None
         os.makedirs(os.path.join(out_dir, 'backups'), exist_ok=True)
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         dest_path = os.path.join(out_dir, 'backups', f'evalscope_meta_{reason}_{ts}.db')
 
         src = sqlite3.connect(_db_path, timeout=30)
@@ -419,10 +568,65 @@ def _get_conn() -> sqlite3.Connection:
         conn = sqlite3.connect(_db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA foreign_keys=ON')
+        conn.execute('PRAGMA busy_timeout=30000')
         # Aggressive auto-checkpoint: flush WAL after ~800 KB instead of 4 MB default
         conn.execute('PRAGMA wal_autocheckpoint=200')
         _local.conn = conn
     return conn
+
+
+# ---------------------------------------------------------------------------
+# Global task-id uniqueness / ownership helpers
+# ---------------------------------------------------------------------------
+
+_TASK_ID_TABLES = ('eval_reports', 'perf_tasks', 'task_state')
+
+
+def task_id_exists(task_id: str) -> bool:
+    """Return True when *task_id* is already known to any task table.
+
+    Task directories are shared by eval and perf modules, therefore task IDs
+    are treated as globally unique across task types rather than unique only
+    within one table.
+    """
+    conn = _get_conn()
+    for table in _TASK_ID_TABLES:
+        if conn.execute(f'SELECT 1 FROM {table} WHERE task_id = ? LIMIT 1', (task_id,)).fetchone():
+            return True
+    return False
+
+
+def new_task_id_available(output_dir: str, task_id: str) -> bool:
+    """Return True only when a new task can safely claim *task_id*.
+
+    Both metadata tables and the filesystem are checked. Reusing even an
+    existing task owned by the same user is rejected because task writers use
+    ``exist_ok=True`` and would otherwise overwrite historical artifacts.
+    """
+    if task_id_exists(task_id):
+        return False
+    return not os.path.exists(os.path.join(output_dir, task_id))
+
+
+def task_ids_owned_by(table: str, task_ids: list[str], user_id: int) -> bool:
+    """Return True iff every task id exists in *table* and belongs to user.
+
+    ``table`` is restricted to known task tables so callers cannot inject SQL
+    identifiers. Duplicate IDs are collapsed for the ownership check.
+    """
+    if table not in _TASK_ID_TABLES:
+        raise ValueError(f'Unsupported task table: {table}')
+    ids = list(dict.fromkeys(task_ids))
+    if not ids:
+        return False
+    placeholders = ','.join('?' for _ in ids)
+    conn = _get_conn()
+    count = conn.execute(
+        f'SELECT COUNT(*) FROM {table} WHERE user_id = ? AND task_id IN ({placeholders})',
+        [user_id, *ids],
+    ).fetchone()[0]
+    return count == len(ids)
 
 
 # ---------------------------------------------------------------------------
@@ -434,13 +638,28 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def write_owner_marker(task_dir: str, user_id: int) -> None:
-    """Write ``<task_dir>/.owner`` containing the owning user id (atomic)."""
+    """Write ``<task_dir>/.owner`` without allowing ownership takeover.
+
+    An existing marker may be rewritten by the same owner (resume/backfill),
+    but a different user id is rejected. This is a second line of defence in
+    case a caller forgets the new-task collision check.
+    """
     try:
         os.makedirs(task_dir, exist_ok=True)
+        owner_path = os.path.join(task_dir, '.owner')
+        if os.path.isfile(owner_path):
+            with open(owner_path) as f:
+                existing = int(f.read().strip())
+            if existing != int(user_id):
+                raise PermissionError(
+                    f'task directory already belongs to user {existing}, not {int(user_id)}'
+                )
         tmp = os.path.join(task_dir, '.owner.tmp')
         with open(tmp, 'w') as f:
             f.write(str(int(user_id)))
-        os.replace(tmp, os.path.join(task_dir, '.owner'))
+        os.replace(tmp, owner_path)
+    except PermissionError:
+        raise
     except Exception as e:
         logger.debug(f'Owner marker write failed for {task_dir}: {e}')
 
@@ -513,11 +732,29 @@ def upsert_eval_report(
     error_note: str = '',
 ) -> None:
     def _op(conn: sqlite3.Connection) -> None:
+        existing = conn.execute(
+            'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
+        ).fetchone()
+        if existing is not None and int(existing['user_id']) != int(user_id):
+            raise PermissionError(
+                f'task_id {task_id!r} is already owned by user {existing["user_id"]}'
+            )
         conn.execute(
-            '''INSERT OR REPLACE INTO eval_reports
+            '''INSERT INTO eval_reports
                (task_id, model_name, dataset_name, score, num_samples, timestamp,
                 dataset_scores, eval_backend, user_id, has_errors, error_note)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(task_id) DO UPDATE SET
+                   model_name = excluded.model_name,
+                   dataset_name = excluded.dataset_name,
+                   score = excluded.score,
+                   num_samples = excluded.num_samples,
+                   timestamp = excluded.timestamp,
+                   dataset_scores = excluded.dataset_scores,
+                   eval_backend = excluded.eval_backend,
+                   user_id = excluded.user_id,
+                   has_errors = excluded.has_errors,
+                   error_note = excluded.error_note''',
             (
                 task_id, model_name, dataset_name, score, num_samples, timestamp,
                 json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
@@ -684,10 +921,25 @@ def upsert_perf_task(
     user_id: int = 1,
 ) -> None:
     def _op(conn: sqlite3.Connection) -> None:
+        existing = conn.execute(
+            'SELECT user_id FROM perf_tasks WHERE task_id = ?', (task_id,)
+        ).fetchone()
+        if existing is not None and int(existing['user_id']) != int(user_id):
+            raise PermissionError(
+                f'task_id {task_id!r} is already owned by user {existing["user_id"]}'
+            )
         conn.execute(
-            '''INSERT OR REPLACE INTO perf_tasks
+            '''INSERT INTO perf_tasks
                (task_id, model, api, dataset, runs, has_report, timestamp, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(task_id) DO UPDATE SET
+                   model = excluded.model,
+                   api = excluded.api,
+                   dataset = excluded.dataset,
+                   runs = excluded.runs,
+                   has_report = excluded.has_report,
+                   timestamp = excluded.timestamp,
+                   user_id = excluded.user_id''',
             (task_id, model, api, dataset, runs, int(has_report), timestamp, user_id),
         )
 
@@ -841,10 +1093,10 @@ def upsert_aigc_audio_report(output_dir: str, task_id: str, user_id: int = 1) ->
     # Timestamp
     ts = data.get('timestamp')
     if ts:
-        timestamp = datetime.fromtimestamp(float(ts)).isoformat()
+        timestamp = epoch_to_utc_iso(float(ts))
     else:
         try:
-            timestamp = datetime.fromtimestamp(os.path.getmtime(results_file)).isoformat()
+            timestamp = epoch_to_utc_iso(os.path.getmtime(results_file))
         except OSError:
             timestamp = ''
 
@@ -969,7 +1221,7 @@ def upsert_task_state(
     """
 
     def _op(conn: sqlite3.Connection) -> None:
-        now = datetime.now().isoformat()
+        now = utc_now_iso()
         conn.execute(
             '''INSERT INTO task_state (task_id, task_type, status, pid, model, user_id, started_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -989,7 +1241,7 @@ def delete_task_state(task_id: str) -> None:
 
 def _mark_orphaned_tasks(task_ids: list[str]) -> int:
     """Mark the given task_ids 'orphaned' (single locked write transaction)."""
-    now = datetime.now().isoformat()
+    now = utc_now_iso()
 
     def _op(conn: sqlite3.Connection) -> int:
         conn.executemany(
@@ -1095,7 +1347,7 @@ def cleanup_task_state(days: int = 7) -> int:
 
     Returns the number of rows removed.
     """
-    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
     def _op(conn: sqlite3.Connection) -> int:
         cur = conn.execute(
@@ -1316,22 +1568,26 @@ def backfill(output_dir: str) -> None:
                     dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
                 avg_score = round(score_sum / len(report_list), 4) if report_list else 0.0
 
-                # Extract timestamp from directory name
+                # Prefer mtime (epoch is timezone-independent); only parse a
+                # legacy date-encoded directory name when mtime is unavailable.
                 from evalscope.utils.data_utils import process_report_name
                 prefix, _, _ = process_report_name(rn)
                 timestamp = ''
-                for fmt in ('%Y%m%d_%H%M%S', '%Y%m%d'):
+                dir_path = os.path.join(output_dir, prefix)
+                if os.path.isdir(dir_path):
                     try:
-                        dt = datetime.strptime(prefix, fmt)
-                        timestamp = dt.isoformat()
-                        break
-                    except ValueError:
-                        continue
-                if not timestamp:
-                    dir_path = os.path.join(output_dir, prefix)
-                    if os.path.isdir(dir_path):
                         mtime = os.path.getmtime(dir_path)
-                        timestamp = datetime.fromtimestamp(mtime).isoformat()
+                        timestamp = epoch_to_utc_iso(mtime)
+                    except OSError:
+                        pass
+                if not timestamp:
+                    for fmt in ('%Y%m%d_%H%M%S', '%Y%m%d'):
+                        try:
+                            dt = datetime.strptime(prefix, fmt)
+                            timestamp = legacy_datetime_to_utc_iso(dt)
+                            break
+                        except ValueError:
+                            continue
 
                 # Try to extract eval_backend from task config
                 eval_backend = ''
@@ -1429,17 +1685,20 @@ def backfill(output_dir: str) -> None:
                 if score is not None and score > 1:
                     score = score / 100
                 dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
-            # Timestamp from directory name (eval_<ts>) or mtime
+            # Prefer mtime; legacy 14-digit names are only a fallback.
             timestamp = ''
             try:
-                import re as _re
-                m = _re.search(r'(\d{14})', entry)
-                if m:
-                    timestamp = datetime.strptime(m.group(1), '%Y%m%d%H%M%S').isoformat()
-            except ValueError:
+                timestamp = epoch_to_utc_iso(os.path.getmtime(task_dir))
+            except OSError:
                 pass
             if not timestamp:
-                timestamp = datetime.fromtimestamp(os.path.getmtime(task_dir)).isoformat()
+                try:
+                    import re as _re
+                    m = _re.search(r'(\d{14})', entry)
+                    if m:
+                        timestamp = legacy_datetime_to_utc_iso(datetime.strptime(m.group(1), '%Y%m%d%H%M%S'))
+                except ValueError:
+                    pass
             upsert_eval_report(
                 task_id=entry,
                 model_name=first.model_name,
@@ -1495,17 +1754,20 @@ def backfill(output_dir: str) -> None:
                 if score is not None and score > 1:
                     score = score / 100
                 dataset_scores[r.dataset_name] = round(score, 4) if score is not None else None
-            # Timestamp from directory name (eval_<ts>) or mtime
+            # Prefer mtime; legacy 14-digit names are only a fallback.
             timestamp = ''
             try:
-                import re as _re
-                m = _re.search(r'(\d{14})', entry)
-                if m:
-                    timestamp = datetime.strptime(m.group(1), '%Y%m%d%H%M%S').isoformat()
-            except ValueError:
+                timestamp = epoch_to_utc_iso(os.path.getmtime(task_dir))
+            except OSError:
                 pass
             if not timestamp:
-                timestamp = datetime.fromtimestamp(os.path.getmtime(task_dir)).isoformat()
+                try:
+                    import re as _re
+                    m = _re.search(r'(\d{14})', entry)
+                    if m:
+                        timestamp = legacy_datetime_to_utc_iso(datetime.strptime(m.group(1), '%Y%m%d%H%M%S'))
+                except ValueError:
+                    pass
             upsert_eval_report(
                 task_id=entry,
                 model_name=first.model_name,
@@ -1583,7 +1845,7 @@ def backfill(output_dir: str) -> None:
             # Timestamp
             try:
                 mtime = os.path.getmtime(task_dir)
-                timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                timestamp = epoch_to_utc_iso(mtime)
             except Exception:
                 pass
 
@@ -1621,9 +1883,8 @@ def backfill(output_dir: str) -> None:
 
 def save_compare_report(name: str, task_ids_json: str, task_count: int, backend: str = 'Perf', root_path: str = '', user_id: int = 1) -> int:
     """Save a compare report and return its ID."""
-    from datetime import datetime
 
-    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    created_at = utc_now_iso()
 
     def _op(conn: sqlite3.Connection) -> int:
         conn.execute(

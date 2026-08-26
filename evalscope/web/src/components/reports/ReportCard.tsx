@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useLocale } from '@/contexts/LocaleContext'
 import type { ReportSummary } from '@/api/types'
 import { scoreColor } from '@/utils/colorScale'
+import { formatTimestamp } from '@/utils/timeFormat'
 
 interface ReportCardProps {
   report: ReportSummary
@@ -14,10 +15,6 @@ interface ReportCardProps {
   onClick: (name: string) => void
   /** Delete this report */
   onDelete?: (name: string) => void
-}
-
-function formatTimestamp(ts: string): string {
-  return ts.replace('T', ' ').slice(0, 16)
 }
 
 function Checkbox({ checked }: { checked: boolean }) {

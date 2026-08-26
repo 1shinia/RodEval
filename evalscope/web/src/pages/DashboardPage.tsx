@@ -26,20 +26,15 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { formatTimestamp, formatTimestampShort } from '@/utils/timeFormat'
 
 // ------------------------------------------------------------------ //
 // Helpers                                                              //
 // ------------------------------------------------------------------ //
 
 /** Format timestamp to YYYY-MM-DD HH:MM:SS */
-function formatTimestamp(ts: string): string {
-  return ts.replace('T', ' ').slice(0, 19)
-}
-
-/** Format timestamp to short form MM-DD HH:MM */
-function formatTimestampShort(ts: string): string {
-  return ts.replace('T', ' ').slice(5, 16)
-}
+// Local formatters removed — use the shared tz-aware ones from
+// '@/utils/timeFormat' (handles v15 UTC timestamps + legacy naive values).
 
 // ------------------------------------------------------------------ //
 // CompactRunRow (Grouped view)                                         //

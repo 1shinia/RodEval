@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import uuid
 from typing import Any, List, Optional
 
 from evalscope.perf.utils.perf_constants import Metrics
@@ -21,6 +22,8 @@ class BenchmarkData:
     """
 
     # --- Request ---
+    request_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    """Stable per-request identifier persisted in benchmark_data.db."""
     request: str = None  # JSON-serialized request body
     start_time: float = 0.0
     completed_time: float = 0.0

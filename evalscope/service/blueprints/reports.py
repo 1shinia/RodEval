@@ -24,6 +24,7 @@ from evalscope.report.visualization import (
     plot_single_report_scores,
     plot_single_report_sunburst,
 )
+from evalscope.service.time_utils import epoch_to_utc_iso, legacy_datetime_to_utc_iso
 from evalscope.utils.data_utils import (
     get_acc_report_df,
     get_compare_report_df,
@@ -220,21 +221,26 @@ def _load_mteb_report_data(root: str, report_name: str, task_cfg: dict):
 
 
 def _extract_timestamp(report_name: str, root: str) -> str:
-    """Try to extract a timestamp from the report directory name or fall back to mtime."""
+    """Return a timezone-aware UTC timestamp for a report.
+
+    Prefer filesystem mtime because Unix epoch values remain unambiguous after
+    moving outputs between servers/timezones.  Date-encoded legacy directory
+    names are only a fallback and are interpreted using the configured legacy
+    UTC offset.
+    """
     try:
         prefix, _, _ = process_report_name(report_name)
-        # Directory names typically look like "20260423_201338"
+        dir_path = os.path.join(root, prefix)
+        if os.path.isdir(dir_path):
+            return epoch_to_utc_iso(os.path.getmtime(dir_path))
+
+        # Legacy fallback: directory names typically look like "20260423_201338".
         for fmt in ('%Y%m%d_%H%M%S', '%Y%m%d'):
             try:
                 dt = datetime.strptime(prefix, fmt)
-                return dt.isoformat()
+                return legacy_datetime_to_utc_iso(dt)
             except ValueError:
                 continue
-        # Fall back to directory modification time
-        dir_path = os.path.join(root, prefix)
-        if os.path.isdir(dir_path):
-            mtime = os.path.getmtime(dir_path)
-            return datetime.fromtimestamp(mtime).isoformat()
     except Exception:
         pass
     return ''

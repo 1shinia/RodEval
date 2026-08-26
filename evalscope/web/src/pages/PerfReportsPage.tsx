@@ -9,6 +9,7 @@ import ServerBadge from '@/components/ui/ServerBadge'
 import CompareBar from '@/components/reports/CompareBar'
 import { ExternalLink, History, Search, Trash2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import { formatTimestamp } from '@/utils/timeFormat'
 
 const PAGE_SIZE = 20
 
@@ -250,7 +251,7 @@ export default function PerfReportsPage() {
                     <td className="py-2.5 px-3 text-[var(--text-muted)] max-w-[150px] truncate" title={item.dataset}>{item.dataset}</td>
                     <td className="py-2.5 px-3 text-[var(--text-muted)]">{item.api}</td>
                     <td className="py-2.5 px-3 text-[var(--text-muted)]">{item.runs}</td>
-                    <td className="py-2.5 px-3 text-xs text-[var(--text-dim)] whitespace-nowrap">{item.timestamp}</td>
+                    <td className="py-2.5 px-3 text-xs text-[var(--text-dim)] whitespace-nowrap">{formatTimestamp(item.timestamp)}</td>
                     <td className="py-2.5 px-3 text-right whitespace-nowrap">
                       {item.has_report && (
                         <button onClick={() => handleViewReport(item.task_id)}

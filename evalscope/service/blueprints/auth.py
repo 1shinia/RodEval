@@ -60,17 +60,23 @@ _JWT_SECRET = _load_or_create_jwt_secret()
 
 
 def ensure_admin_user() -> None:
-    """Create the initial admin account if no admin exists yet.
+    """Ensure there is at least one active admin account.
 
     Safe bootstrap after meta.db loss (previously nobody could log in).
     Password source: EVALSCOPE_ADMIN_PASSWORD env var; if unset, a random
     one is generated and printed ONCE to the service log.
-    Never resets an existing admin's password.
+    Never resets an existing *active* admin's password.  If soft deletion left
+    the system with no active admin and the default ``admin`` username still
+    exists, that row is reactivated instead of attempting a conflicting INSERT.
     """
     conn = _get_conn()
-    row = conn.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+    row = conn.execute("SELECT id FROM users WHERE role = 'admin' AND deleted_at IS NULL LIMIT 1").fetchone()
     if row is not None:
         return
+
+    default_row = conn.execute(
+        'SELECT id FROM users WHERE username = ? LIMIT 1', (_DEFAULT_ADMIN,)
+    ).fetchone()
 
     password = os.environ.get('EVALSCOPE_ADMIN_PASSWORD', '')
     generated = False
@@ -83,29 +89,38 @@ def ensure_admin_user() -> None:
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     def _op(c) -> None:
-        c.execute(
-            "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'admin', ?)",
-            (_DEFAULT_ADMIN, pw_hash, now),
-        )
+        if default_row is not None:
+            c.execute(
+                '''UPDATE users
+                   SET password_hash = ?, role = 'admin', deleted_at = NULL
+                   WHERE id = ?''',
+                (pw_hash, default_row['id']),
+            )
+        else:
+            c.execute(
+                "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'admin', ?)",
+                (_DEFAULT_ADMIN, pw_hash, now),
+            )
 
     try:
         _write(_op)
     except Exception as e:
         logger.warning(f'Admin bootstrap failed (non-fatal): {e}')
         return
+    action = 'Reactivated' if default_row is not None else 'Bootstrapped'
     if generated:
         logger.warning(
-            f'Bootstrapped admin user "{_DEFAULT_ADMIN}" with random password: {password} '
+            f'{action} admin user "{_DEFAULT_ADMIN}" with random password: {password} '
             '(shown once — change it after first login, or set EVALSCOPE_ADMIN_PASSWORD)'
         )
     else:
-        logger.info(f'Bootstrapped admin user "{_DEFAULT_ADMIN}" from EVALSCOPE_ADMIN_PASSWORD')
+        logger.info(f'{action} admin user "{_DEFAULT_ADMIN}" from EVALSCOPE_ADMIN_PASSWORD')
 
 
 def _user_by_username(username: str) -> dict | None:
     conn = _get_conn()
     row = conn.execute(
-        'SELECT id, username, password_hash, role FROM users WHERE username = ?',
+        'SELECT id, username, password_hash, role FROM users WHERE username = ? AND deleted_at IS NULL',
         (username,),
     ).fetchone()
     return dict(row) if row else None
@@ -184,6 +199,24 @@ def require_auth():
     if _is_blacklisted(user.get('jti', '')):
         return jsonify({'error': 'Token has been revoked'}), 401
 
+    # JWTs are stateless, so deleting/soft-deleting a user must be checked
+    # against the database on every authenticated request; otherwise an old
+    # token would remain usable until its natural expiry.  Refresh role and
+    # username from the DB as well so token claims cannot outlive account
+    # changes.
+    try:
+        uid = int(user.get('sub', '0'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Token user is invalid'}), 401
+    row = _get_conn().execute(
+        'SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL',
+        (uid,),
+    ).fetchone()
+    if row is None:
+        return jsonify({'error': 'User account is disabled or deleted'}), 401
+    user['username'] = row['username']
+    user['role'] = row['role']
+
     request.current_user = user
     return None
 
@@ -215,7 +248,9 @@ def check_task_ownership(table: str, task_id: str) -> tuple[bool, int | None]:
       - Row exists, belongs to someone else      -> denied
       - No row (unindexed/legacy directory)      -> admin only
     """
-    from ..db import _get_conn
+    from ..db import _TASK_ID_TABLES, _get_conn
+    if table not in _TASK_ID_TABLES:
+        raise ValueError(f'Unsupported task table: {table}')
     uid = get_current_user_id()
     row = _get_conn().execute(
         f'SELECT user_id FROM {table} WHERE task_id = ?', (task_id,)
@@ -329,13 +364,25 @@ def change_password():
 
 
 def _require_admin() -> dict | None:
-    """Return the admin user dict if the request has a valid admin token, else None + error response."""
+    """Return an active admin account for a valid, non-revoked token."""
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return None
     payload = verify_token(auth_header[7:])
-    if payload is None or payload.get('role') != 'admin':
+    if payload is None or payload.get('role') != 'admin' or _is_blacklisted(payload.get('jti', '')):
         return None
+    try:
+        uid = int(payload.get('sub', '0'))
+    except (TypeError, ValueError):
+        return None
+    row = _get_conn().execute(
+        "SELECT id, username, role FROM users WHERE id = ? AND role = 'admin' AND deleted_at IS NULL",
+        (uid,),
+    ).fetchone()
+    if row is None:
+        return None
+    payload['username'] = row['username']
+    payload['role'] = row['role']
     return payload
 
 
@@ -346,7 +393,7 @@ def list_users():
     if admin is None:
         return jsonify({'error': 'Admin access required'}), 403
     conn = _get_conn()
-    rows = conn.execute('SELECT id, username, role, created_at FROM users ORDER BY id').fetchall()
+    rows = conn.execute('SELECT id, username, role, created_at FROM users WHERE deleted_at IS NULL ORDER BY id').fetchall()
     return jsonify({'users': [dict(r) for r in rows]}), 200
 
 
@@ -390,7 +437,11 @@ def delete_user(user_id: int):
         return jsonify({'error': 'Admin access required'}), 403
     if int(admin['sub']) == user_id:
         return jsonify({'error': '不能删除自己'}), 400
-    removed = _write(lambda conn: conn.execute('DELETE FROM users WHERE id = ?', (user_id,)).rowcount)
+    deleted_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    removed = _write(lambda conn: conn.execute(
+        'UPDATE users SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL',
+        (deleted_at, user_id),
+    ).rowcount)
     if removed == 0:
         return jsonify({'error': '用户不存在'}), 404
     return jsonify({'ok': True}), 200
@@ -410,7 +461,7 @@ def reset_password(user_id: int):
         return jsonify({'error': 'password must be at least 6 characters'}), 400
     pw_hash = generate_password_hash(password)
     updated = _write(lambda conn: conn.execute(
-        'UPDATE users SET password_hash = ? WHERE id = ?', (pw_hash, user_id)).rowcount)
+        'UPDATE users SET password_hash = ? WHERE id = ? AND deleted_at IS NULL', (pw_hash, user_id)).rowcount)
     if updated == 0:
         return jsonify({'error': '用户不存在'}), 404
     return jsonify({'ok': True}), 200

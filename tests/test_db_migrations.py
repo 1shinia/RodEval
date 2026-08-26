@@ -2,9 +2,9 @@
 
 Three guards, per the P2 schema-drift hardening (2026-08):
 
-1. Fingerprint test — released migrations (v1–v8) are IMMUTABLE. Rewriting any
-   of them after release must fail CI. Adding a new migration (v9+) requires
-   appending its (version, description, sql) to RELEASED here.
+1. Fingerprint test — released migrations are IMMUTABLE. Rewriting any of
+   them after release must fail CI. Adding a migration requires appending its
+   (version, description, sql) tuple to RELEASED here.
 2. Fresh-DB test — a brand-new DB runs the full migration chain and must end
    at SCHEMA_VERSION with the reconciled schema: eval_backend column +
    model_name NOCASE index + complete version history 1..SCHEMA_VERSION.
@@ -23,7 +23,7 @@ from evalscope.service import db
 
 
 # --------------------------------------------------------------------------- #
-# Released migration fingerprint (v1–v10). IMMUTABLE — do not edit.
+# Released migration fingerprint (v1–v15). IMMUTABLE — do not edit.
 # When appending a new migration to db.py, append it here too.
 # --------------------------------------------------------------------------- #
 RELEASED: list[tuple[int, str, str]] = [
@@ -188,6 +188,41 @@ RELEASED: list[tuple[int, str, str]] = [
         UPDATE task_state SET user_id = 0 WHERE user_id IS NULL;
     '''
     ),
+    (
+        13, 'add tenant-aware composite indexes', '''
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_user_timestamp
+            ON eval_reports(user_id, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_user_backend_timestamp
+            ON eval_reports(user_id, eval_backend, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_user_model_nocase_timestamp
+            ON eval_reports(user_id, model_name COLLATE NOCASE, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_user_timestamp
+            ON perf_tasks(user_id, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_user_model_timestamp
+            ON perf_tasks(user_id, model, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_compare_reports_user_created
+            ON compare_reports(user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_task_state_user_status
+            ON task_state(user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires
+            ON token_blacklist(expires_at);
+    '''
+    ),
+    (
+        14, 'add soft-delete marker to users', '''
+        ALTER TABLE users ADD COLUMN deleted_at TEXT DEFAULT NULL;
+        CREATE INDEX IF NOT EXISTS idx_users_active_role
+            ON users(deleted_at, role);
+    '''
+    ),
+    (
+        15, 'normalize metadata timestamps to UTC', '''
+        -- The data rewrite is implemented by _migrate_v15_timestamps_to_utc
+        -- so offset-aware values can be preserved and legacy naive values can
+        -- be interpreted using EVALSCOPE_LEGACY_UTC_OFFSET_HOURS.
+        SELECT 1;
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -268,14 +303,14 @@ def _build_historic_db(db_path: str) -> None:
 # --------------------------------------------------------------------------- #
 
 def test_released_migrations_immutable():
-    """The fingerprint must match db.py's first 8 migrations exactly.
+    """The fingerprint must match db.py's released migrations exactly.
 
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 12
+    assert len(RELEASED) == 15
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 12
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 15
 
 
 def test_fresh_db_converges(tmp_path):
@@ -287,6 +322,10 @@ def test_fresh_db_converges(tmp_path):
         assert 'eval_backend' in _columns(conn, 'eval_reports')
         assert 'has_errors' in _columns(conn, 'eval_reports')
         assert 'error_note' in _columns(conn, 'eval_reports')
+        assert 'deleted_at' in _columns(conn, 'users')
+        idx = {r[1] for r in conn.execute("PRAGMA index_list('eval_reports')").fetchall()}
+        assert 'idx_eval_reports_user_timestamp' in idx
+        assert 'idx_eval_reports_user_backend_timestamp' in idx
         assert _nocase_index_ok(conn), 'NOCASE index missing/malformed on fresh DB'
     finally:
         conn.close()
@@ -329,3 +368,89 @@ def test_historic_db_verify_schema_clean(tmp_path, caplog):
     _build_historic_db(db_path)
     db.init_db(str(tmp_path))
     assert not any('Schema drift' in r.message for r in caplog.records)
+
+def test_migration_version_is_atomic(tmp_path, monkeypatch):
+    """A failing multi-statement migration must leave no partial DDL behind."""
+    db_path = str(tmp_path / 'atomic.db')
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL, applied_at TEXT NOT NULL)"
+    )
+    conn.execute("CREATE TABLE demo (id INTEGER PRIMARY KEY)")
+    conn.execute("INSERT INTO schema_version VALUES (15, 'baseline', 'x')")
+    conn.commit()
+
+    monkeypatch.setattr(db, 'SCHEMA_VERSION', 16)
+    monkeypatch.setattr(
+        db, '_MIGRATIONS',
+        [*db._MIGRATIONS, (16, 'atomic failure probe',
+         'ALTER TABLE demo ADD COLUMN should_rollback TEXT;\n'
+         'INSERT INTO table_that_does_not_exist VALUES (1);')],
+    )
+    with pytest.raises(sqlite3.OperationalError):
+        db._migrate(conn)
+
+    assert 'should_rollback' not in _columns(conn, 'demo')
+    assert _schema_versions(conn)[-1] == 15
+    conn.close()
+
+
+def test_v15_converts_legacy_naive_timestamps_from_cst_to_utc(tmp_path, monkeypatch):
+    """Pre-v15 naive metadata is interpreted as UTC+8 and normalized once."""
+    monkeypatch.setenv('EVALSCOPE_LEGACY_UTC_OFFSET_HOURS', '8')
+    monkeypatch.setattr(db, 'SCHEMA_VERSION', 14)
+    db.init_db(str(tmp_path))
+
+    # Close the thread-local connection before mutating with an independent
+    # handle and before re-running init_db at the next schema version.
+    db._local.conn.close()
+    db._local.conn = None
+    db_path = str(tmp_path / 'evalscope_meta.db')
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        '''INSERT INTO eval_reports
+           (task_id, model_name, dataset_name, timestamp, user_id, has_errors, error_note)
+           VALUES ('eval_tz', 'm', 'd', '2026-08-26T16:00:00', 1, 0, '')'''
+    )
+    conn.execute(
+        '''INSERT INTO perf_tasks
+           (task_id, model, timestamp, user_id)
+           VALUES ('perf_tz', 'm', '2026-08-26 16:00:00', 1)'''
+    )
+    conn.execute(
+        '''INSERT INTO compare_reports
+           (name, task_ids, created_at, task_count, backend, root_path, user_id)
+           VALUES ('c', '[]', '2026-08-26T16:00:00', 0, 'Perf', '', 1)'''
+    )
+    conn.execute(
+        '''INSERT INTO task_state
+           (task_id, task_type, status, pid, model, started_at, updated_at, user_id)
+           VALUES ('run_tz', 'eval', 'running', NULL, 'm',
+                   '2026-08-26T16:00:00', '2026-08-26T16:30:00', 1)'''
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(db, 'SCHEMA_VERSION', 15)
+    db.init_db(str(tmp_path))
+    db._local.conn.close()
+    db._local.conn = None
+
+    conn = sqlite3.connect(db_path)
+    try:
+        assert conn.execute(
+            "SELECT timestamp FROM eval_reports WHERE task_id='eval_tz'"
+        ).fetchone()[0] == '2026-08-26T08:00:00+00:00'
+        assert conn.execute(
+            "SELECT timestamp FROM perf_tasks WHERE task_id='perf_tz'"
+        ).fetchone()[0] == '2026-08-26T08:00:00+00:00'
+        assert conn.execute(
+            "SELECT created_at FROM compare_reports WHERE name='c'"
+        ).fetchone()[0] == '2026-08-26T08:00:00+00:00'
+        started, updated = conn.execute(
+            "SELECT started_at, updated_at FROM task_state WHERE task_id='run_tz'"
+        ).fetchone()
+        assert started == '2026-08-26T08:00:00+00:00'
+        assert updated == '2026-08-26T08:30:00+00:00'
+    finally:
+        conn.close()

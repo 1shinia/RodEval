@@ -1,16 +1,15 @@
 import type { ReportSummary } from '@/api/types'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import ScoreChip from '@/components/ui/ScoreChip'
+import { formatTimestamp } from '@/utils/timeFormat'
 
 interface EvalRunCardProps {
   report: ReportSummary
   onClick: () => void
 }
 
-/** Format ISO-ish timestamp `2025-05-22T14:30:00…` → `2025-05-22 14:30:00`. */
-function formatTimestamp(ts: string): string {
-  return ts.replace('T', ' ').slice(0, 19)
-}
+// Local formatTimestamp removed — use the shared tz-aware formatter from
+// '@/utils/timeFormat' (handles v15 UTC timestamps + legacy naive values).
 
 /**
  * EvalRunCard — single eval-row in the dashboard timeline view.

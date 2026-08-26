@@ -80,3 +80,41 @@ def test_checkpoint_db_normal_and_tolerant(iso_db):
     _db._local.conn = None
     r2 = _db.checkpoint_db()
     assert r2['busy'] == -1
+
+
+def test_new_task_id_available_checks_db_and_filesystem(iso_db):
+    assert _db.new_task_id_available(iso_db, 'fresh-task') is True
+
+    _db.upsert_perf_task(
+        task_id='existing-db', model='m', api='openai', dataset='d', runs=1,
+        has_report=False, timestamp='2026-08-26', user_id=1,
+    )
+    assert _db.new_task_id_available(iso_db, 'existing-db') is False
+
+    os.makedirs(os.path.join(iso_db, 'existing-dir'))
+    assert _db.new_task_id_available(iso_db, 'existing-dir') is False
+
+
+def test_task_owner_cannot_be_reassigned_by_upsert(iso_db):
+    _db.upsert_eval_report(
+        task_id='owned', model_name='m', dataset_name='d', score=0.1,
+        num_samples=1, timestamp='2026-08-26', eval_backend='Native', user_id=7,
+    )
+    with pytest.raises(PermissionError):
+        _db.upsert_eval_report(
+            task_id='owned', model_name='other', dataset_name='d2', score=0.9,
+            num_samples=1, timestamp='2026-08-26', eval_backend='Native', user_id=8,
+        )
+    row = _db._get_conn().execute(
+        "SELECT user_id, model_name FROM eval_reports WHERE task_id='owned'"
+    ).fetchone()
+    assert tuple(row) == (7, 'm')
+
+
+def test_owner_marker_refuses_cross_user_replacement(iso_db):
+    task_dir = os.path.join(iso_db, 'owner-marker')
+    _db.write_owner_marker(task_dir, 7)
+    _db.write_owner_marker(task_dir, 7)  # same-owner resume is fine
+    with pytest.raises(PermissionError):
+        _db.write_owner_marker(task_dir, 8)
+    assert _db.read_owner(task_dir) == 7

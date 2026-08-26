@@ -8,6 +8,7 @@ from evalscope.perf.arguments import Arguments as PerfArguments
 from evalscope.perf.utils.benchmark_util import Metrics
 from evalscope.perf.utils.rich_display import EmbeddingResultAnalyzer, LLMResultAnalyzer
 from evalscope.utils.logger import get_logger
+from ..time_utils import epoch_to_utc_iso, utc_now_iso
 from ..utils import (
     OUTPUT_DIR,
     count_running_tasks,
@@ -65,8 +66,25 @@ def _write_owner_marker(task_dir: str, user_id: int) -> None:
     try:
         from ..db import write_owner_marker
         write_owner_marker(task_dir, user_id)
+    except PermissionError:
+        raise
     except Exception as e:
         logger.debug(f'Owner marker skipped for {task_dir}: {e}')
+
+
+def _new_task_id_conflict(task_id: str) -> bool:
+    """Return True when a new task id would overwrite existing metadata/artifacts."""
+    from .. import db as _db
+    return not _db.new_task_id_available(OUTPUT_DIR, task_id)
+
+
+def _metadata_task_id(task_ref: str) -> str:
+    """Return the metadata task id from a full eval report identifier.
+
+    LLM compare selections use ``task_id@@model::datasets`` identifiers while
+    eval_reports stores only the task_id prefix. Perf ids are already plain.
+    """
+    return str(task_ref).split('@@', 1)[0]
 
 
 def _mark_perf_completed(task_id: str) -> None:
@@ -78,7 +96,6 @@ def _mark_perf_completed(task_id: str) -> None:
     This marker aligns perf dirs with completed eval dirs, which are kept
     forever. Called after a perf task finishes successfully.
     """
-    from datetime import datetime
 
     try:
         pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
@@ -88,7 +105,7 @@ def _mark_perf_completed(task_id: str) -> None:
                 'status': 'completed',
                 'phase': 'completed',
                 'pipeline': 'perf',
-                'updated_at': datetime.now().isoformat(),
+                'updated_at': utc_now_iso(),
             }, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.warning(f'[{task_id}] Failed to write perf completion marker: {e}')
@@ -171,7 +188,6 @@ def launch_batch_perf():
     """
     import csv as csv_mod
     import threading
-    from datetime import datetime
     from .auth import get_current_user_id
 
     data = request.get_json()
@@ -253,7 +269,7 @@ def launch_batch_perf():
                     continue
 
                 state['current_model'] = model_name
-                task_id = f'perf_{int(datetime.now().timestamp() * 1000)}'
+                task_id = f'perf_{uuid.uuid4().hex}'
                 state['current_task_id'] = task_id
 
                 # Parse CSV concurrency: comma-separated like "1,2,4"
@@ -433,7 +449,7 @@ def launch_batch_perf():
                                 dataset=perf_args.dataset_label or perf_args.dataset or 'N/A',
                                 runs=runs,
                                 has_report=has_report,
-                                timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                timestamp=utc_now_iso(),
                                 user_id=shared_config['user_id'],
                             )
                         except Exception as e:
@@ -636,8 +652,7 @@ def list_perf_tasks():
 
         try:
             mtime = os.path.getmtime(task_dir)
-            from datetime import datetime
-            meta['timestamp'] = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+            meta['timestamp'] = epoch_to_utc_iso(mtime)
         except Exception as e:
             logger.debug(f'Failed to get timestamp for task {entry}: {e}')
 
@@ -701,6 +716,8 @@ def run_performance_test():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
+    if _new_task_id_conflict(task_id):
+        return jsonify({'error': 'Task ID already exists. Generate a new EvalScope-Task-Id and retry.'}), 409
     if not try_reserve_slot(task_id, 'perf', model=model, user_id=uid):
         max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
         slots = get_user_slots(uid)
@@ -761,7 +778,6 @@ def run_performance_test():
 
             # Write to SQLite
             try:
-                from datetime import datetime
 
                 from .. import db as _db
                 from .auth import get_current_user_id
@@ -783,7 +799,7 @@ def run_performance_test():
                     dataset=perf_args.dataset_label or perf_args.dataset or 'N/A',
                     runs=runs,
                     has_report=has_report,
-                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    timestamp=utc_now_iso(),
                     user_id=get_current_user_id(),
                 )
             except Exception as e:
@@ -828,6 +844,8 @@ def launch_performance_test():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
+    if _new_task_id_conflict(task_id):
+        return jsonify({'error': 'Task ID already exists. Generate a new EvalScope-Task-Id and retry.'}), 409
     if not try_reserve_slot(task_id, 'perf', model=model, user_id=uid):
         max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
         slots = get_user_slots(uid)
@@ -890,7 +908,6 @@ def launch_performance_test():
                     _mark_perf_completed(task_id)
 
                     try:
-                        from datetime import datetime
                         from .. import db as _db
                         perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
                         has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
@@ -907,7 +924,7 @@ def launch_performance_test():
                             task_id=task_id, model=perf_args.model, api=perf_args.api,
                             dataset=perf_args.dataset_label or perf_args.dataset or 'N/A',
                             runs=runs, has_report=has_report,
-                            timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            timestamp=utc_now_iso(),
                             user_id=uid,
                         )
                     except Exception as e:
@@ -1063,7 +1080,6 @@ def resume_performance_test():
 
             # Update SQLite
             try:
-                from datetime import datetime
 
                 from .. import db as _db
                 from .auth import get_current_user_id
@@ -1085,7 +1101,7 @@ def resume_performance_test():
                     dataset=perf_args.dataset_label or perf_args.dataset or 'N/A',
                     runs=runs,
                     has_report=has_report,
-                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    timestamp=utc_now_iso(),
                     user_id=get_current_user_id(),
                 )
             except Exception as e:
@@ -1413,7 +1429,12 @@ def compare_perf_reports():
     if not task_ids:
         return jsonify({'error': 'task_ids is required'}), 400
 
-    from datetime import datetime
+    from .. import db as _db
+    from .auth import get_current_user_id
+    uid = get_current_user_id()
+    if not _db.task_ids_owned_by('perf_tasks', task_ids, uid):
+        # Do not reveal whether a foreign task id exists.
+        return jsonify({'error': 'One or more tasks were not found'}), 404
 
     tasks_data = []
     for tid in task_ids:
@@ -1520,7 +1541,7 @@ def compare_perf_reports():
 
     return jsonify({
         'meta': {
-            'generated_at': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+            'generated_at': utc_now_iso(),
             'task_count': len(tasks_data),
         },
         'tasks': tasks_data,
@@ -1547,6 +1568,13 @@ def save_compare_report():
     root_path = data.get('root_path', '')
     if not isinstance(task_ids, list) or len(task_ids) < 2:
         return jsonify({'error': 'task_ids must be a list of at least 2'}), 400
+    if backend_type not in ('Perf', 'LLM'):
+        return jsonify({'error': 'backend must be Perf or LLM'}), 400
+    try:
+        for tid in task_ids:
+            validate_task_id(str(tid))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     if not name:
         name = f'对比报告 ({len(task_ids)} 个模型)'
@@ -1554,7 +1582,17 @@ def save_compare_report():
     try:
         from .. import db as _db
         from .auth import get_current_user_id
-        report_id = _db.save_compare_report(name, json.dumps(task_ids), len(task_ids), backend_type, root_path, user_id=get_current_user_id())
+        uid = get_current_user_id()
+        task_table = 'eval_reports' if backend_type == 'LLM' else 'perf_tasks'
+        ownership_ids = (
+            [_metadata_task_id(str(t)) for t in task_ids]
+            if backend_type == 'LLM' else [str(t) for t in task_ids]
+        )
+        if not _db.task_ids_owned_by(task_table, ownership_ids, uid):
+            return jsonify({'error': 'One or more tasks were not found'}), 404
+        report_id = _db.save_compare_report(
+            name, json.dumps(task_ids), len(task_ids), backend_type, root_path, user_id=uid
+        )
         return jsonify({'id': report_id, 'name': name, 'task_count': len(task_ids)}), 201
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
@@ -1592,7 +1630,7 @@ def delete_compare_report(report_id: int):
         return jsonify({'error': 'Failed to delete', 'error_id': error_id}), 500
 
 
-def _download_llm_compare(report: dict, task_ids: list, timestamp: str):
+def _download_llm_compare(report: dict, task_ids: list, timestamp: str, user_id: int):
     """Generate LLM comparison HTML download."""
     from .. import db as _db
 
@@ -1601,8 +1639,9 @@ def _download_llm_compare(report: dict, task_ids: list, timestamp: str):
     rows = []
     for name in task_ids:
         row = conn.execute(
-            'SELECT model_name, dataset_name, score, num_samples, timestamp FROM eval_reports WHERE task_id = ?',
-            (name,)
+            '''SELECT model_name, dataset_name, score, num_samples, timestamp
+               FROM eval_reports WHERE task_id = ? AND user_id = ?''',
+            (_metadata_task_id(name), user_id)
         ).fetchone()
         if row:
             rows.append({
@@ -1682,7 +1721,8 @@ def download_compare_report(report_id: int):
     try:
         from .. import db as _db
         from .auth import get_current_user_id
-        reports = _db.list_compare_reports(user_id=get_current_user_id())
+        uid = get_current_user_id()
+        reports = _db.list_compare_reports(user_id=uid)
         report = next((r for r in reports if r['id'] == report_id), None)
         if not report:
             return jsonify({'error': 'Report not found'}), 404
@@ -1690,9 +1730,16 @@ def download_compare_report(report_id: int):
         task_ids = json.loads(report['task_ids'])
         timestamp = report['created_at']
         backend_type = report.get('backend', 'Perf')
+        task_table = 'eval_reports' if backend_type == 'LLM' else 'perf_tasks'
+        ownership_ids = (
+            [_metadata_task_id(str(t)) for t in task_ids]
+            if backend_type == 'LLM' else [str(t) for t in task_ids]
+        )
+        if not _db.task_ids_owned_by(task_table, ownership_ids, uid):
+            return jsonify({'error': 'One or more tasks were not found'}), 404
 
         if backend_type == 'LLM':
-            return _download_llm_compare(report, task_ids, timestamp)
+            return _download_llm_compare(report, task_ids, timestamp, uid)
 
         # Collect per-task summary data (Perf)
         tasks_data = []

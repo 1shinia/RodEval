@@ -120,6 +120,12 @@ def try_reserve_slot(task_id: str, task_type: str, model: str = '', user_id: int
     max_global = int(os.environ.get(max_global_key, '0'))
 
     with _active_lock:
+        # A task id is a global runtime key. Never overwrite an existing
+        # placeholder/process entry: doing so loses the original process
+        # handle and can let two requests write into the same task directory.
+        if task_id in _active_processes:
+            return False
+
         running_user = sum(
             1 for info in _active_processes.values()
             if info.task_type == task_type and info.user_id == user_id

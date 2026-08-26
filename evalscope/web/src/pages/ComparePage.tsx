@@ -38,6 +38,7 @@ import Select from '@/components/ui/Select'
 import Skeleton from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
 import ChatView from '@/components/single/ChatView'
+import { formatTimestamp } from '@/utils/timeFormat'
 import { ChevronLeft, ChevronRight, AlertCircle, CircleCheck, CircleX, ExternalLink, Trash2, Download } from 'lucide-react'
 import { BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 
@@ -1302,7 +1303,7 @@ function SavedReportsList() {
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-[var(--text-muted)]">{r.task_count}</td>
-                    <td className="py-2.5 px-3 text-xs text-[var(--text-dim)]">{r.created_at}</td>
+                    <td className="py-2.5 px-3 text-xs text-[var(--text-dim)]">{formatTimestamp(r.created_at)}</td>
                     <td className="py-2.5 px-3 text-right">
                       <a
                         href={`/api/v1/perf/compare/saved/${r.id}/download`}

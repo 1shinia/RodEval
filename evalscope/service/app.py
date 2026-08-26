@@ -4,10 +4,10 @@ import logging
 import multiprocessing
 import os
 import time
-from datetime import datetime
 from flask import Flask, jsonify, request, send_from_directory
 
 from evalscope.utils.logger import get_logger
+from .time_utils import utc_now_iso
 from . import db as _db
 from .blueprints import bp_eval, bp_perf, bp_reports
 from .blueprints.aigc import bp_aigc
@@ -191,7 +191,7 @@ def create_app(outputs: str = None):
     @app.route('/health', methods=['GET'])
     def health_check():
         """Health check endpoint with component status."""
-        checks: dict = {'status': 'ok', 'service': 'evalscope', 'timestamp': datetime.now().isoformat()}
+        checks: dict = {'status': 'ok', 'service': 'evalscope', 'timestamp': utc_now_iso()}
 
         # SQLite connectivity
         try:

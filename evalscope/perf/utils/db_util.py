@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import os
 import pickle
@@ -21,6 +22,8 @@ logger = get_logger()
 
 
 class DatabaseColumns:
+    ID = 'id'
+    REQUEST_ID = 'request_id'
     REQUEST = 'request'
     START_TIME = 'start_time'
     INTER_TOKEN_LATENCIES = 'inter_token_latencies'
@@ -33,6 +36,16 @@ class DatabaseColumns:
     COMPLETION_TOKENS = 'completion_tokens'
     MAX_GPU_MEMORY_COST = 'max_gpu_memory_cost'
     TIME_PER_OUTPUT_TOKEN = 'time_per_output_token'
+    STATUS_CODE = 'status_code'
+    ERROR = 'error'
+    TRACE_ID = 'trace_id'
+    TURN_INDEX = 'turn_index'
+    INPUT_NUM_TURNS = 'input_num_turns'
+    IS_FIRST_TURN = 'is_first_turn'
+    IS_LAST_TURN = 'is_last_turn'
+    REAL_CACHED_TOKENS = 'real_cached_tokens'
+    CACHED_TOKENS = 'cached_tokens'
+    DECODED_TOKENS_PER_ITER = 'decoded_tokens_per_iter'
 
 
 def load_prompt(prompt_path_or_text):
@@ -43,8 +56,102 @@ def load_prompt(prompt_path_or_text):
 
 
 def encode_data(data) -> str:
-    """Encodes data using base64 and pickle."""
-    return base64.b64encode(pickle.dumps(data)).decode('utf-8')
+    """Serialize benchmark payloads as portable JSON text.
+
+    Older EvalScope benchmark databases used base64-encoded pickle blobs.
+    New writes are JSON so the SQLite file can be inspected safely from any
+    language and does not require executing pickle during normal analysis.
+
+    Response streams are normally strings/dicts, but some adapters may expose
+    raw byte chunks.  Preserve those explicitly instead of relying on
+    ``default=str`` (which silently loses the original type).
+    """
+    return json.dumps(data, ensure_ascii=False, default=_json_default)
+
+
+_SERIALIZED_TYPE = '__evalscope_serialized_type__'
+
+
+def _json_default(value):
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {
+            _SERIALIZED_TYPE: 'bytes',
+            'base64': base64.b64encode(bytes(value)).decode('ascii'),
+        }
+
+    # Do not fail the metrics-consumer loop because a provider returned an
+    # unexpected object.  Unlike ``default=str``, mark the fallback explicitly
+    # so downstream tooling can see that exact round-tripping was impossible.
+    logger.warning(
+        'Benchmark response contains non-JSON value %s; storing a repr envelope',
+        type(value).__name__,
+    )
+    return {
+        _SERIALIZED_TYPE: 'repr',
+        'python_type': f'{type(value).__module__}.{type(value).__qualname__}',
+        'repr': repr(value),
+    }
+
+
+def _json_object_hook(value: dict):
+    kind = value.get(_SERIALIZED_TYPE)
+    if kind == 'bytes' and isinstance(value.get('base64'), str):
+        try:
+            return base64.b64decode(value['base64'], validate=True)
+        except (ValueError, TypeError):
+            return value
+    return value
+
+
+class _RestrictedLegacyUnpickler(pickle.Unpickler):
+    """Load primitive/container legacy payloads without importing globals.
+
+    Old ``response_messages`` values are typically lists of strings/dicts and
+    do not need ``GLOBAL``/``REDUCE`` class loading.  Blocking ``find_class``
+    prevents the common arbitrary-code-execution pickle path while retaining
+    compatibility with those historical rows.
+    """
+
+    def find_class(self, module, name):  # noqa: ARG002
+        raise pickle.UnpicklingError(f'global class loading is disabled: {module}.{name}')
+
+
+def _restricted_legacy_pickle_loads(payload: bytes):
+    return _RestrictedLegacyUnpickler(io.BytesIO(payload)).load()
+
+
+def decode_data(data: str, *, allow_legacy_pickle: bool = False):
+    """Decode current JSON or historical base64/pickle benchmark payloads.
+
+    JSON is always attempted first.  Historical primitive/container pickles
+    are then decoded with a restricted unpickler, so normal old runs remain
+    readable without enabling arbitrary class loading.  ``allow_legacy_pickle``
+    is retained as an explicit *unsafe* escape hatch for trusted legacy DBs
+    that contain custom Python objects.
+    """
+    if data is None:
+        return None
+    try:
+        return json.loads(data, object_hook=_json_object_hook)
+    except (json.JSONDecodeError, TypeError) as json_error:
+        try:
+            payload = base64.b64decode(data, validate=True)
+        except (ValueError, TypeError) as decode_error:
+            raise ValueError('Benchmark payload is neither valid JSON nor legacy base64/pickle data') from decode_error
+
+        try:
+            return _restricted_legacy_pickle_loads(payload)
+        except Exception as restricted_error:
+            if not allow_legacy_pickle:
+                raise ValueError(
+                    'Legacy pickle requires Python global/class loading. '
+                    'Only enable allow_legacy_pickle=True for a trusted database.'
+                ) from restricted_error
+            logger.warning('Using unsafe legacy pickle compatibility for a trusted benchmark database')
+            try:
+                return pickle.loads(payload)
+            except Exception as unsafe_error:
+                raise ValueError('Failed to decode legacy benchmark pickle payload') from unsafe_error
 
 
 def write_json_file(data, output_path):
@@ -52,9 +159,17 @@ def write_json_file(data, output_path):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 
-def create_result_table(cursor):
+def create_result_table(cursor: sqlite3.Cursor):
+    """Create/upgrade the per-run request table.
+
+    New runs get a request primary key plus diagnostic and multi-turn fields.
+    ``ALTER TABLE`` reconciliation keeps the writer compatible with databases
+    created by older versions if they are ever reopened by tooling.
+    """
     cursor.execute(
         f'''CREATE TABLE IF NOT EXISTS result(
+                      {DatabaseColumns.ID} INTEGER PRIMARY KEY AUTOINCREMENT,
+                      {DatabaseColumns.REQUEST_ID} TEXT,
                       {DatabaseColumns.REQUEST} TEXT,
                       {DatabaseColumns.START_TIME} REAL,
                       {DatabaseColumns.INTER_TOKEN_LATENCIES} TEXT,
@@ -66,46 +181,90 @@ def create_result_table(cursor):
                       {DatabaseColumns.PROMPT_TOKENS} INTEGER,
                       {DatabaseColumns.COMPLETION_TOKENS} INTEGER,
                       {DatabaseColumns.MAX_GPU_MEMORY_COST} REAL,
-                      {DatabaseColumns.TIME_PER_OUTPUT_TOKEN} REAL
+                      {DatabaseColumns.TIME_PER_OUTPUT_TOKEN} REAL,
+                      {DatabaseColumns.STATUS_CODE} INTEGER,
+                      {DatabaseColumns.ERROR} TEXT,
+                      {DatabaseColumns.TRACE_ID} TEXT,
+                      {DatabaseColumns.TURN_INDEX} INTEGER,
+                      {DatabaseColumns.INPUT_NUM_TURNS} INTEGER,
+                      {DatabaseColumns.IS_FIRST_TURN} INTEGER,
+                      {DatabaseColumns.IS_LAST_TURN} INTEGER,
+                      {DatabaseColumns.REAL_CACHED_TOKENS} INTEGER,
+                      {DatabaseColumns.CACHED_TOKENS} INTEGER,
+                      {DatabaseColumns.DECODED_TOKENS_PER_ITER} REAL
                    )'''
+    )
+
+    # Reconcile old request DBs without requiring a separate migration file.
+    existing = {row[1] for row in cursor.execute('PRAGMA table_info(result)').fetchall()}
+    additions = {
+        DatabaseColumns.REQUEST_ID: 'TEXT',
+        DatabaseColumns.STATUS_CODE: 'INTEGER',
+        DatabaseColumns.ERROR: 'TEXT',
+        DatabaseColumns.TRACE_ID: 'TEXT',
+        DatabaseColumns.TURN_INDEX: 'INTEGER',
+        DatabaseColumns.INPUT_NUM_TURNS: 'INTEGER',
+        DatabaseColumns.IS_FIRST_TURN: 'INTEGER',
+        DatabaseColumns.IS_LAST_TURN: 'INTEGER',
+        DatabaseColumns.REAL_CACHED_TOKENS: 'INTEGER',
+        DatabaseColumns.CACHED_TOKENS: 'INTEGER',
+        DatabaseColumns.DECODED_TOKENS_PER_ITER: 'REAL',
+    }
+    for column, sql_type in additions.items():
+        if column not in existing:
+            cursor.execute(f'ALTER TABLE result ADD COLUMN {column} {sql_type}')
+
+    cursor.execute(
+        f'''CREATE UNIQUE INDEX IF NOT EXISTS idx_result_request_id
+            ON result({DatabaseColumns.REQUEST_ID})
+            WHERE {DatabaseColumns.REQUEST_ID} IS NOT NULL'''
+    )
+    cursor.execute(
+        f'''CREATE INDEX IF NOT EXISTS idx_result_success_start
+            ON result({DatabaseColumns.SUCCESS}, {DatabaseColumns.START_TIME})'''
+    )
+    cursor.execute(
+        f'''CREATE INDEX IF NOT EXISTS idx_result_trace_turn
+            ON result({DatabaseColumns.TRACE_ID}, {DatabaseColumns.TURN_INDEX})
+            WHERE {DatabaseColumns.TRACE_ID} IS NOT NULL'''
     )
 
 
 def insert_benchmark_data(cursor: sqlite3.Cursor, benchmark_data: BenchmarkData):
-    request = benchmark_data.request
-    inter_token_latencies = json.dumps(benchmark_data.inter_chunk_latency)
+    """Persist one request with diagnostics needed for post-mortem analysis."""
+    inter_token_latencies = json.dumps(benchmark_data.inter_chunk_latency, ensure_ascii=False)
     response_messages = encode_data(benchmark_data.response_messages)
+    turn_index = benchmark_data.input_num_turns if benchmark_data.input_num_turns > 0 else None
 
-    # Columns common to both success and failure cases
-    common_columns = (
-        request,
-        benchmark_data.start_time,
-        inter_token_latencies,
-        benchmark_data.success,
-        response_messages,
-        benchmark_data.completed_time,
+    columns = (
+        DatabaseColumns.REQUEST_ID, DatabaseColumns.REQUEST, DatabaseColumns.START_TIME,
+        DatabaseColumns.INTER_TOKEN_LATENCIES, DatabaseColumns.SUCCESS, DatabaseColumns.RESPONSE_MESSAGES,
+        DatabaseColumns.COMPLETED_TIME, DatabaseColumns.LATENCY, DatabaseColumns.FIRST_CHUNK_LATENCY,
+        DatabaseColumns.PROMPT_TOKENS, DatabaseColumns.COMPLETION_TOKENS,
+        DatabaseColumns.MAX_GPU_MEMORY_COST, DatabaseColumns.TIME_PER_OUTPUT_TOKEN,
+        DatabaseColumns.STATUS_CODE, DatabaseColumns.ERROR, DatabaseColumns.TRACE_ID,
+        DatabaseColumns.TURN_INDEX, DatabaseColumns.INPUT_NUM_TURNS, DatabaseColumns.IS_FIRST_TURN,
+        DatabaseColumns.IS_LAST_TURN, DatabaseColumns.REAL_CACHED_TOKENS, DatabaseColumns.CACHED_TOKENS,
+        DatabaseColumns.DECODED_TOKENS_PER_ITER,
     )
-
-    if benchmark_data.success:
-        # Add additional columns for success case
-        additional_columns = (
-            benchmark_data.query_latency, benchmark_data.first_chunk_latency, benchmark_data.prompt_tokens,
-            benchmark_data.completion_tokens, benchmark_data.max_gpu_memory_cost, benchmark_data.time_per_output_token
-        )
-        query = f"""INSERT INTO result(
-                      {DatabaseColumns.REQUEST}, {DatabaseColumns.START_TIME}, {DatabaseColumns.INTER_TOKEN_LATENCIES},
-                      {DatabaseColumns.SUCCESS}, {DatabaseColumns.RESPONSE_MESSAGES}, {DatabaseColumns.COMPLETED_TIME},
-                      {DatabaseColumns.LATENCY}, {DatabaseColumns.FIRST_CHUNK_LATENCY}, {DatabaseColumns.PROMPT_TOKENS},
-                      {DatabaseColumns.COMPLETION_TOKENS}, {DatabaseColumns.MAX_GPU_MEMORY_COST},
-                      {DatabaseColumns.TIME_PER_OUTPUT_TOKEN}
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
-        cursor.execute(query, common_columns + additional_columns)
-    else:
-        query = f"""INSERT INTO result(
-                      {DatabaseColumns.REQUEST}, {DatabaseColumns.START_TIME}, {DatabaseColumns.INTER_TOKEN_LATENCIES},
-                      {DatabaseColumns.SUCCESS}, {DatabaseColumns.RESPONSE_MESSAGES}, {DatabaseColumns.COMPLETED_TIME}
-                   ) VALUES (?, ?, ?, ?, ?, ?)"""
-        cursor.execute(query, common_columns)
+    values = (
+        benchmark_data.request_id, benchmark_data.request, benchmark_data.start_time,
+        inter_token_latencies, int(bool(benchmark_data.success)), response_messages,
+        benchmark_data.completed_time, benchmark_data.query_latency if benchmark_data.success else None,
+        benchmark_data.first_chunk_latency if benchmark_data.success else None,
+        benchmark_data.prompt_tokens, benchmark_data.completion_tokens,
+        benchmark_data.max_gpu_memory_cost if benchmark_data.success else None,
+        benchmark_data.time_per_output_token if benchmark_data.success else None,
+        benchmark_data.status_code, benchmark_data.error, benchmark_data.trace_id, turn_index,
+        benchmark_data.input_num_turns, int(bool(benchmark_data.is_first_turn)),
+        int(bool(benchmark_data.is_last_turn)), benchmark_data.real_cached_tokens,
+        benchmark_data.cached_tokens, benchmark_data.decoded_tokens_per_iter,
+    )
+    placeholders = ', '.join('?' for _ in columns)
+    cursor.execute(
+        f"INSERT INTO result ({', '.join(columns)}) VALUES ({placeholders})",
+        values,
+    )
 
 
 def get_output_path(args: Arguments) -> str:

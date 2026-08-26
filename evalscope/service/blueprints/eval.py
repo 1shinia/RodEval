@@ -10,6 +10,7 @@ from evalscope.config import TaskConfig
 from evalscope.constants import EvalBackend, EvalType
 from evalscope.report.combinator import get_data_frame, get_report_list
 from evalscope.utils.logger import get_logger
+from ..time_utils import utc_now_iso
 from ..model_launcher import LaunchResult, LocalBackend, ModelSource, is_direct_eval_type, launch
 from ..model_launcher import stop as launcher_stop
 from ..utils import (
@@ -282,6 +283,16 @@ def _parse_request() -> tuple[dict, str]:
     return data, task_id
 
 
+def _ensure_new_task_id_available(task_id: str) -> None:
+    """Reject reuse of an existing task id before any artifacts are written."""
+    from .. import db as _db
+    if not _db.new_task_id_available(OUTPUT_DIR, task_id):
+        raise RequestValidationError(
+            'Task ID already exists. Generate a new EvalScope-Task-Id and retry.',
+            status_code=409,
+        )
+
+
 def _build_task_config_openai(data: dict) -> TaskConfig:
     """Build a TaskConfig for OpenAI or Anthropic API mode."""
     api_eval_type = data.get('eval_type') or EvalType.OPENAI_API
@@ -361,6 +372,8 @@ def _write_owner_marker(task_dir: str, user_id: int) -> None:
     try:
         from ..db import write_owner_marker
         write_owner_marker(task_dir, user_id)
+    except PermissionError:
+        raise
     except Exception as e:
         logger.debug(f'Owner marker skipped for {task_dir}: {e}')
 
@@ -393,7 +406,6 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
         # Write to SQLite (with retry for WAL lock contention from subprocess)
         try:
             import time as _time
-            from datetime import datetime
 
             from .. import db as _db
             from .auth import get_current_user_id
@@ -456,7 +468,7 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                             (dataset_names[0] if dataset_names else ''),
                             score=avg_score,
                             num_samples=total_num,
-                            timestamp=datetime.now().isoformat(),
+                            timestamp=utc_now_iso(),
                             dataset_scores=dataset_scores,
                             eval_backend=task_config.eval_backend or '',
                             user_id=current_uid,
@@ -530,6 +542,7 @@ def run_evaluation():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
+    _ensure_new_task_id_available(task_id)
     if not try_reserve_slot(task_id, 'eval', model=model, user_id=uid):
         max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
         slots = get_user_slots(uid)
@@ -719,6 +732,7 @@ def launch_evaluation():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
+    _ensure_new_task_id_available(task_id)
     if not try_reserve_slot(task_id, 'eval', model=model, user_id=uid):
         max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
         slots = get_user_slots(uid)
@@ -1265,7 +1279,6 @@ def list_benchmarks():
 
 import csv as _csv_mod
 import threading
-from datetime import datetime
 
 from flask import current_app
 
@@ -1413,7 +1426,7 @@ def launch_eval_batch():
                     continue
 
                 s['current_model'] = model_name
-                task_id = f'eval_{int(datetime.now().timestamp() * 1000)}'
+                task_id = f'eval_{uuid.uuid4().hex}'
                 s['current_task_id'] = task_id
                 eval_backend = shared_config.get('eval_backend', '')
 

@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import time
-from datetime import datetime
 from flask import Blueprint, Response, jsonify, request, send_file
 from pathlib import Path
 from typing import Any, Dict
@@ -12,6 +11,7 @@ from evalscope.backend.aigc_eval.backend_manager import AIGCBackendManager
 from evalscope.service.utils.log import create_log_file, validate_task_id
 from evalscope.service.utils.process import register_process, try_reserve_slot, unregister_process
 from evalscope.utils.logger import configure_logging, get_logger
+from evalscope.service.time_utils import epoch_to_utc_iso
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
@@ -34,17 +34,27 @@ def run_aigc_evaluation():
         task_id = request.headers.get('EvalScope-Task-Id')
         if not task_id:
             return jsonify({'error': 'Missing EvalScope-Task-Id header'}), 400
+        try:
+            validate_task_id(task_id)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
 
         model = data.get('model', {}).get('model_name_or_path', 'unknown')
 
         # Reserve slot for concurrent control
         from .auth import get_current_user_id
-        if not try_reserve_slot(task_id, 'aigc', model, user_id=get_current_user_id()):
+        from .. import db as _db
+        uid = get_current_user_id()
+        if not _db.new_task_id_available(str(OUTPUT_DIR), task_id):
+            return jsonify({'error': 'Task ID already exists. Generate a new EvalScope-Task-Id and retry.'}), 409
+        if not try_reserve_slot(task_id, 'aigc', model, user_id=uid):
             return jsonify({'error': f'Max concurrent AIGC tasks reached ({MAX_CONCURRENT_AIGC})'}), 429
 
         try:
-            # Build configuration
+            # Build configuration and persist ownership before any task
+            # artifacts are created.
             config = _build_aigc_config(data, task_id)
+            _db.write_owner_marker(str(OUTPUT_DIR / task_id), uid)
 
             # Execute evaluation
             result = _execute_aigc_task(task_id, config)
@@ -53,7 +63,7 @@ def run_aigc_evaluation():
             try:
                 from .. import db as _db
                 logger.info(f'AIGC task {task_id} completed, syncing to SQLite...')
-                ok = _db.upsert_aigc_audio_report(str(OUTPUT_DIR), task_id, user_id=get_current_user_id())
+                ok = _db.upsert_aigc_audio_report(str(OUTPUT_DIR), task_id, user_id=uid)
                 logger.info(f'AIGC SQLite sync result: {ok}')
             except Exception as e:
                 logger.warning(f'Failed to sync AIGC report to SQLite: {e}', exc_info=True)
@@ -277,8 +287,7 @@ def list_aigc_reports():
                 'inception_score': metrics.get('inception_score'),
                 'has_errors': has_errors,
                 'error_note': error_note,
-                'created_at': datetime.fromtimestamp(float(results.get('timestamp')
-                                                           or task_dir.stat().st_mtime)).isoformat(),
+                'created_at': epoch_to_utc_iso(float(results.get('timestamp') or task_dir.stat().st_mtime)),
             }
             reports.append(report)
         except Exception as e:

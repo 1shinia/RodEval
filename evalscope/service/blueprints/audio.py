@@ -2,10 +2,10 @@
 import json
 import logging
 import os
-from datetime import datetime
 from pathlib import Path
 
 from flask import Blueprint, jsonify, send_file
+from evalscope.service.time_utils import epoch_to_utc_iso
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
@@ -59,9 +59,7 @@ def list_audio_reports():
 
         created_at = ''
         try:
-            created_at = datetime.fromtimestamp(
-                float(results.get('timestamp') or task_dir.stat().st_mtime)
-            ).isoformat()
+            created_at = epoch_to_utc_iso(float(results.get('timestamp') or task_dir.stat().st_mtime))
         except (OSError, ValueError):
             pass
 
