@@ -26,17 +26,17 @@ def validate_task_id(task_id: str) -> None:
         raise ValueError('Invalid task_id')
 
 
-def validate_root_path(root: str) -> str:
-    """Validate that *root* resolves to a path within OUTPUT_DIR.
+def validate_root_path(root: str, allowed_root: str | None = None) -> str:
+    """Validate that *root* resolves inside the configured output root.
 
-    Returns the resolved absolute path.
-    Raises ValueError if the path escapes the allowed directory.
+    ``allowed_root`` lets service instances started with a custom ``--outputs``
+    directory validate against that runtime root instead of the module-level
+    default.  Callers that omit it retain the historical ``OUTPUT_DIR`` policy.
     """
     resolved = os.path.realpath(root)
-    allowed = os.path.realpath(OUTPUT_DIR)
-    # The resolved path must be exactly OUTPUT_DIR or a subdirectory of it
+    allowed = os.path.realpath(allowed_root or OUTPUT_DIR)
     if resolved != allowed and not resolved.startswith(allowed + os.sep):
-        raise ValueError(f'root_path must be within {OUTPUT_DIR}')
+        raise ValueError(f'root_path must be within {allowed}')
     return resolved
 
 

@@ -96,8 +96,10 @@ def create_app(outputs: str = None):
 
     # Operational maintenance remains best-effort: once the schema is known
     # good, a cleanup/backup/recovery hiccup should not make the HTTP service
-    # unavailable. Filesystem reconciliation is deliberately done once here,
-    # not on every list request.
+    # unavailable. Startup performs a full reconciliation; canonical list
+    # endpoints may additionally do per-user lazy cleanup so manually deleted
+    # task directories disappear promptly. Custom subdirectory views never
+    # mutate global metadata.
     try:
         # Online snapshot at every start (bounded by keep=5). If
         # EVALSCOPE_DB_BACKUP_DIR is configured, db.py mirrors the snapshot to

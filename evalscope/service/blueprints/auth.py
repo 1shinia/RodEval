@@ -2,6 +2,7 @@
 
 import datetime
 import os
+import sqlite3
 import uuid
 
 import jwt
@@ -283,10 +284,19 @@ def register():
 
     pw_hash = generate_password_hash(password)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    _write(lambda conn: conn.execute(
-        'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
-        (username, pw_hash, 'user', now),
-    ))
+    try:
+        _write(lambda conn: conn.execute(
+            'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
+            (username, pw_hash, 'user', now),
+        ))
+    except sqlite3.IntegrityError:
+        # The UNIQUE constraint is the cross-process authority.  A concurrent
+        # registration can pass the optimistic pre-check above, then lose the
+        # INSERT race; report that as a normal conflict instead of HTTP 500.
+        # Do not mask unrelated integrity failures.
+        if _user_by_username(username):
+            return jsonify({'error': '用户名已存在'}), 409
+        raise
 
     user = _user_by_username(username)
     if not user:

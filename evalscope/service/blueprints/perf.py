@@ -264,7 +264,8 @@ def launch_batch_perf():
                     continue
 
                 state['current_model'] = model_name
-                task_id = f'perf_{uuid.uuid4().hex}'
+                import time, secrets
+                task_id = f'perf_{int(time.time() * 1000)}_{secrets.token_hex(3)}'
                 state['current_task_id'] = task_id
 
                 # Parse CSV concurrency: comma-separated like "1,2,4"

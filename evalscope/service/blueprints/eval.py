@@ -1427,7 +1427,8 @@ def launch_eval_batch():
                     continue
 
                 s['current_model'] = model_name
-                task_id = f'eval_{uuid.uuid4().hex}'
+                import time, secrets
+                task_id = f'eval_{int(time.time() * 1000)}_{secrets.token_hex(3)}'
                 s['current_task_id'] = task_id
                 eval_backend = shared_config.get('eval_backend', '')
 

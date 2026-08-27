@@ -77,29 +77,49 @@ async def statistic_benchmark_metric(
 
         async def _db_writer() -> None:
             pending = []
+            flush_interval_sec = 1.0
+            pending_since = None
+
+            async def _flush_pending(*, final: bool = False) -> None:
+                nonlocal pending, pending_since
+                if not pending:
+                    return
+                started = time.monotonic()
+                batch = pending
+                pending = []
+                await asyncio.to_thread(_flush_db_batch, batch)
+                pending_since = None
+                elapsed = time.monotonic() - started
+                if elapsed > 1.0:
+                    kind = 'final flush' if final else 'flush'
+                    logger.warning(f'Benchmark DB {kind} took {elapsed:.2f}s for {len(batch)} rows')
+
             while True:
-                item = await db_write_queue.get()
+                # Keep row-count batching for throughput, but bound how long
+                # completed requests can live only in memory during low-rate
+                # or short-running benchmarks.
+                timeout = None
+                if pending:
+                    timeout = max(0.0, flush_interval_sec - (time.monotonic() - pending_since))
+                try:
+                    if timeout is None:
+                        item = await db_write_queue.get()
+                    else:
+                        item = await asyncio.wait_for(db_write_queue.get(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    await _flush_pending()
+                    continue
+
                 try:
                     if item is None:
-                        if pending:
-                            started = time.monotonic()
-                            batch = pending
-                            pending = []
-                            await asyncio.to_thread(_flush_db_batch, batch)
-                            elapsed = time.monotonic() - started
-                            if elapsed > 1.0:
-                                logger.warning(f'Benchmark DB final flush took {elapsed:.2f}s for {len(batch)} rows')
+                        await _flush_pending(final=True)
                         return
 
+                    if not pending:
+                        pending_since = time.monotonic()
                     pending.append(item)
                     if len(pending) >= commit_every:
-                        started = time.monotonic()
-                        batch = pending
-                        pending = []
-                        await asyncio.to_thread(_flush_db_batch, batch)
-                        elapsed = time.monotonic() - started
-                        if elapsed > 1.0:
-                            logger.warning(f'Benchmark DB flush took {elapsed:.2f}s for {len(batch)} rows')
+                        await _flush_pending()
                 finally:
                     db_write_queue.task_done()
 
