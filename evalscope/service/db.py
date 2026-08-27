@@ -9,6 +9,7 @@ import os
 import shutil
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -28,7 +29,11 @@ _db_path: str | None = None
 _write_lock = threading.Lock()
 
 
-def _write(fn, *, retries: int = 5, backoff: float = 0.2) -> Any:
+_DEFAULT_BUSY_TIMEOUT_MS = 3000
+_DEFAULT_WRITE_DEADLINE_SEC = 10.0
+
+
+def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) -> Any:
     """Serialise *fn* (a callable taking the thread-local connection) under
     ``_write_lock`` with locked-error retry and rollback-on-failure.
 
@@ -38,14 +43,18 @@ def _write(fn, *, retries: int = 5, backoff: float = 0.2) -> Any:
     """
     with _write_lock:
         conn = _get_conn()
-        last_err: Exception | None = None
-        for attempt in range(retries):
+        deadline = time.monotonic() + (
+            deadline_seconds
+            if deadline_seconds is not None
+            else float(os.environ.get('EVALSCOPE_DB_WRITE_DEADLINE_SEC', _DEFAULT_WRITE_DEADLINE_SEC))
+        )
+        attempt = 0
+        while True:
             try:
                 result = fn(conn)
                 conn.commit()
                 return result
             except sqlite3.OperationalError as e:
-                last_err = e
                 # Roll back any half-open implicit transaction so the
                 # thread-local connection isn't left holding a stale write
                 # intent after a busy/lock failure.
@@ -53,10 +62,14 @@ def _write(fn, *, retries: int = 5, backoff: float = 0.2) -> Any:
                     conn.rollback()
                 except Exception:
                     pass
-                if 'locked' in str(e) and attempt < retries - 1:
-                    import time
-                    time.sleep(backoff * (attempt + 1))
-                    continue
+                if 'locked' in str(e).lower() or 'busy' in str(e).lower():
+                    remaining = deadline - time.monotonic()
+                    if remaining > 0:
+                        sleep_for = min(backoff * (2**attempt), 1.0, remaining)
+                        if sleep_for > 0:
+                            time.sleep(sleep_for)
+                        attempt += 1
+                        continue
                 raise
             except Exception:
                 # Non-lock errors: still clean up a possible open transaction
@@ -65,14 +78,12 @@ def _write(fn, *, retries: int = 5, backoff: float = 0.2) -> Any:
                 except Exception:
                     pass
                 raise
-        assert last_err is not None
-        raise last_err
 
 # ---------------------------------------------------------------------------
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 15  # Bump when adding migrations below
+SCHEMA_VERSION = 18  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -281,6 +292,98 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         SELECT 1;
     '''
     ),
+    (
+        16, 'add global task registry', '''
+        CREATE TABLE IF NOT EXISTS task_registry (
+            task_id     TEXT PRIMARY KEY,
+            task_kind   TEXT NOT NULL CHECK (task_kind IN ('eval', 'perf')),
+            user_id     INTEGER NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_task_registry_user_kind_created
+            ON task_registry(user_id, task_kind, created_at DESC);
+    '''
+    ),
+    (
+        17, 'normalize eval report datasets', '''
+        CREATE TABLE IF NOT EXISTS eval_report_datasets (
+            task_id       TEXT NOT NULL,
+            user_id       INTEGER NOT NULL,
+            dataset_name  TEXT NOT NULL COLLATE NOCASE,
+            score         REAL,
+            position      INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (task_id, dataset_name),
+            FOREIGN KEY (task_id) REFERENCES eval_reports(task_id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_eval_report_datasets_user_name_task
+            ON eval_report_datasets(user_id, dataset_name COLLATE NOCASE, task_id);
+        CREATE INDEX IF NOT EXISTS idx_eval_report_datasets_user_name_score
+            ON eval_report_datasets(user_id, dataset_name COLLATE NOCASE, score);
+        CREATE INDEX IF NOT EXISTS idx_eval_report_datasets_task_position
+            ON eval_report_datasets(task_id, position);
+    '''
+    ),
+    (
+        18, 'add tenant-aware filter indexes', '''
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_user_score_timestamp
+            ON eval_reports(user_id, score, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_user_dataset_timestamp
+            ON perf_tasks(user_id, dataset, timestamp DESC);
+        CREATE TRIGGER IF NOT EXISTS trg_eval_reports_task_registry_insert
+        BEFORE INSERT ON eval_reports
+        BEGIN
+            INSERT INTO task_registry (task_id, task_kind, user_id, created_at)
+            VALUES (
+                NEW.task_id, 'eval', COALESCE(NEW.user_id, 1),
+                COALESCE(NULLIF(NEW.timestamp, ''), datetime('now'))
+            )
+            ON CONFLICT(task_id) DO NOTHING;
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM task_registry
+                WHERE task_id = NEW.task_id
+                  AND (task_kind != 'eval' OR user_id != COALESCE(NEW.user_id, 1))
+            ) THEN RAISE(ABORT, 'task registry conflict for eval report') END;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_perf_tasks_task_registry_insert
+        BEFORE INSERT ON perf_tasks
+        BEGIN
+            INSERT INTO task_registry (task_id, task_kind, user_id, created_at)
+            VALUES (
+                NEW.task_id, 'perf', COALESCE(NEW.user_id, 1),
+                COALESCE(NULLIF(NEW.timestamp, ''), datetime('now'))
+            )
+            ON CONFLICT(task_id) DO NOTHING;
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM task_registry
+                WHERE task_id = NEW.task_id
+                  AND (task_kind != 'perf' OR user_id != COALESCE(NEW.user_id, 1))
+            ) THEN RAISE(ABORT, 'task registry conflict for perf task') END;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_task_state_task_registry_insert
+        BEFORE INSERT ON task_state
+        BEGIN
+            INSERT INTO task_registry (task_id, task_kind, user_id, created_at)
+            VALUES (
+                NEW.task_id,
+                CASE WHEN NEW.task_type = 'perf' THEN 'perf' ELSE 'eval' END,
+                CASE WHEN COALESCE(NEW.user_id, 0) > 0 THEN NEW.user_id ELSE 1 END,
+                COALESCE(NULLIF(NEW.started_at, ''), datetime('now'))
+            )
+            ON CONFLICT(task_id) DO NOTHING;
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM task_registry
+                WHERE task_id = NEW.task_id
+                  AND (
+                      task_kind != CASE WHEN NEW.task_type = 'perf' THEN 'perf' ELSE 'eval' END
+                      OR (
+                          COALESCE(NEW.user_id, 0) > 0
+                          AND user_id != NEW.user_id
+                      )
+                  )
+            ) THEN RAISE(ABORT, 'task registry conflict for task state') END;
+        END;
+    '''
+    ),
 ]
 
 
@@ -332,7 +435,6 @@ def _repair_partial_v11(conn: sqlite3.Connection) -> None:
         conn.execute('DROP TABLE task_state_new')
     else:
         conn.execute('ALTER TABLE task_state_new RENAME TO task_state')
-    conn.commit()
     logger.warning('Recovered interrupted legacy v11 task_state rebuild before retrying migration')
 
 
@@ -378,7 +480,121 @@ def _migrate_v15_timestamps_to_utc(conn: sqlite3.Connection) -> None:
     logger.info(f'DB migration v15: normalized {converted} legacy timestamp value(s) to UTC')
 
 
-_PYTHON_MIGRATIONS = {15: _migrate_v15_timestamps_to_utc}
+def _split_dataset_names(dataset_name: str | None) -> list[str]:
+    """Return normalized dataset names from the legacy comma-separated field."""
+    if not dataset_name:
+        return []
+    names: list[str] = []
+    seen: set[str] = set()
+    for raw_name in str(dataset_name).split(','):
+        name = raw_name.strip()
+        key = name.casefold()
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+    return names
+
+
+def _dataset_score_for_name(dataset_scores: dict | None, dataset_name: str) -> float | None:
+    """Return a dataset score using a case-insensitive key fallback."""
+    if not dataset_scores:
+        return None
+    value = dataset_scores.get(dataset_name)
+    if value is None:
+        target = dataset_name.casefold()
+        for key, candidate in dataset_scores.items():
+            if str(key).casefold() == target:
+                value = candidate
+                break
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _migrate_v16_task_registry(conn: sqlite3.Connection) -> None:
+    """Backfill the global task registry and reject ambiguous historic IDs."""
+    conflicts = conn.execute(
+        '''SELECT e.task_id
+           FROM eval_reports e
+           INNER JOIN perf_tasks p ON p.task_id = e.task_id
+           ORDER BY e.task_id
+           LIMIT 20'''
+    ).fetchall()
+    if conflicts:
+        task_ids = ', '.join(row[0] for row in conflicts)
+        raise RuntimeError(
+            'Cannot enforce global task-id uniqueness because eval_reports and perf_tasks '
+            f'share task_id(s): {task_ids}'
+        )
+
+    now = utc_now_iso()
+    conn.execute(
+        '''INSERT OR IGNORE INTO task_registry (task_id, task_kind, user_id, created_at)
+           SELECT task_id, 'eval', COALESCE(user_id, 1), COALESCE(NULLIF(timestamp, ''), ?)
+           FROM eval_reports''',
+        (now,),
+    )
+    conn.execute(
+        '''INSERT OR IGNORE INTO task_registry (task_id, task_kind, user_id, created_at)
+           SELECT task_id, 'perf', COALESCE(user_id, 1), COALESCE(NULLIF(timestamp, ''), ?)
+           FROM perf_tasks''',
+        (now,),
+    )
+    conn.execute(
+        '''INSERT OR IGNORE INTO task_registry (task_id, task_kind, user_id, created_at)
+           SELECT task_id,
+                  CASE WHEN task_type = 'perf' THEN 'perf' ELSE 'eval' END,
+                  CASE WHEN COALESCE(user_id, 0) > 0 THEN user_id ELSE 1 END,
+                  COALESCE(NULLIF(started_at, ''), ?)
+           FROM task_state''',
+        (now,),
+    )
+
+
+def _migrate_v17_eval_report_datasets(conn: sqlite3.Connection) -> None:
+    """Backfill one indexed row per dataset while retaining legacy snapshots."""
+    rows = conn.execute(
+        'SELECT task_id, user_id, dataset_name, dataset_scores, score FROM eval_reports'
+    ).fetchall()
+    inserted = 0
+    for row in rows:
+        names = _split_dataset_names(row['dataset_name'])
+        scores: dict | None = None
+        if row['dataset_scores']:
+            try:
+                parsed = json.loads(row['dataset_scores'])
+                if isinstance(parsed, dict):
+                    scores = parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not names and scores:
+            names = [str(name).strip() for name in scores if str(name).strip()]
+        values = []
+        for position, name in enumerate(names):
+            score = _dataset_score_for_name(scores, name)
+            if score is None and len(names) == 1 and row['score'] is not None:
+                score = float(row['score'])
+            values.append((row['task_id'], row['user_id'], name, score, position))
+        if values:
+            conn.executemany(
+                '''INSERT OR REPLACE INTO eval_report_datasets
+                   (task_id, user_id, dataset_name, score, position)
+                   VALUES (?, ?, ?, ?, ?)''',
+                values,
+            )
+            inserted += len(values)
+    logger.info(f'DB migration v17: indexed {inserted} eval dataset relation(s)')
+
+
+_PYTHON_MIGRATIONS = {
+    15: _migrate_v15_timestamps_to_utc,
+    16: _migrate_v16_task_registry,
+    17: _migrate_v17_eval_report_datasets,
+}
 
 # v11 rebuilds a table; v15 rewrites historical timestamps.  Both should have
 # a rollback snapshot when upgrading an existing database.
@@ -432,13 +648,25 @@ def _migrate(conn: sqlite3.Connection, pre_migration_backup=None) -> None:
     elif needs_destructive_backup:
         raise RuntimeError('Destructive migration requires a pre-migration backup callback')
 
-    if current < 11:
-        _repair_partial_v11(conn)
-
     for version, description, sql in pending:
-        logger.info(f'DB migration v{current}→v{version}: {description}')
         try:
             conn.execute('BEGIN IMMEDIATE')
+            # Another service process may have migrated the database after
+            # this process computed ``pending``. Re-read while holding the
+            # SQLite write lock so each version is applied at most once.
+            locked_current = _get_schema_version(conn)
+            if locked_current >= version:
+                conn.commit()
+                current = locked_current
+                continue
+            if locked_current != version - 1:
+                raise RuntimeError(
+                    f'Database migration history has a gap: current v{locked_current}, '
+                    f'next candidate v{version}'
+                )
+            logger.info(f'DB migration v{locked_current}→v{version}: {description}')
+            if version == 11:
+                _repair_partial_v11(conn)
             for statement in _iter_sql_statements(sql):
                 conn.execute(statement)
             python_migration = _PYTHON_MIGRATIONS.get(version)
@@ -475,10 +703,15 @@ def _verify_schema(*, strict: bool = False) -> None:
     conn = _get_conn()
     structural_errors: list[str] = []
     try:
+        current_version = _get_schema_version(conn)
         required_tables = {
             'schema_version', 'eval_reports', 'perf_tasks', 'task_state',
             'compare_reports', 'users', 'token_blacklist',
         }
+        if current_version >= 16:
+            required_tables.add('task_registry')
+        if current_version >= 17:
+            required_tables.add('eval_report_datasets')
         existing_tables = {
             r[0] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -500,6 +733,10 @@ def _verify_schema(*, strict: bool = False) -> None:
             'compare_reports': {'id', 'task_ids', 'user_id'},
             'users': {'id', 'username', 'deleted_at'},
         }
+        if current_version >= 16:
+            required_columns['task_registry'] = {'task_id', 'task_kind', 'user_id', 'created_at'}
+        if current_version >= 17:
+            required_columns['eval_report_datasets'] = {'task_id', 'user_id', 'dataset_name', 'score', 'position'}
         for table, expected in required_columns.items():
             if table not in existing_tables:
                 continue
@@ -510,11 +747,65 @@ def _verify_schema(*, strict: bool = False) -> None:
                     f'{table} missing column(s): {", ".join(missing)}'
                 )
 
+        if current_version >= 17 and 'eval_report_datasets' in existing_tables:
+            foreign_keys = conn.execute('PRAGMA foreign_key_list(eval_report_datasets)').fetchall()
+            if not any(
+                row['table'] == 'eval_reports' and row['from'] == 'task_id'
+                and row['to'] == 'task_id' and row['on_delete'].upper() == 'CASCADE'
+                for row in foreign_keys
+            ):
+                structural_errors.append(
+                    'eval_report_datasets missing task_id → eval_reports ON DELETE CASCADE foreign key'
+                )
+
+        if current_version >= 18:
+            required_triggers = {
+                'trg_eval_reports_task_registry_insert',
+                'trg_perf_tasks_task_registry_insert',
+                'trg_task_state_task_registry_insert',
+            }
+            existing_triggers = {
+                row[0] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+                ).fetchall()
+            }
+            missing_triggers = sorted(required_triggers - existing_triggers)
+            if missing_triggers:
+                structural_errors.append(
+                    f'missing task-registry trigger(s): {", ".join(missing_triggers)}'
+                )
+
         if structural_errors:
             message = 'Schema drift: ' + '; '.join(structural_errors)
             if strict:
                 raise RuntimeError(message)
             logger.error(message)
+
+        quick_check = conn.execute('PRAGMA quick_check').fetchone()
+        if quick_check is None or quick_check[0] != 'ok':
+            message = f'Schema integrity check failed: {quick_check[0] if quick_check else "no result"}'
+            if strict:
+                raise RuntimeError(message)
+            logger.error(message)
+
+        fk_violations = conn.execute('PRAGMA foreign_key_check').fetchall()
+        if fk_violations:
+            message = f'Foreign-key integrity check found {len(fk_violations)} violation(s)'
+            if strict:
+                raise RuntimeError(message)
+            logger.error(message)
+
+        if current_version >= 11 and 'task_state' in existing_tables:
+            row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'task_state'"
+            ).fetchone()
+            normalized_sql = ' '.join((row[0] if row and row[0] else '').lower().split())
+            required_statuses = ('running', 'completed', 'failed', 'stopped', 'orphaned')
+            if 'check' not in normalized_sql or any(f"'{status}'" not in normalized_sql for status in required_statuses):
+                message = 'Schema drift: task_state.status CHECK constraint is missing or malformed'
+                if strict:
+                    raise RuntimeError(message)
+                logger.error(message)
 
         if 'eval_reports' in existing_tables:
             rows = conn.execute(
@@ -533,6 +824,32 @@ def _verify_schema(*, strict: bool = False) -> None:
                     'Schema drift: idx_eval_reports_model_nocase exists but is malformed '
                     '(expected model_name COLLATE NOCASE); model filters may not use it.'
                 )
+
+        critical_indexes = [
+            'idx_eval_reports_user_timestamp',
+            'idx_eval_reports_user_model_nocase_timestamp',
+            'idx_perf_tasks_user_timestamp',
+        ]
+        if current_version >= 16:
+            critical_indexes.append('idx_task_registry_user_kind_created')
+        if current_version >= 17:
+            critical_indexes.extend([
+                'idx_eval_report_datasets_user_name_task',
+                'idx_eval_report_datasets_user_name_score',
+            ])
+        if current_version >= 18:
+            critical_indexes.extend([
+                'idx_eval_reports_user_score_timestamp',
+                'idx_perf_tasks_user_dataset_timestamp',
+            ])
+        existing_indexes = {
+            row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            ).fetchall()
+        }
+        missing_indexes = [name for name in critical_indexes if name not in existing_indexes]
+        if missing_indexes:
+            logger.warning(f'Schema drift: missing performance index(es): {", ".join(missing_indexes)}')
     except RuntimeError:
         raise
     except sqlite3.Error as e:
@@ -597,7 +914,8 @@ def backup_db(output_dir: str | None = None, keep: int = 5, reason: str = 'start
             logger.warning(f'DB backup skipped ({reason}): source {_db_path} does not exist')
             return None
         os.makedirs(os.path.join(out_dir, 'backups'), exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+        ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
+        ts = f'{ts}_{os.getpid()}'
         dest_path = os.path.join(out_dir, 'backups', f'evalscope_meta_{reason}_{ts}.db')
 
         src = sqlite3.connect(_db_path, timeout=30)
@@ -670,11 +988,15 @@ def _get_conn() -> sqlite3.Connection:
             conn = None
 
     if conn is None:
-        conn = sqlite3.connect(_db_path, timeout=30)
+        busy_timeout_ms = max(
+            250,
+            int(os.environ.get('EVALSCOPE_DB_BUSY_TIMEOUT_MS', _DEFAULT_BUSY_TIMEOUT_MS)),
+        )
+        conn = sqlite3.connect(_db_path, timeout=busy_timeout_ms / 1000.0)
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA journal_mode=WAL')
         conn.execute('PRAGMA foreign_keys=ON')
-        conn.execute('PRAGMA busy_timeout=30000')
+        conn.execute(f'PRAGMA busy_timeout={busy_timeout_ms}')
         # Aggressive auto-checkpoint: flush WAL after ~800 KB instead of 4 MB default
         conn.execute('PRAGMA wal_autocheckpoint=200')
         _local.conn = conn
@@ -689,6 +1011,102 @@ def _get_conn() -> sqlite3.Connection:
 _TASK_ID_TABLES = ('eval_reports', 'perf_tasks', 'task_state')
 
 
+def _task_kind_for_type(task_type: str) -> str:
+    """Map runtime task types to the two durable task namespaces."""
+    return 'perf' if task_type == 'perf' else 'eval'
+
+
+def _ensure_task_registry(
+    conn: sqlite3.Connection,
+    task_id: str,
+    task_kind: str,
+    user_id: int,
+    created_at: str | None = None,
+) -> None:
+    """Ensure a task registry row exists and matches the durable owner/kind."""
+    if task_kind not in ('eval', 'perf'):
+        raise ValueError(f'Unsupported task kind: {task_kind}')
+    created_at = created_at or utc_now_iso()
+    cursor = conn.execute(
+        '''INSERT INTO task_registry (task_id, task_kind, user_id, created_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(task_id) DO NOTHING''',
+        (task_id, task_kind, int(user_id), created_at),
+    )
+    if cursor.rowcount:
+        return
+    existing = conn.execute(
+        'SELECT task_kind, user_id FROM task_registry WHERE task_id = ?',
+        (task_id,),
+    ).fetchone()
+    if existing is None:
+        raise RuntimeError(f'Failed to register task_id {task_id!r}')
+    if existing['task_kind'] != task_kind:
+        raise ValueError(
+            f'task_id {task_id!r} is already registered as {existing["task_kind"]}, not {task_kind}'
+        )
+    if int(existing['user_id']) != int(user_id):
+        raise PermissionError(
+            f'task_id {task_id!r} is already owned by user {existing["user_id"]}'
+        )
+
+
+def reserve_task_id(task_id: str, task_type: str, user_id: int) -> bool:
+    """Atomically reserve a never-before-used task id in SQLite.
+
+    The task directory is checked first for pre-registry legacy artifacts;
+    SQLite's primary key is the final cross-process arbiter when two service
+    instances race to reserve the same identifier.
+    """
+    if _db_path is None:
+        raise RuntimeError('init_db() has not been called')
+    task_dir = os.path.join(os.path.dirname(_db_path), task_id)
+    if os.path.exists(task_dir):
+        return False
+    task_kind = _task_kind_for_type(task_type)
+
+    def _op(conn: sqlite3.Connection) -> bool:
+        cursor = conn.execute(
+            '''INSERT INTO task_registry (task_id, task_kind, user_id, created_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(task_id) DO NOTHING''',
+            (task_id, task_kind, int(user_id), utc_now_iso()),
+        )
+        return bool(cursor.rowcount)
+
+    return bool(_write(_op))
+
+
+def release_task_id_reservation(task_id: str, user_id: int | None = None) -> bool:
+    """Release an unused reservation that never produced metadata/artifacts.
+
+    Completed or partially-created tasks intentionally keep their registry row
+    as a tombstone so a historical task id cannot later overwrite artifacts.
+    """
+    if _db_path is None:
+        return False
+    task_dir = os.path.join(os.path.dirname(_db_path), task_id)
+    if os.path.exists(task_dir):
+        return False
+
+    def _op(conn: sqlite3.Connection) -> bool:
+        for table in _TASK_ID_TABLES:
+            if conn.execute(f'SELECT 1 FROM {table} WHERE task_id = ? LIMIT 1', (task_id,)).fetchone():
+                return False
+        params: list[Any] = [task_id]
+        owner_sql = ''
+        if user_id is not None:
+            owner_sql = ' AND user_id = ?'
+            params.append(int(user_id))
+        cursor = conn.execute(
+            f'DELETE FROM task_registry WHERE task_id = ?{owner_sql}',
+            params,
+        )
+        return bool(cursor.rowcount)
+
+    return bool(_write(_op))
+
+
 def task_id_exists(task_id: str) -> bool:
     """Return True when *task_id* is already known to any task table.
 
@@ -697,6 +1115,8 @@ def task_id_exists(task_id: str) -> bool:
     within one table.
     """
     conn = _get_conn()
+    if conn.execute('SELECT 1 FROM task_registry WHERE task_id = ? LIMIT 1', (task_id,)).fetchone():
+        return True
     for table in _TASK_ID_TABLES:
         if conn.execute(f'SELECT 1 FROM {table} WHERE task_id = ? LIMIT 1', (task_id,)).fetchone():
             return True
@@ -824,6 +1244,34 @@ def _compute_total_num(report_list) -> int:
     return max(positive) if positive else -1
 
 
+def _replace_eval_report_datasets(
+    conn: sqlite3.Connection,
+    task_id: str,
+    user_id: int,
+    dataset_name: str,
+    dataset_scores: dict | None,
+    overall_score: float | None,
+) -> None:
+    """Synchronize the normalized dataset query table for one eval report."""
+    names = _split_dataset_names(dataset_name)
+    if not names and dataset_scores:
+        names = [str(name).strip() for name in dataset_scores if str(name).strip()]
+    values: list[tuple[str, int, str, float | None, int]] = []
+    for position, name in enumerate(names):
+        score = _dataset_score_for_name(dataset_scores, name)
+        if score is None and len(names) == 1 and overall_score is not None:
+            score = float(overall_score)
+        values.append((task_id, int(user_id), name, score, position))
+    conn.execute('DELETE FROM eval_report_datasets WHERE task_id = ?', (task_id,))
+    if values:
+        conn.executemany(
+            '''INSERT INTO eval_report_datasets
+               (task_id, user_id, dataset_name, score, position)
+               VALUES (?, ?, ?, ?, ?)''',
+            values,
+        )
+
+
 def upsert_eval_report(
     task_id: str,
     model_name: str,
@@ -844,6 +1292,7 @@ def upsert_eval_report(
     processes that may share the same SQLite file.
     """
     def _op(conn: sqlite3.Connection) -> None:
+        _ensure_task_registry(conn, task_id, 'eval', user_id, timestamp)
         cursor = conn.execute(
             '''INSERT INTO eval_reports
                (task_id, model_name, dataset_name, score, num_samples, timestamp,
@@ -876,6 +1325,14 @@ def upsert_eval_report(
             raise PermissionError(
                 f'task_id {task_id!r} is already owned by user {owner}'
             )
+        _replace_eval_report_datasets(
+            conn,
+            task_id=task_id,
+            user_id=user_id,
+            dataset_name=dataset_name,
+            dataset_scores=dataset_scores,
+            overall_score=score,
+        )
 
     _write(_op)
 
@@ -899,8 +1356,16 @@ def query_eval_reports(
     params: list[Any] = [user_id]
 
     if search:
-        # SQLite LIKE is case-insensitive for ASCII — no LOWER() needed, index-friendly
-        where.append('(model_name LIKE ? OR dataset_name LIKE ?)')
+        # Contains search intentionally remains fuzzy. Exact dataset filters
+        # below use the normalized relation and its B-tree indexes.
+        where.append(
+            '''(model_name LIKE ? OR EXISTS (
+                   SELECT 1 FROM eval_report_datasets d
+                   WHERE d.task_id = eval_reports.task_id
+                     AND d.user_id = eval_reports.user_id
+                     AND d.dataset_name LIKE ?
+               ))'''
+        )
         params.extend([f'%{search}%', f'%{search}%'])
     if models:
         model_set = [m.strip().lower() for m in models.split(';') if m.strip()]
@@ -912,12 +1377,19 @@ def query_eval_reports(
                 params.append(m)
             where.append(f'({" OR ".join(model_conds)})')
     if datasets:
-        ds_set = [d.strip().lower() for d in datasets.split(';') if d.strip()]
+        ds_set = [d.strip() for d in datasets.split(';') if d.strip()]
         if ds_set:
             ds_conds = []
             for ds in ds_set:
-                ds_conds.append('dataset_name LIKE ?')
-                params.append(f'%{ds}%')
+                ds_conds.append(
+                    '''EXISTS (
+                           SELECT 1 FROM eval_report_datasets d
+                           WHERE d.task_id = eval_reports.task_id
+                             AND d.user_id = eval_reports.user_id
+                             AND d.dataset_name = ? COLLATE NOCASE
+                       )'''
+                )
+                params.append(ds)
             where.append(f'({" OR ".join(ds_conds)})')
     if score_min is not None:
         where.append('score >= ?')
@@ -950,18 +1422,19 @@ def query_eval_reports(
                 f'WHERE model_name != "" AND user_id = ? {_backend_where} ORDER BY model_name',
                 [user_id, *_backend_params]).fetchall()
     ]
-    avail_datasets_raw = conn.execute(
-        f'SELECT DISTINCT dataset_name FROM eval_reports '
-        f'WHERE dataset_name != "" AND user_id = ? {_backend_where}',
-        [user_id, *_backend_params],
-    ).fetchall()
-    avail_datasets: list[str] = []
-    for r in avail_datasets_raw:
-        for d in r[0].split(', '):
-            d = d.strip()
-            if d and d not in avail_datasets:
-                avail_datasets.append(d)
-    avail_datasets.sort()
+    avail_datasets = [
+        r[0] for r in conn.execute(
+            f'''SELECT DISTINCT d.dataset_name
+                FROM eval_report_datasets d
+                INNER JOIN eval_reports e ON e.task_id = d.task_id
+                WHERE d.dataset_name != ''
+                  AND d.user_id = ?
+                  AND e.user_id = ?
+                  {_backend_where}
+                ORDER BY d.dataset_name COLLATE NOCASE''',
+            [user_id, user_id, *_backend_params],
+        ).fetchall()
+    ]
 
     total = conn.execute(f'SELECT COUNT(*) FROM eval_reports {where_sql}', params).fetchone()[0]
 
@@ -1011,8 +1484,10 @@ def query_eval_reports(
 def delete_eval_report(task_id: str, user_id: int | None = None) -> None:
     def _op(conn: sqlite3.Connection) -> None:
         if user_id is not None:
+            conn.execute('DELETE FROM eval_report_datasets WHERE task_id = ? AND user_id = ?', (task_id, user_id))
             conn.execute('DELETE FROM eval_reports WHERE task_id = ? AND user_id = ?', (task_id, user_id))
         else:
+            conn.execute('DELETE FROM eval_report_datasets WHERE task_id = ?', (task_id,))
             conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id,))
 
     _write(_op)
@@ -1035,6 +1510,7 @@ def upsert_perf_task(
 ) -> None:
     """Insert or update a perf task without allowing owner reassignment."""
     def _op(conn: sqlite3.Connection) -> None:
+        _ensure_task_registry(conn, task_id, 'perf', user_id, timestamp)
         cursor = conn.execute(
             '''INSERT INTO perf_tasks
                (task_id, model, api, dataset, runs, has_report, timestamp, user_id)
@@ -1099,6 +1575,7 @@ def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
             if not os.path.isdir(os.path.join(output_dir, tid)):
                 stale.append(tid)
         if stale:
+            conn.executemany('DELETE FROM eval_report_datasets WHERE task_id = ?', [(t,) for t in stale])
             conn.executemany('DELETE FROM eval_reports WHERE task_id = ?', [(t,) for t in stale])
         return len(stale)
 
@@ -1337,14 +1814,30 @@ def upsert_task_state(
 
     def _op(conn: sqlite3.Connection) -> None:
         now = utc_now_iso()
+        task_kind = _task_kind_for_type(task_type)
+        registry = conn.execute(
+            'SELECT task_kind, user_id FROM task_registry WHERE task_id = ?',
+            (task_id,),
+        ).fetchone()
+        if registry is None:
+            effective_user_id = int(user_id) if int(user_id) > 0 else 1
+            _ensure_task_registry(conn, task_id, task_kind, effective_user_id, now)
+        else:
+            if registry['task_kind'] != task_kind:
+                raise ValueError(
+                    f'task_id {task_id!r} is registered as {registry["task_kind"]}, not {task_kind}'
+                )
+            effective_user_id = int(registry['user_id'])
         conn.execute(
             '''INSERT INTO task_state (task_id, task_type, status, pid, model, user_id, started_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(task_id) DO UPDATE SET
+                   task_type = excluded.task_type,
                    status = excluded.status,
                    pid = excluded.pid,
+                   user_id = excluded.user_id,
                    updated_at = excluded.updated_at''',
-            (task_id, task_type, status, pid, model, user_id, now, now),
+            (task_id, task_type, status, pid, model, effective_user_id, now, now),
         )
 
     _write(_op)

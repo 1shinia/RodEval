@@ -27,6 +27,7 @@ from .process import (
     run_perf_wrapper,
     serialize_result,
     stop_process,
+    try_reserve_new_slot,
     try_reserve_slot,
     unregister_process,
 )
@@ -45,6 +46,7 @@ __all__ = [
     'run_perf_wrapper',
     'serialize_result',
     'stop_process',
+    'try_reserve_new_slot',
     'try_reserve_slot',
     'unregister_process',
     'run_in_subprocess',

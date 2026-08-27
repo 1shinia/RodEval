@@ -195,6 +195,13 @@ class Arguments(BaseArgument):
     db_commit_interval: int = 1000
     """Number of rows buffered before committing to the DB."""
 
+    db_store_payloads: bool = True
+    """Store full request/response payloads in benchmark_data.db.
+
+    Disable for very high-throughput benchmarks when request-level payloads
+    are not needed for post-mortem debugging. Metric columns are still kept.
+    """
+
     queue_size_multiplier: int = 5
     """Maxsize for queue = parallel * this multiplier."""
 

@@ -40,6 +40,10 @@ _active_processes: dict[str, TaskInfo] = {}
 
 _active_lock = threading.Lock()
 
+RESERVE_NEW_OK = 'reserved'
+RESERVE_NEW_CONFLICT = 'conflict'
+RESERVE_NEW_LIMIT = 'limit'
+
 
 def register_process(
     task_id: str,
@@ -148,6 +152,23 @@ def try_reserve_slot(task_id: str, task_type: str, model: str = '', user_id: int
         return True
 
 
+def try_reserve_new_slot(task_id: str, task_type: str, model: str = '', user_id: int = 0) -> str:
+    """Reserve a globally unique task id and an in-process concurrency slot.
+
+    SQLite performs the cross-process task-id arbitration. If the local
+    concurrency limit rejects the task, the unused registry reservation is
+    released immediately so a request that created no artifacts can retry.
+    """
+    from .. import db as _db
+
+    if not _db.reserve_task_id(task_id, task_type, user_id):
+        return RESERVE_NEW_CONFLICT
+    if try_reserve_slot(task_id, task_type, model=model, user_id=user_id):
+        return RESERVE_NEW_OK
+    _db.release_task_id_reservation(task_id, user_id=user_id)
+    return RESERVE_NEW_LIMIT
+
+
 def finalize_slot(task_id: str, proc: multiprocessing.Process) -> None:
     """Attach the real subprocess to a previously reserved slot.
 
@@ -189,6 +210,7 @@ def unregister_process(task_id: str) -> None:
     try:
         from .. import db as _db
         _db.delete_task_state(task_id)
+        _db.release_task_id_reservation(task_id)
     except Exception as e:
         logger.debug(f'Failed to clean task state for {task_id}: {e}')
 
@@ -211,6 +233,7 @@ def stop_process(task_id: str) -> bool:
         try:
             from .. import db as _db
             _db.delete_task_state(task_id)
+            _db.release_task_id_reservation(task_id)
         except Exception:
             pass
         return True

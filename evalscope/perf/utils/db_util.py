@@ -20,6 +20,8 @@ from evalscope.utils.logger import get_logger
 
 logger = get_logger()
 
+RESULT_SCHEMA_VERSION = 1
+
 
 class DatabaseColumns:
     ID = 'id'
@@ -159,13 +161,27 @@ def write_json_file(data, output_path):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 
-def create_result_table(cursor: sqlite3.Cursor):
+def create_result_table(cursor: sqlite3.Cursor) -> None:
     """Create/upgrade the per-run request table.
 
     New runs get a request primary key plus diagnostic and multi-turn fields.
     ``ALTER TABLE`` reconciliation keeps the writer compatible with databases
     created by older versions if they are ever reopened by tooling.
     """
+    cursor.execute(
+        '''CREATE TABLE IF NOT EXISTS benchmark_schema(
+               version INTEGER PRIMARY KEY,
+               applied_at TEXT NOT NULL
+           )'''
+    )
+    row = cursor.execute('SELECT MAX(version) FROM benchmark_schema').fetchone()
+    current_version = int(row[0] or 0)
+    if current_version > RESULT_SCHEMA_VERSION:
+        raise RuntimeError(
+            f'Benchmark DB schema v{current_version} is newer than this build supports '
+            f'(v{RESULT_SCHEMA_VERSION})'
+        )
+
     cursor.execute(
         f'''CREATE TABLE IF NOT EXISTS result(
                       {DatabaseColumns.ID} INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -229,26 +245,22 @@ def create_result_table(cursor: sqlite3.Cursor):
             WHERE {DatabaseColumns.TRACE_ID} IS NOT NULL'''
     )
 
+    if current_version < RESULT_SCHEMA_VERSION:
+        cursor.execute(
+            "INSERT INTO benchmark_schema(version, applied_at) VALUES (?, datetime('now'))",
+            (RESULT_SCHEMA_VERSION,),
+        )
 
-def insert_benchmark_data(cursor: sqlite3.Cursor, benchmark_data: BenchmarkData):
-    """Persist one request with diagnostics needed for post-mortem analysis."""
+
+def _benchmark_data_row(benchmark_data: BenchmarkData, *, store_payloads: bool = True) -> tuple:
+    """Serialize one benchmark result into the stable DB column order."""
     inter_token_latencies = json.dumps(benchmark_data.inter_chunk_latency, ensure_ascii=False)
-    response_messages = encode_data(benchmark_data.response_messages)
+    response_messages = encode_data(benchmark_data.response_messages) if store_payloads else None
+    request = benchmark_data.request if store_payloads else None
     turn_index = benchmark_data.input_num_turns if benchmark_data.input_num_turns > 0 else None
 
-    columns = (
-        DatabaseColumns.REQUEST_ID, DatabaseColumns.REQUEST, DatabaseColumns.START_TIME,
-        DatabaseColumns.INTER_TOKEN_LATENCIES, DatabaseColumns.SUCCESS, DatabaseColumns.RESPONSE_MESSAGES,
-        DatabaseColumns.COMPLETED_TIME, DatabaseColumns.LATENCY, DatabaseColumns.FIRST_CHUNK_LATENCY,
-        DatabaseColumns.PROMPT_TOKENS, DatabaseColumns.COMPLETION_TOKENS,
-        DatabaseColumns.MAX_GPU_MEMORY_COST, DatabaseColumns.TIME_PER_OUTPUT_TOKEN,
-        DatabaseColumns.STATUS_CODE, DatabaseColumns.ERROR, DatabaseColumns.TRACE_ID,
-        DatabaseColumns.TURN_INDEX, DatabaseColumns.INPUT_NUM_TURNS, DatabaseColumns.IS_FIRST_TURN,
-        DatabaseColumns.IS_LAST_TURN, DatabaseColumns.REAL_CACHED_TOKENS, DatabaseColumns.CACHED_TOKENS,
-        DatabaseColumns.DECODED_TOKENS_PER_ITER,
-    )
-    values = (
-        benchmark_data.request_id, benchmark_data.request, benchmark_data.start_time,
+    return (
+        benchmark_data.request_id, request, benchmark_data.start_time,
         inter_token_latencies, int(bool(benchmark_data.success)), response_messages,
         benchmark_data.completed_time, benchmark_data.query_latency if benchmark_data.success else None,
         benchmark_data.first_chunk_latency if benchmark_data.success else None,
@@ -260,11 +272,40 @@ def insert_benchmark_data(cursor: sqlite3.Cursor, benchmark_data: BenchmarkData)
         int(bool(benchmark_data.is_last_turn)), benchmark_data.real_cached_tokens,
         benchmark_data.cached_tokens, benchmark_data.decoded_tokens_per_iter,
     )
-    placeholders = ', '.join('?' for _ in columns)
-    cursor.execute(
-        f"INSERT INTO result ({', '.join(columns)}) VALUES ({placeholders})",
-        values,
+
+
+def insert_benchmark_data_batch(
+    cursor: sqlite3.Cursor,
+    benchmark_rows: list[BenchmarkData],
+    *,
+    store_payloads: bool = True,
+) -> None:
+    """Persist a batch of request results with one ``executemany`` call."""
+    if not benchmark_rows:
+        return
+    columns = (
+        DatabaseColumns.REQUEST_ID, DatabaseColumns.REQUEST, DatabaseColumns.START_TIME,
+        DatabaseColumns.INTER_TOKEN_LATENCIES, DatabaseColumns.SUCCESS, DatabaseColumns.RESPONSE_MESSAGES,
+        DatabaseColumns.COMPLETED_TIME, DatabaseColumns.LATENCY, DatabaseColumns.FIRST_CHUNK_LATENCY,
+        DatabaseColumns.PROMPT_TOKENS, DatabaseColumns.COMPLETION_TOKENS,
+        DatabaseColumns.MAX_GPU_MEMORY_COST, DatabaseColumns.TIME_PER_OUTPUT_TOKEN,
+        DatabaseColumns.STATUS_CODE, DatabaseColumns.ERROR, DatabaseColumns.TRACE_ID,
+        DatabaseColumns.TURN_INDEX, DatabaseColumns.INPUT_NUM_TURNS, DatabaseColumns.IS_FIRST_TURN,
+        DatabaseColumns.IS_LAST_TURN, DatabaseColumns.REAL_CACHED_TOKENS, DatabaseColumns.CACHED_TOKENS,
+        DatabaseColumns.DECODED_TOKENS_PER_ITER,
     )
+    placeholders = ', '.join('?' for _ in columns)
+    cursor.executemany(
+        f"INSERT INTO result ({', '.join(columns)}) VALUES ({placeholders})",
+        [_benchmark_data_row(row, store_payloads=store_payloads) for row in benchmark_rows],
+    )
+
+
+def insert_benchmark_data(
+    cursor: sqlite3.Cursor, benchmark_data: BenchmarkData, *, store_payloads: bool = True
+) -> None:
+    """Persist one request with diagnostics needed for post-mortem analysis."""
+    insert_benchmark_data_batch(cursor, [benchmark_data], store_payloads=store_payloads)
 
 
 def get_output_path(args: Arguments) -> str:

@@ -27,6 +27,7 @@ from ..utils import (
     run_in_subprocess,
     serialize_result,
     stop_process,
+    try_reserve_new_slot,
     try_reserve_slot,
     unregister_process,
     validate_task_id,
@@ -283,16 +284,6 @@ def _parse_request() -> tuple[dict, str]:
     return data, task_id
 
 
-def _ensure_new_task_id_available(task_id: str) -> None:
-    """Reject reuse of an existing task id before any artifacts are written."""
-    from .. import db as _db
-    if not _db.new_task_id_available(OUTPUT_DIR, task_id):
-        raise RequestValidationError(
-            'Task ID already exists. Generate a new EvalScope-Task-Id and retry.',
-            status_code=409,
-        )
-
-
 def _build_task_config_openai(data: dict) -> TaskConfig:
     """Build a TaskConfig for OpenAI or Anthropic API mode."""
     api_eval_type = data.get('eval_type') or EvalType.OPENAI_API
@@ -542,8 +533,13 @@ def run_evaluation():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
-    _ensure_new_task_id_available(task_id)
-    if not try_reserve_slot(task_id, 'eval', model=model, user_id=uid):
+    reservation = try_reserve_new_slot(task_id, 'eval', model=model, user_id=uid)
+    if reservation == 'conflict':
+        raise RequestValidationError(
+            'Task ID already exists. Generate a new EvalScope-Task-Id and retry.',
+            status_code=409,
+        )
+    if reservation != 'reserved':
         max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
         slots = get_user_slots(uid)
         running = slots['eval']['used']
@@ -732,8 +728,13 @@ def launch_evaluation():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
-    _ensure_new_task_id_available(task_id)
-    if not try_reserve_slot(task_id, 'eval', model=model, user_id=uid):
+    reservation = try_reserve_new_slot(task_id, 'eval', model=model, user_id=uid)
+    if reservation == 'conflict':
+        raise RequestValidationError(
+            'Task ID already exists. Generate a new EvalScope-Task-Id and retry.',
+            status_code=409,
+        )
+    if reservation != 'reserved':
         max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
         slots = get_user_slots(uid)
         running_count = slots['eval']['used']
@@ -1430,9 +1431,11 @@ def launch_eval_batch():
                 s['current_task_id'] = task_id
                 eval_backend = shared_config.get('eval_backend', '')
 
-                if not try_reserve_slot(task_id, 'eval', model=model_name, user_id=current_uid):
+                reservation = try_reserve_new_slot(task_id, 'eval', model=model_name, user_id=current_uid)
+                if reservation != 'reserved':
                     s['errors'] += 1
-                    s['error_details'].append({'name': model_name, 'model': model_name, 'error': '并发已满'})
+                    error = '任务 ID 冲突' if reservation == 'conflict' else '并发已满'
+                    s['error_details'].append({'name': model_name, 'model': model_name, 'error': error})
                     continue
 
                 logger.info(f'[eval-batch:{batch_id}] Running {eval_backend} for {model_name}')

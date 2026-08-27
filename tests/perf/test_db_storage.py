@@ -5,7 +5,13 @@ import pickle
 import sqlite3
 
 from evalscope.perf.utils.benchmark_util import BenchmarkData
-from evalscope.perf.utils.db_util import create_result_table, decode_data, insert_benchmark_data
+from evalscope.perf.utils.db_util import (
+    RESULT_SCHEMA_VERSION,
+    create_result_table,
+    decode_data,
+    insert_benchmark_data,
+    insert_benchmark_data_batch,
+)
 
 
 def test_result_table_persists_diagnostics_as_json(tmp_path):
@@ -41,6 +47,7 @@ def test_result_table_persists_diagnostics_as_json(tmp_path):
 
     indexes = {r[1] for r in con.execute("PRAGMA index_list('result')")}
     assert {'idx_result_request_id', 'idx_result_success_start', 'idx_result_trace_turn'} <= indexes
+    assert con.execute('SELECT MAX(version) FROM benchmark_schema').fetchone()[0] == RESULT_SCHEMA_VERSION
     con.close()
 
 
@@ -58,6 +65,50 @@ def test_create_result_table_upgrades_legacy_shape(tmp_path):
     create_result_table(con.cursor())
     columns = {r[1] for r in con.execute('PRAGMA table_info(result)')}
     assert {'request_id', 'status_code', 'error', 'trace_id', 'turn_index', 'cached_tokens'} <= columns
+    assert con.execute('SELECT MAX(version) FROM benchmark_schema').fetchone()[0] == RESULT_SCHEMA_VERSION
+    con.close()
+
+
+def test_batch_insert_can_skip_large_payloads(tmp_path):
+    db_path = tmp_path / 'batch.db'
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+    create_result_table(cur)
+    rows = [
+        BenchmarkData(
+            request=json.dumps({'prompt': f'hello-{i}'}),
+            start_time=float(i),
+            completed_time=float(i) + 0.5,
+            success=True,
+            response_messages=[{'text': 'large-response'}],
+            prompt_tokens=10,
+            completion_tokens=5,
+        )
+        for i in range(3)
+    ]
+    insert_benchmark_data_batch(cur, rows, store_payloads=False)
+    con.commit()
+
+    stored = con.execute(
+        'SELECT request, response_messages, prompt_tokens, completion_tokens FROM result ORDER BY id'
+    ).fetchall()
+    assert stored == [(None, None, 10, 5)] * 3
+    con.close()
+
+
+def test_newer_benchmark_schema_is_rejected(tmp_path):
+    db_path = tmp_path / 'future.db'
+    con = sqlite3.connect(db_path)
+    con.execute('CREATE TABLE benchmark_schema(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)')
+    con.execute(
+        'INSERT INTO benchmark_schema(version, applied_at) VALUES (?, ?)',
+        (RESULT_SCHEMA_VERSION + 1, 'future'),
+    )
+    con.commit()
+
+    import pytest
+    with pytest.raises(RuntimeError, match='newer than this build supports'):
+        create_result_table(con.cursor())
     con.close()
 
 

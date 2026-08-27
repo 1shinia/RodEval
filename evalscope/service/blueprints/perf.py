@@ -18,6 +18,7 @@ from ..utils import (
     run_perf_wrapper,
     serialize_result,
     stop_process,
+    try_reserve_new_slot,
     try_reserve_slot,
     unregister_process,
     validate_root_path,
@@ -70,12 +71,6 @@ def _write_owner_marker(task_dir: str, user_id: int) -> None:
         raise
     except Exception as e:
         logger.debug(f'Owner marker skipped for {task_dir}: {e}')
-
-
-def _new_task_id_conflict(task_id: str) -> bool:
-    """Return True when a new task id would overwrite existing metadata/artifacts."""
-    from .. import db as _db
-    return not _db.new_task_id_available(OUTPUT_DIR, task_id)
 
 
 def _metadata_task_id(task_ref: str) -> str:
@@ -353,9 +348,13 @@ def launch_batch_perf():
                 if shared_config.get('sla_number_multiplier') is not None:
                     perf_data['sla_number_multiplier'] = shared_config['sla_number_multiplier']
 
-                if not try_reserve_slot(task_id, 'perf', model=model_name, user_id=shared_config['user_id']):
+                reservation = try_reserve_new_slot(
+                    task_id, 'perf', model=model_name, user_id=shared_config['user_id']
+                )
+                if reservation != 'reserved':
                     state['errors'] += 1
-                    state['error_details'].append({'name': model_name, 'model': model_name, 'error': '并发已满'})
+                    error = '任务 ID 冲突' if reservation == 'conflict' else '并发已满'
+                    state['error_details'].append({'name': model_name, 'model': model_name, 'error': error})
                     continue
 
                 logger.info(f'[batch:{batch_id}] Running perf for {model_name}')
@@ -716,9 +715,10 @@ def run_performance_test():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
-    if _new_task_id_conflict(task_id):
+    reservation = try_reserve_new_slot(task_id, 'perf', model=model, user_id=uid)
+    if reservation == 'conflict':
         return jsonify({'error': 'Task ID already exists. Generate a new EvalScope-Task-Id and retry.'}), 409
-    if not try_reserve_slot(task_id, 'perf', model=model, user_id=uid):
+    if reservation != 'reserved':
         max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
         slots = get_user_slots(uid)
         running = slots['perf']['used']
@@ -844,9 +844,10 @@ def launch_performance_test():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
-    if _new_task_id_conflict(task_id):
+    reservation = try_reserve_new_slot(task_id, 'perf', model=model, user_id=uid)
+    if reservation == 'conflict':
         return jsonify({'error': 'Task ID already exists. Generate a new EvalScope-Task-Id and retry.'}), 409
-    if not try_reserve_slot(task_id, 'perf', model=model, user_id=uid):
+    if reservation != 'reserved':
         max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
         slots = get_user_slots(uid)
         running = slots['perf']['used']

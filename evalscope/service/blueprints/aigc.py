@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 from evalscope.backend.aigc_eval.backend_manager import AIGCBackendManager
 from evalscope.service.utils.log import create_log_file, validate_task_id
-from evalscope.service.utils.process import register_process, try_reserve_slot, unregister_process
+from evalscope.service.utils.process import register_process, try_reserve_new_slot, unregister_process
 from evalscope.utils.logger import configure_logging, get_logger
 from evalscope.service.time_utils import epoch_to_utc_iso
 
@@ -45,9 +45,10 @@ def run_aigc_evaluation():
         from .auth import get_current_user_id
         from .. import db as _db
         uid = get_current_user_id()
-        if not _db.new_task_id_available(str(OUTPUT_DIR), task_id):
+        reservation = try_reserve_new_slot(task_id, 'aigc', model, user_id=uid)
+        if reservation == 'conflict':
             return jsonify({'error': 'Task ID already exists. Generate a new EvalScope-Task-Id and retry.'}), 409
-        if not try_reserve_slot(task_id, 'aigc', model, user_id=uid):
+        if reservation != 'reserved':
             return jsonify({'error': f'Max concurrent AIGC tasks reached ({MAX_CONCURRENT_AIGC})'}), 429
 
         try:

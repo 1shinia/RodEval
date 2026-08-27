@@ -95,6 +95,57 @@ def test_new_task_id_available_checks_db_and_filesystem(iso_db):
     assert _db.new_task_id_available(iso_db, 'existing-dir') is False
 
 
+def test_task_id_reservation_is_atomic_and_releasable(iso_db):
+    assert _db.reserve_task_id('reserved-task', 'eval', 7) is True
+    assert _db.reserve_task_id('reserved-task', 'eval', 7) is False
+    row = _db._get_conn().execute(
+        "SELECT task_kind, user_id FROM task_registry WHERE task_id='reserved-task'"
+    ).fetchone()
+    assert tuple(row) == ('eval', 7)
+
+    # A reservation that never produced metadata/artifacts can be returned.
+    assert _db.release_task_id_reservation('reserved-task', user_id=7) is True
+    assert _db.new_task_id_available(iso_db, 'reserved-task') is True
+
+
+def test_task_registry_rejects_cross_kind_reuse(iso_db):
+    _db.upsert_eval_report(
+        task_id='global-id', model_name='m', dataset_name='d', score=0.1,
+        num_samples=1, timestamp='2026-08-26', eval_backend='Native', user_id=7,
+    )
+    with pytest.raises(ValueError, match='registered as eval'):
+        _db.upsert_perf_task(
+            task_id='global-id', model='m', api='a', dataset='d', runs=1,
+            has_report=False, timestamp='2026-08-26', user_id=7,
+        )
+
+
+def test_eval_dataset_relation_uses_exact_membership_and_scores(iso_db):
+    _db.upsert_eval_report(
+        task_id='multi', model_name='m', dataset_name='mmlu_pro, gsm8k', score=0.75,
+        num_samples=10, timestamp='2026-08-26',
+        dataset_scores={'mmlu_pro': 0.8, 'gsm8k': 0.7},
+        eval_backend='Native', user_id=1,
+    )
+    _db.upsert_eval_report(
+        task_id='exact', model_name='m', dataset_name='mmlu', score=0.9,
+        num_samples=10, timestamp='2026-08-27',
+        dataset_scores={'mmlu': 0.9}, eval_backend='Native', user_id=1,
+    )
+
+    items, total, _models, datasets = _db.query_eval_reports(datasets='mmlu', user_id=1)
+    assert total == 1
+    assert len(items) == 1 and items[0]['name'].startswith('exact@@')
+    assert datasets == ['gsm8k', 'mmlu', 'mmlu_pro']
+
+    rows = _db._get_conn().execute(
+        '''SELECT dataset_name, score, position
+           FROM eval_report_datasets WHERE task_id = 'multi'
+           ORDER BY position'''
+    ).fetchall()
+    assert [tuple(row) for row in rows] == [('mmlu_pro', 0.8, 0), ('gsm8k', 0.7, 1)]
+
+
 def test_task_owner_cannot_be_reassigned_by_upsert(iso_db):
     _db.upsert_eval_report(
         task_id='owned', model_name='m', dataset_name='d', score=0.1,

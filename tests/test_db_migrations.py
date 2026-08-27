@@ -16,6 +16,7 @@ Three guards, per the P2 schema-drift hardening (2026-08):
 Run (hermes env):  python -m pytest tests/test_db_migrations.py -q
 """
 import sqlite3
+import threading
 
 import pytest
 
@@ -23,7 +24,7 @@ from evalscope.service import db
 
 
 # --------------------------------------------------------------------------- #
-# Released migration fingerprint (v1–v15). IMMUTABLE — do not edit.
+# Released migration fingerprint (v1–v18). IMMUTABLE — do not edit.
 # When appending a new migration to db.py, append it here too.
 # --------------------------------------------------------------------------- #
 RELEASED: list[tuple[int, str, str]] = [
@@ -223,6 +224,98 @@ RELEASED: list[tuple[int, str, str]] = [
         SELECT 1;
     '''
     ),
+    (
+        16, 'add global task registry', '''
+        CREATE TABLE IF NOT EXISTS task_registry (
+            task_id     TEXT PRIMARY KEY,
+            task_kind   TEXT NOT NULL CHECK (task_kind IN ('eval', 'perf')),
+            user_id     INTEGER NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_task_registry_user_kind_created
+            ON task_registry(user_id, task_kind, created_at DESC);
+    '''
+    ),
+    (
+        17, 'normalize eval report datasets', '''
+        CREATE TABLE IF NOT EXISTS eval_report_datasets (
+            task_id       TEXT NOT NULL,
+            user_id       INTEGER NOT NULL,
+            dataset_name  TEXT NOT NULL COLLATE NOCASE,
+            score         REAL,
+            position      INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (task_id, dataset_name),
+            FOREIGN KEY (task_id) REFERENCES eval_reports(task_id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_eval_report_datasets_user_name_task
+            ON eval_report_datasets(user_id, dataset_name COLLATE NOCASE, task_id);
+        CREATE INDEX IF NOT EXISTS idx_eval_report_datasets_user_name_score
+            ON eval_report_datasets(user_id, dataset_name COLLATE NOCASE, score);
+        CREATE INDEX IF NOT EXISTS idx_eval_report_datasets_task_position
+            ON eval_report_datasets(task_id, position);
+    '''
+    ),
+    (
+        18, 'add tenant-aware filter indexes', '''
+        CREATE INDEX IF NOT EXISTS idx_eval_reports_user_score_timestamp
+            ON eval_reports(user_id, score, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_perf_tasks_user_dataset_timestamp
+            ON perf_tasks(user_id, dataset, timestamp DESC);
+        CREATE TRIGGER IF NOT EXISTS trg_eval_reports_task_registry_insert
+        BEFORE INSERT ON eval_reports
+        BEGIN
+            INSERT INTO task_registry (task_id, task_kind, user_id, created_at)
+            VALUES (
+                NEW.task_id, 'eval', COALESCE(NEW.user_id, 1),
+                COALESCE(NULLIF(NEW.timestamp, ''), datetime('now'))
+            )
+            ON CONFLICT(task_id) DO NOTHING;
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM task_registry
+                WHERE task_id = NEW.task_id
+                  AND (task_kind != 'eval' OR user_id != COALESCE(NEW.user_id, 1))
+            ) THEN RAISE(ABORT, 'task registry conflict for eval report') END;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_perf_tasks_task_registry_insert
+        BEFORE INSERT ON perf_tasks
+        BEGIN
+            INSERT INTO task_registry (task_id, task_kind, user_id, created_at)
+            VALUES (
+                NEW.task_id, 'perf', COALESCE(NEW.user_id, 1),
+                COALESCE(NULLIF(NEW.timestamp, ''), datetime('now'))
+            )
+            ON CONFLICT(task_id) DO NOTHING;
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM task_registry
+                WHERE task_id = NEW.task_id
+                  AND (task_kind != 'perf' OR user_id != COALESCE(NEW.user_id, 1))
+            ) THEN RAISE(ABORT, 'task registry conflict for perf task') END;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_task_state_task_registry_insert
+        BEFORE INSERT ON task_state
+        BEGIN
+            INSERT INTO task_registry (task_id, task_kind, user_id, created_at)
+            VALUES (
+                NEW.task_id,
+                CASE WHEN NEW.task_type = 'perf' THEN 'perf' ELSE 'eval' END,
+                CASE WHEN COALESCE(NEW.user_id, 0) > 0 THEN NEW.user_id ELSE 1 END,
+                COALESCE(NULLIF(NEW.started_at, ''), datetime('now'))
+            )
+            ON CONFLICT(task_id) DO NOTHING;
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM task_registry
+                WHERE task_id = NEW.task_id
+                  AND (
+                      task_kind != CASE WHEN NEW.task_type = 'perf' THEN 'perf' ELSE 'eval' END
+                      OR (
+                          COALESCE(NEW.user_id, 0) > 0
+                          AND user_id != NEW.user_id
+                      )
+                  )
+            ) THEN RAISE(ABORT, 'task registry conflict for task state') END;
+        END;
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -308,9 +401,9 @@ def test_released_migrations_immutable():
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 15
+    assert len(RELEASED) == 18
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 15
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 18
 
 
 def test_fresh_db_converges(tmp_path):
@@ -323,9 +416,12 @@ def test_fresh_db_converges(tmp_path):
         assert 'has_errors' in _columns(conn, 'eval_reports')
         assert 'error_note' in _columns(conn, 'eval_reports')
         assert 'deleted_at' in _columns(conn, 'users')
+        assert {'task_id', 'task_kind', 'user_id', 'created_at'} <= set(_columns(conn, 'task_registry'))
+        assert {'task_id', 'dataset_name', 'score', 'position'} <= set(_columns(conn, 'eval_report_datasets'))
         idx = {r[1] for r in conn.execute("PRAGMA index_list('eval_reports')").fetchall()}
         assert 'idx_eval_reports_user_timestamp' in idx
         assert 'idx_eval_reports_user_backend_timestamp' in idx
+        assert 'idx_eval_reports_user_score_timestamp' in idx
         assert _nocase_index_ok(conn), 'NOCASE index missing/malformed on fresh DB'
     finally:
         conn.close()
@@ -371,19 +467,21 @@ def test_historic_db_verify_schema_clean(tmp_path, caplog):
 
 def test_migration_version_is_atomic(tmp_path, monkeypatch):
     """A failing multi-statement migration must leave no partial DDL behind."""
+    baseline = db.SCHEMA_VERSION
+    probe_version = baseline + 1
     db_path = str(tmp_path / 'atomic.db')
     conn = sqlite3.connect(db_path)
     conn.execute(
         "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL, applied_at TEXT NOT NULL)"
     )
     conn.execute("CREATE TABLE demo (id INTEGER PRIMARY KEY)")
-    conn.execute("INSERT INTO schema_version VALUES (15, 'baseline', 'x')")
+    conn.execute("INSERT INTO schema_version VALUES (?, 'baseline', 'x')", (baseline,))
     conn.commit()
 
-    monkeypatch.setattr(db, 'SCHEMA_VERSION', 16)
+    monkeypatch.setattr(db, 'SCHEMA_VERSION', probe_version)
     monkeypatch.setattr(
         db, '_MIGRATIONS',
-        [*db._MIGRATIONS, (16, 'atomic failure probe',
+        [*db._MIGRATIONS, (probe_version, 'atomic failure probe',
          'ALTER TABLE demo ADD COLUMN should_rollback TEXT;\n'
          'INSERT INTO table_that_does_not_exist VALUES (1);')],
     )
@@ -391,8 +489,40 @@ def test_migration_version_is_atomic(tmp_path, monkeypatch):
         db._migrate(conn)
 
     assert 'should_rollback' not in _columns(conn, 'demo')
-    assert _schema_versions(conn)[-1] == 15
+    assert _schema_versions(conn)[-1] == baseline
     conn.close()
+
+
+def test_concurrent_migrators_converge_without_replaying_versions(tmp_path):
+    """Two service processes starting together must converge on one history."""
+    db_path = str(tmp_path / 'concurrent.db')
+    barrier = threading.Barrier(2)
+    errors: list[Exception] = []
+
+    def _worker() -> None:
+        conn = sqlite3.connect(db_path, timeout=5)
+        conn.row_factory = sqlite3.Row
+        try:
+            barrier.wait(timeout=5)
+            db._migrate(conn, pre_migration_backup=lambda: str(tmp_path / 'snapshot.db'))
+        except Exception as e:
+            errors.append(e)
+        finally:
+            conn.close()
+
+    threads = [threading.Thread(target=_worker) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=20)
+
+    assert not errors
+    conn = sqlite3.connect(db_path)
+    try:
+        assert _schema_versions(conn) == list(range(1, db.SCHEMA_VERSION + 1))
+        assert conn.execute('SELECT COUNT(*) FROM schema_version').fetchone()[0] == db.SCHEMA_VERSION
+    finally:
+        conn.close()
 
 
 def test_v15_converts_legacy_naive_timestamps_from_cst_to_utc(tmp_path, monkeypatch):
