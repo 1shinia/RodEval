@@ -109,3 +109,20 @@ def test_ensure_admin_user_reactivates_soft_deleted_default(tmp_path, monkeypatc
     assert row['deleted_at'] is None
     assert row['password_hash'] != 'old-hash'
     assert conn.execute("SELECT COUNT(*) FROM users WHERE username='admin'").fetchone()[0] == 1
+
+
+def test_backup_db_mirrors_to_configured_directory(tmp_path, monkeypatch):
+    remote = tmp_path / 'remote-backups'
+    monkeypatch.setenv('EVALSCOPE_DB_BACKUP_DIR', str(remote))
+    db.init_db(str(tmp_path / 'outputs'))
+
+    dest = db.backup_db(str(tmp_path / 'outputs'), reason='startup')
+
+    assert dest is not None
+    mirrored = remote / os.path.basename(dest)
+    assert mirrored.is_file()
+    conn = sqlite3.connect(mirrored)
+    try:
+        assert conn.execute('SELECT MAX(version) FROM schema_version').fetchone()[0] == db.SCHEMA_VERSION
+    finally:
+        conn.close()

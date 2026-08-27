@@ -454,3 +454,41 @@ def test_v15_converts_legacy_naive_timestamps_from_cst_to_utc(tmp_path, monkeypa
         assert updated == '2026-08-26T08:30:00+00:00'
     finally:
         conn.close()
+
+
+def test_future_schema_version_is_rejected(tmp_path):
+    """An older binary must never open a DB created by a newer schema."""
+    db_path = str(tmp_path / 'evalscope_meta.db')
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        'CREATE TABLE schema_version '
+        '(version INTEGER PRIMARY KEY, description TEXT NOT NULL, applied_at TEXT NOT NULL)'
+    )
+    conn.execute(
+        'INSERT INTO schema_version VALUES (?, ?, ?)',
+        (db.SCHEMA_VERSION + 1, 'future', '2099-01-01T00:00:00+00:00'),
+    )
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(RuntimeError, match='newer than this application supports'):
+        db.init_db(str(tmp_path))
+
+
+def test_current_version_structural_drift_is_fatal(tmp_path):
+    """A version marker alone cannot make a structurally broken DB healthy."""
+    db_path = str(tmp_path / 'evalscope_meta.db')
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        'CREATE TABLE schema_version '
+        '(version INTEGER PRIMARY KEY, description TEXT NOT NULL, applied_at TEXT NOT NULL)'
+    )
+    conn.execute(
+        'INSERT INTO schema_version VALUES (?, ?, ?)',
+        (db.SCHEMA_VERSION, 'pretend-current', '2026-08-26T00:00:00+00:00'),
+    )
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(RuntimeError, match='Schema drift:'):
+        db.init_db(str(tmp_path))

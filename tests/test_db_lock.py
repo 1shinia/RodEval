@@ -118,3 +118,46 @@ def test_owner_marker_refuses_cross_user_replacement(iso_db):
     with pytest.raises(PermissionError):
         _db.write_owner_marker(task_dir, 8)
     assert _db.read_owner(task_dir) == 7
+
+
+def test_init_db_switches_thread_connection_to_new_path(tmp_path):
+    """Re-initialising for another output dir must not keep using the old DB."""
+    first = tmp_path / 'first'
+    second = tmp_path / 'second'
+    try:
+        _db.init_db(str(first))
+        conn1 = _db._get_conn()
+        _db.upsert_perf_task(
+            task_id='only-first', model='m', api='a', dataset='d', runs=1,
+            has_report=False, timestamp='2026-08-26', user_id=1,
+        )
+
+        _db.init_db(str(second))
+        conn2 = _db._get_conn()
+        assert conn2 is not conn1
+        assert os.path.isfile(second / 'evalscope_meta.db')
+        assert conn2.execute(
+            "SELECT COUNT(*) FROM perf_tasks WHERE task_id='only-first'"
+        ).fetchone()[0] == 0
+    finally:
+        conn = getattr(_db._local, 'conn', None)
+        if conn is not None:
+            conn.close()
+        _db._local.conn = None
+        _db._db_path = None
+
+
+def test_perf_task_owner_cannot_be_reassigned_by_upsert(iso_db):
+    _db.upsert_perf_task(
+        task_id='owned-perf', model='m', api='a', dataset='d', runs=1,
+        has_report=False, timestamp='2026-08-26', user_id=7,
+    )
+    with pytest.raises(PermissionError):
+        _db.upsert_perf_task(
+            task_id='owned-perf', model='other', api='b', dataset='d2', runs=2,
+            has_report=True, timestamp='2026-08-27', user_id=8,
+        )
+    row = _db._get_conn().execute(
+        "SELECT user_id, model FROM perf_tasks WHERE task_id='owned-perf'"
+    ).fetchone()
+    assert tuple(row) == (7, 'm')

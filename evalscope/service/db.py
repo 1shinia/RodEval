@@ -6,6 +6,7 @@ request.  The database file lives at ``{OUTPUT_DIR}/evalscope_meta.db``.
 
 import json
 import os
+import shutil
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
@@ -407,7 +408,12 @@ def _migrate(conn: sqlite3.Connection, pre_migration_backup=None) -> None:
     conn.commit()
 
     current = _get_schema_version(conn)
-    if current >= SCHEMA_VERSION:
+    if current > SCHEMA_VERSION:
+        raise RuntimeError(
+            f'Database schema v{current} is newer than this application supports '
+            f'(v{SCHEMA_VERSION}). Refusing to open it with an older EvalScope build.'
+        )
+    if current == SCHEMA_VERSION:
         return
 
     pending = [m for m in _MIGRATIONS if current < m[0] <= SCHEMA_VERSION]
@@ -456,47 +462,122 @@ def _migrate(conn: sqlite3.Connection, pre_migration_backup=None) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _verify_schema() -> None:
-    """Post-migration sanity checks for known schema-drift points.
+def _verify_schema(*, strict: bool = False) -> None:
+    """Post-migration sanity checks for critical schema invariants.
 
-    Two severity levels (NOT merged into one log line):
-    - Missing ``eval_backend`` column  -> structural drift: every eval write
-      (INSERT with explicit column names) would fail with OperationalError.
-      Logged as ERROR with a remediation hint.
-    - Missing / malformed NOCASE index -> query-plan degradation only (model
-      filter ``= ? COLLATE NOCASE`` falls back to a full scan). Logged as
-      WARNING.
-
-    Never raises: startup must not be blocked by incidental drift, and the
-    service stays available for diagnostics.
+    Structural drift (missing tables/columns) is fatal when *strict* is true,
+    which is the mode used by :func:`init_db`. Query-plan-only drift such as a
+    missing/malformed index stays a warning because the service remains
+    correct, only slower.
     """
     if _db_path is None:
         return
     conn = _get_conn()
+    structural_errors: list[str] = []
     try:
-        REQUIRED_COLUMNS = ('eval_backend', 'has_errors')
-        cols = {r['name'] for r in conn.execute('PRAGMA table_info(eval_reports)')}
-        missing = [c for c in REQUIRED_COLUMNS if c not in cols]
-        if missing:
-            logger.error(
-                f'Schema drift: eval_reports missing column(s): {", ".join(missing)}; '
-                'eval writes will fail with OperationalError. Remediation: delete '
-                'evalscope_meta.db and restart (backfill restores it), or run the '
-                'corresponding ALTER TABLE ADD COLUMN statements.'
+        required_tables = {
+            'schema_version', 'eval_reports', 'perf_tasks', 'task_state',
+            'compare_reports', 'users', 'token_blacklist',
+        }
+        existing_tables = {
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        missing_tables = sorted(required_tables - existing_tables)
+        if missing_tables:
+            structural_errors.append(
+                f'missing table(s): {", ".join(missing_tables)}'
             )
-        rows = conn.execute("PRAGMA index_xinfo('idx_eval_reports_model_nocase')").fetchall()
-        if not rows:
-            logger.warning(
-                'Schema drift: idx_eval_reports_model_nocase index is missing; '
-                'model filters fall back to a full scan. Migration v9 should have created it.'
-            )
-        elif not any(r['name'] == 'model_name' and r['coll'] == 'NOCASE' and r['key'] == 1 for r in rows):
-            logger.warning(
-                'Schema drift: idx_eval_reports_model_nocase exists but is malformed '
-                '(expected model_name COLLATE NOCASE); model filters may not use it.'
-            )
+
+        required_columns = {
+            'eval_reports': {
+                'task_id', 'model_name', 'dataset_name', 'eval_backend',
+                'user_id', 'has_errors', 'error_note',
+            },
+            'perf_tasks': {'task_id', 'model', 'user_id'},
+            'task_state': {'task_id', 'task_type', 'status', 'user_id'},
+            'compare_reports': {'id', 'task_ids', 'user_id'},
+            'users': {'id', 'username', 'deleted_at'},
+        }
+        for table, expected in required_columns.items():
+            if table not in existing_tables:
+                continue
+            cols = {r['name'] for r in conn.execute(f'PRAGMA table_info({table})')}
+            missing = sorted(expected - cols)
+            if missing:
+                structural_errors.append(
+                    f'{table} missing column(s): {", ".join(missing)}'
+                )
+
+        if structural_errors:
+            message = 'Schema drift: ' + '; '.join(structural_errors)
+            if strict:
+                raise RuntimeError(message)
+            logger.error(message)
+
+        if 'eval_reports' in existing_tables:
+            rows = conn.execute(
+                "PRAGMA index_xinfo('idx_eval_reports_model_nocase')"
+            ).fetchall()
+            if not rows:
+                logger.warning(
+                    'Schema drift: idx_eval_reports_model_nocase index is missing; '
+                    'model filters fall back to a full scan. Migration v9 should have created it.'
+                )
+            elif not any(
+                r['name'] == 'model_name' and r['coll'] == 'NOCASE' and r['key'] == 1
+                for r in rows
+            ):
+                logger.warning(
+                    'Schema drift: idx_eval_reports_model_nocase exists but is malformed '
+                    '(expected model_name COLLATE NOCASE); model filters may not use it.'
+                )
+    except RuntimeError:
+        raise
     except sqlite3.Error as e:
+        if strict:
+            raise RuntimeError(f'Schema verification failed: {e}') from e
         logger.warning(f'Schema verification skipped (non-fatal): {e}')
+
+
+def _mirror_backup_if_configured(snapshot_path: str) -> str | None:
+    """Mirror a completed snapshot to an operator-provided backup directory.
+
+    ``EVALSCOPE_DB_BACKUP_DIR`` should point at a different failure domain
+    (for example NFS/NAS or another mounted volume). A mirror failure is
+    intentionally non-fatal because the local SQLite snapshot is still valid.
+    """
+    target_dir = os.environ.get('EVALSCOPE_DB_BACKUP_DIR', '').strip()
+    if not target_dir:
+        return None
+    try:
+        source_dir = os.path.realpath(os.path.dirname(snapshot_path))
+        target_dir = os.path.abspath(os.path.expanduser(target_dir))
+        os.makedirs(target_dir, exist_ok=True)
+        if os.path.realpath(target_dir) == source_dir:
+            logger.warning(
+                'EVALSCOPE_DB_BACKUP_DIR points to the local backup directory; '
+                'no additional failure-domain protection is gained.'
+            )
+            return snapshot_path
+
+        target = os.path.join(target_dir, os.path.basename(snapshot_path))
+        tmp_target = f'{target}.tmp-{os.getpid()}-{threading.get_ident()}'
+        try:
+            shutil.copy2(snapshot_path, tmp_target)
+            os.replace(tmp_target, target)
+        finally:
+            try:
+                if os.path.exists(tmp_target):
+                    os.remove(tmp_target)
+            except OSError:
+                pass
+        logger.info(f'DB backup mirror: {target}')
+        return target
+    except Exception as e:
+        logger.warning(f'DB backup mirror skipped (non-fatal): {e}')
+        return None
 
 
 def backup_db(output_dir: str | None = None, keep: int = 5, reason: str = 'startup') -> str | None:
@@ -542,6 +623,7 @@ def backup_db(output_dir: str | None = None, keep: int = 5, reason: str = 'start
             except OSError:
                 pass
         logger.info(f'DB backup ({reason}): {dest_path}')
+        _mirror_backup_if_configured(dest_path)
         return dest_path
     except Exception as e:
         logger.warning(f'DB backup skipped ({reason}, non-fatal): {e}')
@@ -549,21 +631,44 @@ def backup_db(output_dir: str | None = None, keep: int = 5, reason: str = 'start
 
 
 def init_db(output_dir: str) -> None:
-    """Initialise the database path and create tables if needed."""
+    """Initialise the database path and bring the schema to the supported version.
+
+    Re-initialising the module for a different output directory is supported:
+    each thread lazily discards a connection that was opened for the old path.
+    """
     global _db_path
-    _db_path = os.path.join(output_dir, 'evalscope_meta.db')
+    new_path = os.path.abspath(os.path.join(output_dir, 'evalscope_meta.db'))
     os.makedirs(output_dir, exist_ok=True)
+    _db_path = new_path
     conn = _get_conn()
     _migrate(conn, pre_migration_backup=lambda: backup_db(output_dir, reason='pre-migration'))
-    _verify_schema()
+    _verify_schema(strict=True)
     logger.info(f'SQLite metadata DB ready: {_db_path}')
 
 
 def _get_conn() -> sqlite3.Connection:
-    """Return a per-thread SQLite connection."""
+    """Return a per-thread SQLite connection for the current ``_db_path``."""
     if _db_path is None:
         raise RuntimeError('init_db() has not been called')
+
     conn: sqlite3.Connection | None = getattr(_local, 'conn', None)
+    conn_path: str | None = getattr(_local, 'db_path', None)
+    if conn is not None and conn_path is None:
+        # Compatibility with connections created before path tracking existed
+        # (and with tests/tools that inject a raw sqlite3 connection).
+        try:
+            row = conn.execute('PRAGMA database_list').fetchone()
+            if row and row[2]:
+                conn_path = os.path.abspath(row[2])
+        except sqlite3.Error:
+            conn_path = None
+    if conn is not None and conn_path != _db_path:
+        try:
+            conn.close()
+        finally:
+            _local.conn = None
+            conn = None
+
     if conn is None:
         conn = sqlite3.connect(_db_path, timeout=30)
         conn.row_factory = sqlite3.Row
@@ -573,6 +678,7 @@ def _get_conn() -> sqlite3.Connection:
         # Aggressive auto-checkpoint: flush WAL after ~800 KB instead of 4 MB default
         conn.execute('PRAGMA wal_autocheckpoint=200')
         _local.conn = conn
+        _local.db_path = _db_path
     return conn
 
 
@@ -731,15 +837,14 @@ def upsert_eval_report(
     has_errors: int = 0,
     error_note: str = '',
 ) -> None:
+    """Insert or update an eval report without allowing owner reassignment.
+
+    The ownership predicate is part of the SQLite UPSERT itself rather than a
+    SELECT-then-UPDATE sequence. This keeps the invariant safe across multiple
+    processes that may share the same SQLite file.
+    """
     def _op(conn: sqlite3.Connection) -> None:
-        existing = conn.execute(
-            'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
-        ).fetchone()
-        if existing is not None and int(existing['user_id']) != int(user_id):
-            raise PermissionError(
-                f'task_id {task_id!r} is already owned by user {existing["user_id"]}'
-            )
-        conn.execute(
+        cursor = conn.execute(
             '''INSERT INTO eval_reports
                (task_id, model_name, dataset_name, score, num_samples, timestamp,
                 dataset_scores, eval_backend, user_id, has_errors, error_note)
@@ -752,9 +857,9 @@ def upsert_eval_report(
                    timestamp = excluded.timestamp,
                    dataset_scores = excluded.dataset_scores,
                    eval_backend = excluded.eval_backend,
-                   user_id = excluded.user_id,
                    has_errors = excluded.has_errors,
-                   error_note = excluded.error_note''',
+                   error_note = excluded.error_note
+               WHERE eval_reports.user_id = excluded.user_id''',
             (
                 task_id, model_name, dataset_name, score, num_samples, timestamp,
                 json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
@@ -763,6 +868,14 @@ def upsert_eval_report(
                 has_errors, error_note,
             ),
         )
+        if cursor.rowcount == 0:
+            existing = conn.execute(
+                'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
+            ).fetchone()
+            owner = existing['user_id'] if existing is not None else 'unknown'
+            raise PermissionError(
+                f'task_id {task_id!r} is already owned by user {owner}'
+            )
 
     _write(_op)
 
@@ -920,15 +1033,9 @@ def upsert_perf_task(
     timestamp: str,
     user_id: int = 1,
 ) -> None:
+    """Insert or update a perf task without allowing owner reassignment."""
     def _op(conn: sqlite3.Connection) -> None:
-        existing = conn.execute(
-            'SELECT user_id FROM perf_tasks WHERE task_id = ?', (task_id,)
-        ).fetchone()
-        if existing is not None and int(existing['user_id']) != int(user_id):
-            raise PermissionError(
-                f'task_id {task_id!r} is already owned by user {existing["user_id"]}'
-            )
-        conn.execute(
+        cursor = conn.execute(
             '''INSERT INTO perf_tasks
                (task_id, model, api, dataset, runs, has_report, timestamp, user_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -938,10 +1045,18 @@ def upsert_perf_task(
                    dataset = excluded.dataset,
                    runs = excluded.runs,
                    has_report = excluded.has_report,
-                   timestamp = excluded.timestamp,
-                   user_id = excluded.user_id''',
+                   timestamp = excluded.timestamp
+               WHERE perf_tasks.user_id = excluded.user_id''',
             (task_id, model, api, dataset, runs, int(has_report), timestamp, user_id),
         )
+        if cursor.rowcount == 0:
+            existing = conn.execute(
+                'SELECT user_id FROM perf_tasks WHERE task_id = ?', (task_id,)
+            ).fetchone()
+            owner = existing['user_id'] if existing is not None else 'unknown'
+            raise PermissionError(
+                f'task_id {task_id!r} is already owned by user {owner}'
+            )
 
     _write(_op)
 

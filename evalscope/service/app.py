@@ -84,27 +84,49 @@ def create_app(outputs: str = None):
 
     # --- Initialise SQLite metadata store --------------------------------
     outputs_root = app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT
+
+    # Schema/bootstrap failures are fatal. The metadata DB carries users,
+    # ownership and compare reports, so running with an incompatible or
+    # structurally broken schema is less safe than refusing to start.
     try:
-        # recover_stale_tasks MUST run BEFORE write_service_pid:
-        # it reads the PID file to check if the old service is still alive.
-        # If we write the new PID first, it sees the new (alive) PID and
-        # skips recovery — leaving zombie 'running' tasks forever.
         _db.init_db(outputs_root)
-        # Online snapshot of the meta DB at every start (bounded by keep=5).
-        # meta.db now holds users/ownership/compare_reports — not rebuildable.
+    except Exception as e:
+        logger.error(f'SQLite metadata store initialization failed: {e}')
+        raise RuntimeError('SQLite metadata store initialization failed') from e
+
+    # Operational maintenance remains best-effort: once the schema is known
+    # good, a cleanup/backup/recovery hiccup should not make the HTTP service
+    # unavailable. Filesystem reconciliation is deliberately done once here,
+    # not on every list request.
+    try:
+        # Online snapshot at every start (bounded by keep=5). If
+        # EVALSCOPE_DB_BACKUP_DIR is configured, db.py mirrors the snapshot to
+        # that separate mounted failure domain as well.
         _db.backup_db(outputs_root, reason='startup')
         _db.backfill(outputs_root)
+        stale_eval = _db.cleanup_eval_reports(outputs_root)
+        stale_perf = _db.cleanup_perf_tasks(outputs_root)
+        if stale_eval or stale_perf:
+            logger.info(
+                'Startup DB reconciliation: removed %d stale eval report(s) and %d stale perf task(s)',
+                stale_eval, stale_perf,
+            )
+
+        # recover_stale_tasks MUST run BEFORE write_service_pid:
+        # it reads the PID file to check if the old service is still alive.
         _db.recover_stale_tasks()
-        # Garbage-collect stale runtime rows AFTER recovery (freshly-orphaned
-        # tasks are protected by the 7-day retention window).
         _db.cleanup_task_state()
         _db.write_service_pid(outputs_root)
-        # Bootstrap an initial admin if none exists (safe after meta.db loss;
-        # never resets an existing admin's password).
+    except Exception as e:
+        logger.warning(f'SQLite metadata maintenance failed (non-fatal): {e}')
+
+    # Bootstrap an initial admin if none exists. This helper is best-effort
+    # and already preserves an existing active admin without resetting it.
+    try:
         from .blueprints.auth import ensure_admin_user
         ensure_admin_user()
     except Exception as e:
-        logger.warning(f'SQLite metadata store init failed (non-fatal): {e}')
+        logger.warning(f'Admin bootstrap failed (non-fatal): {e}')
 
     # --- Opportunistic cleanup: expired JWT blacklist entries --------------
     try:
