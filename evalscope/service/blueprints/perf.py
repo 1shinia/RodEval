@@ -1173,7 +1173,9 @@ def get_performance_report():
     """Get the HTML performance report for a completed task.
 
     Query params:
-        task_id (str): the task identifier
+        task_id  (str): the task identifier
+        download (str): when '1'/'true'/'yes', send the file as an
+                        attachment instead of rendering it inline
     """
     task_id = request.args.get('task_id')
     if not task_id:
@@ -1187,6 +1189,14 @@ def get_performance_report():
     report_file = os.path.join(OUTPUT_DIR, task_id, 'perf', 'perf_report.html')
     if not os.path.exists(report_file):
         return jsonify({'error': f'Report not found for task_id: {task_id}'}), 404
+
+    if request.args.get('download', '').lower() in ('1', 'true', 'yes'):
+        # Align with eval reports (/api/v1/reports/html): download as attachment.
+        # task_id is already validated by validate_task_id, so it is safe as a
+        # filename component; replace any path-hostile characters defensively.
+        safe_name = (task_id.replace('/', '_').replace('\\', '_') + '_perf_report.html')
+        return send_file(report_file, mimetype='text/html', as_attachment=True,
+                         download_name=safe_name)
 
     return send_file(report_file, mimetype='text/html')
 

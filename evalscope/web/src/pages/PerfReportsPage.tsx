@@ -94,7 +94,7 @@ export default function PerfReportsPage() {
       const sla = await getPerfSlaData(tid)
       setSlaData({ taskId: tid, ...sla })
     } catch {
-      window.open(getPerfReportUrl(tid), '_blank')
+      window.open(`/viewer?url=${encodeURIComponent(getPerfReportUrl(tid))}`, '_blank')
     }
   }
 
