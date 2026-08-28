@@ -13,6 +13,17 @@ if TYPE_CHECKING:
 logger = get_logger()
 
 
+async def gather_logging(tasks):
+    """Gather task results, logging any exception instead of silently dropping
+    it.  A failed request task would otherwise let the benchmark 'complete'
+    with fewer requests than expected and no warning."""
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f'Request task failed: {result!r}')
+    return results
+
+
 class BenchmarkStrategy(ABC):
     """Abstract base class for benchmark execution strategies.
 

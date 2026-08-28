@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from evalscope.backend.aigc_eval.backend_manager import AIGCBackendManager
-from evalscope.service.utils.log import create_log_file, validate_task_id
+from evalscope.service.utils.log import OUTPUT_DIR as _OUTPUT_DIR, create_log_file, validate_task_id
 from evalscope.service.utils.process import register_process, try_reserve_new_slot, unregister_process
 from evalscope.utils.logger import configure_logging, get_logger
 from evalscope.service.time_utils import epoch_to_utc_iso
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 bp_aigc = Blueprint('aigc', __name__, url_prefix='/api/v1/aigc')
 
-OUTPUT_DIR = Path(os.getenv('EVALSCOPE_OUTPUT_DIR', './outputs'))
+OUTPUT_DIR = Path(_OUTPUT_DIR)
 
 # Max concurrent AIGC tasks (read from env, default 1)
 MAX_CONCURRENT_AIGC = int(os.environ.get('MAX_CONCURRENT_AIGC', '1'))

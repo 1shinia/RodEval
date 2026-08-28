@@ -285,10 +285,15 @@ def require_auth():
     return None
 
 
-def get_current_user_id() -> int:
-    """Return the current authenticated user_id (1 = admin default for public endpoints)."""
+def get_current_user_id() -> int | None:
+    """Return the current authenticated user_id, or None when unauthenticated.
+
+    Fail-closed: public endpoints must not silently assume an admin identity.
+    Authenticated routes always get a real id because require_auth populates
+    ``request.current_user`` before dispatch.
+    """
     user = getattr(request, 'current_user', None)
-    return int(user['sub']) if user else 1
+    return int(user['sub']) if user else None
 
 
 def get_user_output_dir(user_id: int = None) -> str:
@@ -326,12 +331,16 @@ def check_task_ownership(table: str, task_id: str) -> tuple[bool, int | None]:
 
 def check_task_artifact_access(task_id: str, tables: tuple[str, ...]) -> bool:
     """Authorize reports/logs/SSE/files through the shared task policy."""
+    uid = get_current_user_id()
+    if uid is None:
+        # Unauthenticated requests must never be treated as admin (fail-closed).
+        return False
     from ..task_access import task_artifact_owned_by
     from ..utils import OUTPUT_DIR
     return task_artifact_owned_by(
         task_id,
         tables,
-        user_id=get_current_user_id(),
+        user_id=uid,
         is_admin=get_current_role() == 'admin',
         output_dir=str(OUTPUT_DIR),
     )

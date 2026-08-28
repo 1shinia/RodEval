@@ -4,7 +4,7 @@ import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from evalscope.perf.arguments import Arguments
-from evalscope.perf.core.strategies.base import BenchmarkStrategy
+from evalscope.perf.core.strategies.base import BenchmarkStrategy, gather_logging
 from evalscope.perf.plugin.datasets.base import Conversation, Message, Turn
 from evalscope.utils.logger import get_logger
 
@@ -249,4 +249,4 @@ class MultiTurnStrategy(BenchmarkStrategy):
         self._phase_is_warmup = is_warmup
         self._phase_deadline = deadline
         workers = [asyncio.create_task(self._worker(worker_id=i)) for i in range(self.args.parallel)]
-        await asyncio.gather(*workers, return_exceptions=True)
+        await gather_logging(workers)

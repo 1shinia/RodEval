@@ -160,13 +160,22 @@ def jsonl_to_list(jsonl_file: str) -> List[Dict[str, Any]]:
             for line in reader.iter(type=dict, allow_none=True, skip_invalid=False):
                 res_list.append(line)
     except Exception:
-        # Fallback: parse line-by-line with the stdlib json module.
+        # Fallback: parse line-by-line with the stdlib json module, tolerating
+        # a truncated trailing line so a crash mid-append doesn't poison the
+        # entire cache (skip + warn instead of aborting the whole read).
         res_list = []
+        skipped = 0
         with open(jsonl_file, 'r', encoding='utf-8') as f:
             for line in f:
                 stripped = line.strip()
-                if stripped:
+                if not stripped:
+                    continue
+                try:
                     res_list.append(json.loads(stripped))
+                except json.JSONDecodeError:
+                    skipped += 1
+        if skipped:
+            logger.warning(f'Skipped {skipped} malformed line(s) in {jsonl_file} (likely a truncated write).')
 
     if not res_list:
         logger.warning(f'No data found in {jsonl_file}.')

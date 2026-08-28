@@ -5,14 +5,14 @@ import os
 from pathlib import Path
 
 from flask import Blueprint, jsonify, send_file
-from evalscope.service.utils.log import validate_task_id
+from evalscope.service.utils.log import OUTPUT_DIR as _OUTPUT_DIR, validate_task_id
 from evalscope.service.time_utils import epoch_to_utc_iso
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 bp_audio = Blueprint('audio', __name__, url_prefix='/api/v1/audio')
 
-OUTPUT_DIR = Path(os.getenv('EVALSCOPE_OUTPUT_DIR', './outputs'))
+OUTPUT_DIR = Path(_OUTPUT_DIR)
 
 
 def _require_task_access(task_id: str):

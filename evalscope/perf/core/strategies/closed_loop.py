@@ -4,7 +4,7 @@ import time
 from typing import TYPE_CHECKING, AsyncIterator, Optional, Tuple
 
 from evalscope.perf.arguments import Arguments
-from evalscope.perf.core.strategies.base import BenchmarkStrategy
+from evalscope.perf.core.strategies.base import BenchmarkStrategy, gather_logging
 from evalscope.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -105,12 +105,12 @@ class ClosedLoopStrategy(BenchmarkStrategy):
 
             if len(in_flight) >= max_in_flight:
                 done, pending = await asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
-                await asyncio.gather(*done, return_exceptions=True)
+                await gather_logging(done)
                 in_flight = set(pending)
             else:
                 done = {task for task in in_flight if task.done()}
                 if done:
-                    await asyncio.gather(*done, return_exceptions=True)
+                    await gather_logging(done)
                     in_flight.difference_update(done)
 
             task = asyncio.create_task(
@@ -129,4 +129,4 @@ class ClosedLoopStrategy(BenchmarkStrategy):
         if in_flight:
             if deadline is not None and time.perf_counter() >= deadline:
                 logger.info(f'Duration deadline reached; awaiting {len(in_flight)} in-flight request(s).')
-            await asyncio.gather(*in_flight, return_exceptions=True)
+            await gather_logging(in_flight)
