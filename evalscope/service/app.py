@@ -363,6 +363,11 @@ def _setup_access_logging(app: Flask, outputs_root: str) -> None:
     access_log.addHandler(handler)
     access_log.setLevel(logging.INFO)
 
+    # Parse the trusted-proxy set once at setup time; it never changes per request.
+    trusted_proxies = set(
+        p.strip() for p in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',') if p.strip()
+    )
+
     @app.before_request
     def _capture_start():
         request._start_time = time.time()
@@ -373,12 +378,8 @@ def _setup_access_logging(app: Flask, outputs_root: str) -> None:
             return response
 
         elapsed = (time.time() - getattr(request, '_start_time', time.time())) * 1000
-        # Only trust X-Forwarded-For from known reverse proxy addresses.
-        # When running behind nginx/Caddy on localhost or a trusted LAN proxy,
-        # add its IP to TRUSTED_PROXIES (comma-separated env var).
-        trusted_proxies = set(
-            p.strip() for p in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',') if p.strip()
-        )
+        # Only trust X-Forwarded-For from known reverse proxy addresses (the set
+        # is parsed once at setup time — see above).
         remote = request.remote_addr or ''
         if remote in trusted_proxies:
             client_ip = (

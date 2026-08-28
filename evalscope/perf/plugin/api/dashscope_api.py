@@ -76,7 +76,7 @@ class DashScopeApiPlugin(ApiPluginBase):
             payload['parameters']['top_p'] = param.top_p
         return payload
 
-    def parse_responses(self, responses, **kwargs) -> Dict:
+    def parse_responses(self, responses: List[Dict], request: str = None, **kwargs) -> tuple[int, int]:
         """Parser responses and return number of request and response tokens.
 
         Args:
@@ -87,6 +87,13 @@ class DashScopeApiPlugin(ApiPluginBase):
         Returns:
             Tuple: Return number of prompt token and number of completion tokens.
         """
-        last_response = responses[-1]
-        js = json.loads(last_response)
-        return js['usage']['input_tokens'], js['usage']['output_tokens']
+        if not responses:
+            logger.error('Received empty response list (responses=[]) from dashscope.')
+            return 0, 0
+        try:
+            last_response = responses[-1]
+            js = json.loads(last_response)
+            return js['usage']['input_tokens'], js['usage']['output_tokens']
+        except (IndexError, json.JSONDecodeError, KeyError, TypeError) as e:
+            logger.error(f'Failed to parse dashscope response: {e}')
+            return 0, 0

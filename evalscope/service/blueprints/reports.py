@@ -119,6 +119,18 @@ def serve_media_file():
     if mime_type is None:
         mime_type = 'application/octet-stream'
 
+    # SVG can embed <script>; serve it as an attachment with nosniff so it can
+    # never render inline in the site origin (stored/reflected XSS guard).
+    if ext == '.svg':
+        resp = send_file(
+            file_path,
+            mimetype='image/svg+xml',
+            as_attachment=True,
+            download_name=os.path.basename(file_path),
+        )
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
+
     return send_file(file_path, mimetype=mime_type)
 
 
@@ -372,24 +384,9 @@ def list_reports():
                 backend=backend,
                 user_id=current_uid,
             )
-            # Sanity: filter out reports whose directories no longer exist
-            items = [it for it in items if _report_dir_exists(it['name'], root)]
-            # Always re-count total after filesystem pruning
-            all_total = _db.query_eval_reports(
-                search=search,
-                models=models_filter,
-                datasets=datasets_filter,
-                score_min=score_min,
-                score_max=score_max,
-                sort_by=sort_by,
-                sort_order=sort_order,
-                page=1,
-                page_size=10000,
-                backend=backend,
-                user_id=current_uid,
-            )[0]
-            all_filtered = [r for r in all_total if _report_dir_exists(r['name'], root)]
-            total = len(all_filtered)
+            # cleanup_eval_reports above already deleted rows whose task dirs are
+            # gone, so query_eval_reports returns an accurate SQL COUNT(*) — no
+            # second full-table scan or per-row isdir needed here.
             return jsonify({
                 'reports': items,
                 'total': total,

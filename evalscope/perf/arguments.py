@@ -478,6 +478,11 @@ class Arguments(BaseArgument):
     def _validate_queue_size_multiplier(cls, v):
         return max(v, 1) if v <= 0 else v
 
+    @field_validator('log_every_n_query', mode='after')
+    @classmethod
+    def _validate_log_every_n_query(cls, v):
+        return max(v, 1) if v <= 0 else v
+
     @field_validator('in_flight_task_multiplier', mode='after')
     @classmethod
     def _validate_in_flight_task_multiplier(cls, v):

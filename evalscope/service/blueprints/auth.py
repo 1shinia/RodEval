@@ -3,6 +3,8 @@
 import datetime
 import os
 import sqlite3
+import threading
+import time
 import uuid
 
 import jwt
@@ -140,11 +142,27 @@ def _create_token(user: dict) -> str:
     return jwt.encode(payload, _JWT_SECRET, algorithm='HS256')
 
 
+# Short-TTL cache for token blacklist lookups; a logout writes the entry into
+# the cache immediately (see _blacklist_token) so revocation takes effect at
+# once within this process, while the TTL bounds staleness across processes.
+_blacklist_cache: dict[str, tuple[float, bool]] = {}
+_blacklist_cache_ttl = float(os.environ.get('AUTH_BLACKLIST_CACHE_TTL', '30'))
+_blacklist_cache_lock = threading.Lock()
+
+
 def _is_blacklisted(jti: str) -> bool:
-    """Return True if the token jti is in the blacklist."""
+    """Return True if the token jti is in the blacklist (short-TTL cached)."""
+    now = time.monotonic()
+    with _blacklist_cache_lock:
+        cached = _blacklist_cache.get(jti)
+        if cached is not None and cached[0] > now:
+            return cached[1]
     conn = _get_conn()
     row = conn.execute('SELECT 1 FROM token_blacklist WHERE jti = ?', (jti,)).fetchone()
-    return row is not None
+    result = row is not None
+    with _blacklist_cache_lock:
+        _blacklist_cache[jti] = (now + _blacklist_cache_ttl, result)
+    return result
 
 
 def _blacklist_token(jti: str, exp: float) -> None:
@@ -152,6 +170,9 @@ def _blacklist_token(jti: str, exp: float) -> None:
     exp_str = datetime.datetime.fromtimestamp(exp, datetime.timezone.utc).isoformat()
     _write(lambda conn: conn.execute(
         'INSERT OR IGNORE INTO token_blacklist (jti, expires_at) VALUES (?, ?)', (jti, exp_str)))
+    # Refresh the cache so revocation takes effect immediately on this process.
+    with _blacklist_cache_lock:
+        _blacklist_cache[jti] = (time.monotonic() + _blacklist_cache_ttl, True)
 
 
 def _cleanup_expired_tokens() -> None:
@@ -198,6 +219,30 @@ def _set_auth_cookie(response, token: str):
     return response
 
 
+# Process-local cache for the per-request user lookup in require_auth.  A short
+# TTL keeps soft-delete / role changes visible within seconds while avoiding a
+# SQLite read on every polled request.  Invalidated explicitly on user mutation.
+_user_cache: dict[int, tuple[float, dict | None]] = {}
+_user_cache_ttl = float(os.environ.get('AUTH_USER_CACHE_TTL', '30'))
+_user_cache_lock = threading.Lock()
+
+
+def _get_user_row(uid: int) -> dict | None:
+    """Return the active user row (dict) for *uid*, cached for a short TTL."""
+    now = time.monotonic()
+    with _user_cache_lock:
+        cached = _user_cache.get(uid)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+    row = _get_conn().execute(
+        'SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL', (uid,)
+    ).fetchone()
+    result = dict(row) if row else None
+    with _user_cache_lock:
+        _user_cache[uid] = (now + _user_cache_ttl, result)
+    return result
+
+
 def require_auth():
     """Flask before_request hook — require authenticated access by default.
 
@@ -231,10 +276,7 @@ def require_auth():
         uid = int(user.get('sub', '0'))
     except (TypeError, ValueError):
         return jsonify({'error': 'Token user is invalid'}), 401
-    row = _get_conn().execute(
-        'SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL',
-        (uid,),
-    ).fetchone()
+    row = _get_user_row(uid)
     if row is None:
         return jsonify({'error': 'User account is disabled or deleted'}), 401
     user['username'] = row['username']
@@ -491,6 +533,8 @@ def delete_user(user_id: int):
     ).rowcount)
     if removed == 0:
         return jsonify({'error': '用户不存在'}), 404
+    with _user_cache_lock:
+        _user_cache.pop(user_id, None)
     return jsonify({'ok': True}), 200
 
 

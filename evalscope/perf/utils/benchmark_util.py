@@ -108,8 +108,15 @@ class BenchmarkData:
         # TPOT = (latency - TTFT) / (output_len - 1). A one-token response
         # has no inter-token decoding interval, so TPOT is intentionally None.
         if self.completion_tokens and self.completion_tokens > 1:
-            ttft = self.first_token_latency if self.first_token_latency is not None else self.first_chunk_latency
-            self.time_per_output_token = max(0.0, (self.query_latency - ttft) / (self.completion_tokens - 1))
+            # Non-stream responses set both first-token and first-chunk latency
+            # to the total query latency (see default_api.py), so TTFT/TPOT are
+            # not observable — report None (not-applicable) rather than 0.0.
+            if (self.first_token_latency == self.query_latency
+                    and self.first_chunk_latency == self.query_latency):
+                self.time_per_output_token = None
+            else:
+                ttft = self.first_token_latency if self.first_token_latency is not None else self.first_chunk_latency
+                self.time_per_output_token = max(0.0, (self.query_latency - ttft) / (self.completion_tokens - 1))
         else:
             self.time_per_output_token = None
 
@@ -182,7 +189,8 @@ class MetricsAccumulator:
     total_completion_tokens: int = 0
     total_time_per_output_token: float = 0.0
     n_tpot_samples: int = 0
-    all_inter_chunk_latencies: List[float] = field(default_factory=list)
+    total_inter_chunk_latency: float = 0.0
+    n_inter_chunk_samples: int = 0
 
     # --- Multi-turn cumulative sums ---
     total_input_turns: int = 0
@@ -250,7 +258,9 @@ class MetricsAccumulator:
             if data.time_per_output_token is not None:
                 self.total_time_per_output_token += data.time_per_output_token
                 self.n_tpot_samples += 1
-            self.all_inter_chunk_latencies += data.inter_chunk_latency
+            if data.inter_chunk_latency:
+                self.total_inter_chunk_latency += sum(data.inter_chunk_latency)
+                self.n_inter_chunk_samples += len(data.inter_chunk_latency)
 
             # Multi-turn specific
             if data.input_num_turns > 0:
@@ -326,10 +336,7 @@ class MetricsAccumulator:
                 _safe_div(self.total_time_per_output_token, self.n_tpot_samples, default=0.0)
                 if self.n_tpot_samples else 0.0
             )
-            avg_inter_chunk_latency = (
-                sum(self.all_inter_chunk_latencies)
-                / len(self.all_inter_chunk_latencies) if self.all_inter_chunk_latencies else 0.0
-            )
+            avg_inter_chunk_latency = _safe_div(self.total_inter_chunk_latency, self.n_inter_chunk_samples, default=0.0)
             qps = _safe_div(n, t)
             # Embedding/rerank APIs have no generated token; their first chunk is
             # the full response and remains the correct denominator here.

@@ -140,8 +140,10 @@ def stop_aigc_evaluation():
         with open(progress_file) as f:
             progress = json.load(f)
         progress['status'] = 'stopped'
-        with open(progress_file, 'w') as f:
+        tmp = progress_file.with_name(progress_file.name + '.tmp')
+        with open(tmp, 'w') as f:
             json.dump(progress, f)
+        os.replace(tmp, progress_file)
 
     unregister_process(task_id)
     return jsonify({'status': 'stopped'})

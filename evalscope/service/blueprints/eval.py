@@ -979,13 +979,14 @@ def stop_evaluation():
         try:
             progress_file = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
             if os.path.isfile(progress_file):
-                with open(progress_file, 'r+') as f:
+                with open(progress_file) as f:
                     data = json.load(f)
-                    data['status'] = 'stopped'
-                    data['percent'] = data.get('percent', 0)
-                    f.seek(0)
-                    f.truncate()
+                data['status'] = 'stopped'
+                data['percent'] = data.get('percent', 0)
+                tmp = f'{progress_file}.tmp'
+                with open(tmp, 'w') as f:
                     json.dump(data, f)
+                os.replace(tmp, progress_file)
         except Exception:
             pass
         return jsonify({'status': 'stopped', 'task_id': task_id}), 200

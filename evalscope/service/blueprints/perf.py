@@ -95,13 +95,15 @@ def _mark_perf_completed(task_id: str) -> None:
     try:
         pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
         os.makedirs(os.path.dirname(pj), exist_ok=True)
-        with open(pj, 'w', encoding='utf-8') as f:
+        tmp = f'{pj}.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump({
                 'status': 'completed',
                 'phase': 'completed',
                 'pipeline': 'perf',
                 'updated_at': utc_now_iso(),
             }, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, pj)
     except Exception as e:
         logger.warning(f'[{task_id}] Failed to write perf completion marker: {e}')
 
