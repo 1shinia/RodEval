@@ -184,6 +184,17 @@ def evaluate_model(task_config: TaskConfig, outputs: OutputsStructure) -> dict:
     for dataset_name in task_config.datasets:
         # Create evaluator for each dataset
         benchmark = get_benchmark(dataset_name, task_config)
+
+        # Merge the benchmark's resolved configuration into dataset_args BEFORE
+        # creating the evaluator, so the cache identity (computed in
+        # DefaultEvaluator.__init__) captures benchmark-derived settings
+        # (subset, few-shot, split, prompt template, ...) rather than only
+        # user-supplied args.  DataCollection is excluded as before.
+        if dataset_name != DataCollection.NAME:
+            user_args = task_config.dataset_args.get(dataset_name, {})
+            benchmark_args = benchmark.to_dict()
+            task_config.dataset_args[dataset_name] = {**benchmark_args, **user_args}
+
         evaluator = create_evaluator(
             benchmark=benchmark,
             model=model,
@@ -191,12 +202,6 @@ def evaluate_model(task_config: TaskConfig, outputs: OutputsStructure) -> dict:
             task_config=task_config,
         )
         evaluators.append(evaluator)
-
-        # Update task_config.dataset_args with benchmark metadata, except for DataCollection
-        if dataset_name != DataCollection.NAME:
-            user_args = task_config.dataset_args.get(dataset_name, {})
-            benchmark_args = benchmark.to_dict()
-            task_config.dataset_args[dataset_name] = {**benchmark_args, **user_args}
 
     # dump task_cfg to outputs.configs_dir after creating evaluators
     task_config.dump_yaml(outputs.configs_dir)

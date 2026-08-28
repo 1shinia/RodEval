@@ -341,7 +341,7 @@ def _process_worker(func, result_queue, *args, **kwargs):
         pass
 
 
-def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwargs):
+def _run_in_subprocess_impl(func, *args, task_id=None, task_type='', model='', **kwargs):
     """Run *func* in a child process and return its result (blocks caller).
 
     Returns the function's return value on success; raises on error.
@@ -382,9 +382,6 @@ def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwarg
     # Wait for the child to clean up after we have the result (or it crashed).
     p.join()
 
-    if task_id:
-        unregister_process(task_id)
-
     if res is not None:
         if res['status'] == 'error':
             stderr_info = res.get('stderr', '')
@@ -411,6 +408,23 @@ def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwarg
         'The child process may have crashed due to OOM, a missing import, '
         'GPU initialisation failure, or a signal (e.g. SIGKILL).'
     ) from None
+
+
+def run_in_subprocess(func, *args, task_id=None, task_type='', model='', **kwargs):
+    """Run a task in a subprocess and always release its registry slot.
+
+    The implementation may fail before ``Process.start()``, during IPC, or
+    while decoding the child result.  Centralising cleanup here makes the
+    task registry lifecycle idempotent and prevents reserved slots from
+    leaking on any of those paths.
+    """
+    try:
+        return _run_in_subprocess_impl(
+            func, *args, task_id=task_id, task_type=task_type, model=model, **kwargs
+        )
+    finally:
+        if task_id:
+            unregister_process(task_id)
 
 
 # ---------------------------------------------------------------------------

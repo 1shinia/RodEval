@@ -193,7 +193,8 @@ async def statistic_benchmark_metric(
 
                     message = accumulator.to_result().create_message(api_type=args.api)
 
-                    await asyncio.to_thread(maybe_log_to_visualizer, args, message)
+                    if args.visualizer is not None:
+                        await asyncio.to_thread(maybe_log_to_visualizer, args, message)
 
                     if int(accumulator.n_total) % args.log_every_n_query == 0:
                         msg = json.dumps(message, ensure_ascii=False, indent=2)

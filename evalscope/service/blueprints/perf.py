@@ -43,7 +43,7 @@ def _build_perf_table(result, api_type: str = None) -> str:
             headers = ['并发数', '请求速率', '每秒请求数', '平均延迟(s)', 'P99延迟(s)', '平均输入TPS', 'P99输入TPS', '平均输入Token数', '成功率']
         else:
             headers = [
-                '并发数', '请求速率', '请求数', '每秒请求数', '平均延迟(s)', 'P99延迟(s)', '平均首字延迟(s)', 'P99首字延迟(s)', '平均每Token延迟(s)',
+                '并发数', '请求速率', '请求数', '每秒请求数', '平均延迟(s)', 'P99延迟(s)', '平均首Token延迟(s)', 'P99首Token延迟(s)', '平均每Token延迟(s)',
                 'P99每Token延迟(s)', '生成速度(toks/s)', '成功率'
             ]
         return tabulate([list(r.values()) for r in analysis.rows], headers=headers, tablefmt='pipe')
@@ -435,9 +435,10 @@ def launch_batch_perf():
                         try:
                             from .. import db as _db
                             perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
-                            has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
-                    os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
-                )
+                            has_report = (
+                            os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                            or os.path.exists(os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json'))
+                        )
                             runs = 0
                             for sd in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
                                 if os.path.isdir(sd):
@@ -455,6 +456,7 @@ def launch_batch_perf():
                         except Exception as e:
                             logger.error(f'Failed to write perf to SQLite (data remains on disk, will backfill on restart): {e}')
 
+                        _mark_perf_completed(task_id)
                         state['completed'] += 1
                         state['results'].append({'task_id': task_id, 'name': model_name, 'model': model_name, 'status': 'completed'})
                         logger.info(f'[batch:{batch_id}] [{task_id}] {model_name} completed ({state["completed"]}/{total})')
@@ -912,9 +914,10 @@ def launch_performance_test():
                     try:
                         from .. import db as _db
                         perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
-                        has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
-                    os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
-                )
+                        has_report = (
+                            os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                            or os.path.exists(os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json'))
+                        )
                         runs = 0
                         for search_dir in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
                             if os.path.isdir(search_dir):
@@ -933,6 +936,10 @@ def launch_performance_test():
                         logger.error(f'[{task_id}] Failed to write perf to SQLite (data remains on disk, will backfill on restart): {e}')
             except Exception as e:
                 logger.error(f'[{task_id}] Background perf failed: {e}', exc_info=True)
+            finally:
+                # Idempotent with run_in_subprocess and covers setup failures
+                # that happen inside the background thread before spawning.
+                unregister_process(task_id)
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()
@@ -1183,6 +1190,10 @@ def get_performance_report():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
     try:
         validate_task_id(task_id)
     except ValueError as e:
@@ -1213,6 +1224,10 @@ def get_perf_sla():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
 
     try:
         validate_task_id(task_id)
@@ -1247,6 +1262,10 @@ def get_performance_log():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
     start_line = request.args.get('start_line', type=int)
     page = request.args.get('page', 500, type=int)
 
@@ -1274,6 +1293,10 @@ def stream_performance_log():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
     # Support resume: client can pass last_pos (byte offset) to skip already-seen content
     try:
         initial_pos = int(request.args.get('last_pos', 0))
@@ -1338,6 +1361,10 @@ def get_performance_progress():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
     try:
         validate_task_id(task_id)
     except ValueError as e:
@@ -1379,6 +1406,10 @@ def stream_performance_progress():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
 
     try:
         validate_task_id(task_id)

@@ -53,8 +53,9 @@ class BenchmarkSummary(BaseModel):
     output_token_throughput: float = Field(0.0, alias=Metrics.OUTPUT_TOKEN_THROUGHPUT)
     total_token_throughput: float = Field(0.0, alias=Metrics.TOTAL_TOKEN_THROUGHPUT)
     avg_ttft: float = Field(0.0, alias=Metrics.AVERAGE_TIME_TO_FIRST_TOKEN)
+    avg_ttfc: float = Field(0.0, alias=Metrics.AVERAGE_TIME_TO_FIRST_CHUNK)
     avg_tpot: float = Field(0.0, alias=Metrics.AVERAGE_TIME_PER_OUTPUT_TOKEN)
-    avg_itl: float = Field(0.0, alias=Metrics.AVERAGE_INTER_TOKEN_LATENCY)
+    avg_itl: float = Field(0.0, alias=Metrics.AVERAGE_INTER_CHUNK_LATENCY)
     avg_output_tokens: float = Field(0.0, alias=Metrics.AVERAGE_OUTPUT_TOKENS_PER_REQUEST)
 
     # --- Embedding / Rerank-specific ---
@@ -130,10 +131,12 @@ class BenchmarkSummary(BaseModel):
         rows.append((Metrics.AVERAGE_LATENCY, _fmt(self.avg_latency)))
         if self.avg_ttft:
             rows.append((Metrics.AVERAGE_TIME_TO_FIRST_TOKEN, _fmt(self.avg_ttft)))
+        if self.avg_ttfc:
+            rows.append((Metrics.AVERAGE_TIME_TO_FIRST_CHUNK, _fmt(self.avg_ttfc)))
         if self.avg_tpot:
             rows.append((Metrics.AVERAGE_TIME_PER_OUTPUT_TOKEN, _fmt(self.avg_tpot)))
         if self.avg_itl:
-            rows.append((Metrics.AVERAGE_INTER_TOKEN_LATENCY, _fmt(self.avg_itl)))
+            rows.append((Metrics.AVERAGE_INTER_CHUNK_LATENCY, _fmt(self.avg_itl)))
 
         # ── Tokens ──
         rows.append(('── Tokens ──', ''))
@@ -193,7 +196,8 @@ class PercentileRow(BaseModel):
     percentile: str = Field('', alias=PercentileMetrics.PERCENTILES)
     latency: Optional[float] = Field(None, alias=PercentileMetrics.LATENCY)
     ttft: Optional[float] = Field(None, alias=PercentileMetrics.TTFT)
-    itl: Optional[float] = Field(None, alias=PercentileMetrics.ITL)
+    ttfc: Optional[float] = Field(None, alias=PercentileMetrics.TTFC)
+    itl: Optional[float] = Field(None, alias=PercentileMetrics.ICL)
     tpot: Optional[float] = Field(None, alias=PercentileMetrics.TPOT)
     input_tokens: Optional[float] = Field(None, alias=PercentileMetrics.INPUT_TOKENS)
     output_tokens: Optional[float] = Field(None, alias=PercentileMetrics.OUTPUT_TOKENS)
@@ -356,11 +360,17 @@ class RequestRecord(BaseModel):
     completed_time: float = 0.0
     latency: float = 0.0
     first_chunk_latency: Optional[float] = None
+    first_token_latency: Optional[float] = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    inter_token_latencies: List[float] = Field(default_factory=list)
+    inter_chunk_latencies: List[float] = Field(default_factory=list)
     time_per_output_token: Optional[float] = None
     success: bool = False
+
+    @property
+    def inter_token_latencies(self) -> List[float]:
+        """Deprecated compatibility alias; values are SSE inter-chunk latencies."""
+        return self.inter_chunk_latencies
 
 
 # ---------------------------------------------------------------------------

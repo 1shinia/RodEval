@@ -89,12 +89,13 @@ class DefaultApiPlugin(ApiPluginBase):
         data = json.dumps(body, ensure_ascii=False)  # serialize to JSON
 
         output = BenchmarkData()
-        ttft = 0.0
+        first_generated_timestamp = None
         generated_text = ''
         st = time.perf_counter()
         output.start_time = st
         output.request = data
         most_recent_timestamp = st
+        most_recent_generated_timestamp = None
         try:
             async with client_session.post(url=url, data=data, headers=headers) as response:
                 content_type = response.headers.get('Content-Type', '')
@@ -122,20 +123,34 @@ class DefaultApiPlugin(ApiPluginBase):
                                     data = json.loads(chunk)
 
                                     if choices := data.get('choices'):
-                                        if data.get('object') == 'text_completion':
-                                            content = choices[0].get('text') or ''
-                                        else:
-                                            delta = choices[0].get('delta', {})
-                                            content = (delta.get('content')
-                                                       or '') + (delta.get('reasoning_content') or '')
-                                        # First token
-                                        if ttft == 0.0:
-                                            ttft = timestamp - st
-                                            output.first_chunk_latency = ttft
+                                        # TTFC is a transport/protocol diagnostic: the first
+                                        # SSE choice chunk may be role-only and contain no token.
+                                        if output.first_chunk_latency == 0.0:
+                                            output.first_chunk_latency = timestamp - st
 
-                                        # Decoding phase
+                                        first_choice = choices[0]
+                                        if data.get('object') == 'text_completion':
+                                            content = first_choice.get('text') or ''
+                                            has_generated_delta = bool(content)
                                         else:
-                                            output.inter_chunk_latency.append(timestamp - most_recent_timestamp)
+                                            delta = first_choice.get('delta', {}) or {}
+                                            content = (delta.get('content') or '') + (delta.get('reasoning_content') or '')
+                                            # Tool/function-call deltas are generated model output
+                                            # even when there is no textual content.
+                                            has_generated_delta = bool(
+                                                content or delta.get('tool_calls') or delta.get('function_call')
+                                            )
+
+                                        if has_generated_delta:
+                                            if first_generated_timestamp is None:
+                                                first_generated_timestamp = timestamp
+                                                output.first_token_latency = timestamp - st
+                                            elif most_recent_generated_timestamp is not None:
+                                                output.inter_chunk_latency.append(
+                                                    timestamp - most_recent_generated_timestamp
+                                                )
+                                            output.chunk_times.append(timestamp)
+                                            most_recent_generated_timestamp = timestamp
 
                                         generated_text += content
                                         output.response_messages.append(data)
@@ -155,6 +170,8 @@ class DefaultApiPlugin(ApiPluginBase):
                         output.success = True
                         output.completed_time = most_recent_timestamp
                         output.query_latency = most_recent_timestamp - st
+                        if output.first_chunk_latency == 0.0:
+                            output.first_chunk_latency = output.query_latency
 
                     # Handle non-stream JSON responses
                     elif 'application/json' in content_type or 'application/' in content_type:
@@ -168,8 +185,10 @@ class DefaultApiPlugin(ApiPluginBase):
                         timestamp = time.perf_counter()
                         output.completed_time = timestamp
                         output.query_latency = timestamp - st
-                        # For non-stream, first chunk equals full latency
+                        # For non-stream, first chunk/token can only be observed
+                        # when the complete response is available.
                         output.first_chunk_latency = output.query_latency
+                        output.first_token_latency = output.query_latency
 
                         if isinstance(payload, dict):
                             # Extract generated text from choices
@@ -210,6 +229,7 @@ class DefaultApiPlugin(ApiPluginBase):
                         output.completed_time = timestamp
                         output.query_latency = timestamp - st
                         output.first_chunk_latency = output.query_latency
+                        output.first_token_latency = output.query_latency
                         output.generated_text = raw
                         output.response_messages.append(raw)
                         output.success = True

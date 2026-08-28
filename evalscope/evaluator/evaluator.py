@@ -23,6 +23,7 @@ from evalscope.evaluator.perf_collector import PerfCollector
 from evalscope.report import Report, gen_perf_table, gen_table
 from evalscope.utils.function_utils import run_in_threads_with_progress
 from evalscope.utils.logger import get_logger
+from evalscope.version import __version__ as EVALSCOPE_VERSION
 
 if TYPE_CHECKING:
     from evalscope.api.benchmark import DataAdapter
@@ -31,6 +32,61 @@ if TYPE_CHECKING:
     from evalscope.utils.io_utils import OutputsStructure
 
 logger = get_logger()
+
+
+def _cache_identity(task_config: 'TaskConfig', benchmark_name: str) -> Tuple[str, str, dict]:
+    """Build separate prediction/review identities for safe cache reuse."""
+    cfg = task_config.to_dict()
+    runtime_only = {
+        'use_cache', 'rerun_review', 'work_dir', 'no_timestamp',
+        'enable_progress_tracker', 'eval_batch_size', 'ignore_errors',
+        'debug', 'analysis_report', 'collect_perf', 'judge_worker_num',
+    }
+    prediction_cfg = {k: v for k, v in cfg.items() if k not in runtime_only}
+    # Judge/sandbox settings do not change model predictions and therefore do
+    # not invalidate the more expensive prediction cache.
+    for key in ('judge_strategy', 'judge_model_args', 'sandbox', 'use_sandbox',
+                'sandbox_type', 'sandbox_manager_config'):
+        prediction_cfg.pop(key, None)
+    # generation_config.batch_size is a mirror of eval_batch_size (a pure
+    # concurrency knob, see TaskConfig._init_default_generation_config), not an
+    # independent inference setting.  Strip it so changing only the worker count
+    # never archives the prediction cache.
+    gen_cfg = prediction_cfg.get('generation_config')
+    if isinstance(gen_cfg, dict):
+        gen_cfg = dict(gen_cfg)
+        gen_cfg.pop('batch_size', None)
+        prediction_cfg['generation_config'] = gen_cfg
+    prediction_payload = {
+        'benchmark': benchmark_name,
+        'evalscope_version': EVALSCOPE_VERSION,
+        'config': prediction_cfg,
+    }
+    prediction_fp = CacheManager.fingerprint(prediction_payload)
+
+    review_payload = {
+        'prediction_fingerprint': prediction_fp,
+        'benchmark': benchmark_name,
+        'judge_strategy': cfg.get('judge_strategy'),
+        'judge_model_args': cfg.get('judge_model_args'),
+        'sandbox': cfg.get('sandbox'),
+        'use_sandbox': cfg.get('use_sandbox'),
+        'sandbox_type': cfg.get('sandbox_type'),
+        'sandbox_manager_config': cfg.get('sandbox_manager_config'),
+        'eval_config': cfg.get('eval_config'),
+        'evalscope_version': EVALSCOPE_VERSION,
+    }
+    review_fp = CacheManager.fingerprint(review_payload)
+    manifest = {
+        'schema_version': 1,
+        'benchmark': benchmark_name,
+        'model_id': cfg.get('model_id'),
+        'evalscope_version': EVALSCOPE_VERSION,
+        'prediction_fingerprint': prediction_fp,
+        'review_fingerprint': review_fp,
+        'config': cfg,
+    }
+    return prediction_fp, review_fp, manifest
 
 
 @dataclass
@@ -127,11 +183,16 @@ class DefaultEvaluator(Evaluator):
         self.use_cache = task_config.use_cache
         """Whether to use cache for predictions."""
 
-        # Initialize cache manager for storing and retrieving cached results
+        # Initialize cache manager with configuration fingerprints so a resume
+        # cannot silently reuse results from a different model/prompt/dataset/judge.
+        prediction_fp, review_fp, run_manifest = _cache_identity(task_config, self.benchmark_name)
         self.cache_manager = CacheManager(
             outputs=outputs,
             model_name=self.model_name,
             benchmark_name=self.benchmark_name,
+            prediction_fingerprint=prediction_fp,
+            review_fingerprint=review_fp,
+            run_manifest=run_manifest,
         )
 
         # Initialize batch reviewer for benchmarks that use batch scoring

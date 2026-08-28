@@ -480,17 +480,20 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
 
             # AIGC/Audio/RAG backends don't emit progress.json from their subprocess;
             # write the terminal state here so the frontend stops polling (percent 0.0
-            # with no status keeps it stuck at "运行中").
-            try:
-                _pj = os.path.join(task_config.work_dir, 'progress.json')
-                with open(_pj, 'w') as _f:
-                    json.dump(
-                        {'status': 'completed', 'percent': 100.0, 'processed': 1, 'total': 1, 'pipeline': 'eval'},
-                        _f,
-                        ensure_ascii=False,
-                    )
-            except Exception:
-                pass
+            # with no status keeps it stuck at "运行中").  Native/VLM/OpenCompass
+            # backends already wrote the real progress.json (true processed/total)
+            # in their subprocess — overwriting it would mask the real progress.
+            if task_config.eval_backend in (EvalBackend.RAG_EVAL, EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
+                try:
+                    _pj = os.path.join(task_config.work_dir, 'progress.json')
+                    with open(_pj, 'w') as _f:
+                        json.dump(
+                            {'status': 'completed', 'percent': 100.0, 'processed': 1, 'total': 1, 'pipeline': 'eval'},
+                            _f,
+                            ensure_ascii=False,
+                        )
+                except Exception:
+                    pass
         except Exception as e:
             # Data is safe on disk (reports/ + progress.json); it will be
             # picked up by the next startup backfill.  Log loudly so it is
@@ -827,6 +830,9 @@ def launch_evaluation():
             except Exception as e:
                 logger.error(f'[{task_id}] Background eval failed: {e}', exc_info=True)
             finally:
+                # Idempotent for subprocess mode and essential for direct mode,
+                # which never enters run_in_subprocess/finalize_slot.
+                unregister_process(task_id)
                 if launch_result:
                     launcher_stop(launch_result)
 
@@ -1038,6 +1044,10 @@ def stream_evaluation_progress():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_state', 'eval_reports')):
+        return jsonify({'error': 'Task not found'}), 404
+
     try:
         validate_task_id(task_id)
     except ValueError as e:
@@ -1096,6 +1106,10 @@ def get_evaluation_report():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('eval_reports', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
     try:
         validate_task_id(task_id)
     except ValueError as e:
@@ -1124,6 +1138,10 @@ def get_evaluation_log():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_state', 'eval_reports')):
+        return jsonify({'error': 'Task not found'}), 404
+
     start_line = request.args.get('start_line', type=int)
     page = request.args.get('page', 500, type=int)
 
@@ -1151,6 +1169,10 @@ def stream_evaluation_log():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_state', 'eval_reports')):
+        return jsonify({'error': 'Task not found'}), 404
     # Support resume: client can pass last_pos (byte offset) to skip already-seen content
     try:
         initial_pos = int(request.args.get('last_pos', 0))
@@ -1286,6 +1308,10 @@ from flask import current_app
 EVAL_BATCH_CSV_TEMPLATE = os.path.join(os.path.dirname(OUTPUT_DIR), 'data', 'eval_model_list.csv')
 EVAL_BATCH_UPLOAD_DIR = os.path.join(OUTPUT_DIR, '_eval_batch_uploads')
 
+# Uploaded batch CSVs carry model api_keys in plaintext; cap the size to bound
+# the in-memory parse (memory DoS guard).
+MAX_BATCH_CSV_BYTES = 5 * 1024 * 1024
+
 _eval_batch_state: dict = {}
 
 
@@ -1312,7 +1338,15 @@ def upload_eval_batch_csv():
     if not f.filename or not f.filename.lower().endswith('.csv'):
         return jsonify({'error': 'Only .csv files are accepted'}), 400
 
-    content = f.read().decode('utf-8-sig')
+    # Reject an oversized upload before buffering its bytes, using the part's
+    # Content-Length when present; the post-read check covers the case where it
+    # is absent or untrustworthy.
+    if f.content_length is not None and f.content_length > MAX_BATCH_CSV_BYTES:
+        return jsonify({'error': 'CSV 文件过大（上限 5MB）'}), 413
+    raw = f.read()
+    if len(raw) > MAX_BATCH_CSV_BYTES:
+        return jsonify({'error': 'CSV 文件过大（上限 5MB）'}), 413
+    content = raw.decode('utf-8-sig')
     reader = _csv_mod.DictReader(content.splitlines())
 
     rows = []
@@ -1335,6 +1369,11 @@ def upload_eval_batch_csv():
     saved_path = os.path.join(EVAL_BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     with open(saved_path, 'w', encoding='utf-8') as outf:
         outf.write(content)
+    # Record the uploader so launch/status/stop can enforce ownership.  A
+    # marker file (rather than the in-memory state) survives a service restart.
+    from .auth import get_current_user_id
+    with open(saved_path + '.owner', 'w', encoding='utf-8') as of:
+        of.write(str(get_current_user_id()))
 
     return jsonify({
         'batch_id': batch_id,
@@ -1352,9 +1391,28 @@ def launch_eval_batch():
         return jsonify({'error': 'batch_id is required'}), 400
 
     batch_id = data['batch_id']
+    try:
+        validate_task_id(batch_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    from .auth import get_current_user_id, get_current_role
+    current_uid = get_current_user_id()
+
     csv_path = os.path.join(EVAL_BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     if not os.path.isfile(csv_path):
         return jsonify({'error': f'Batch file not found: {batch_id}'}), 404
+
+    # Ownership: only the uploader (or an admin) may launch this batch.  A
+    # missing marker (legacy/manual file) is treated as admin-only.
+    if get_current_role() != 'admin':
+        try:
+            with open(csv_path + '.owner', encoding='utf-8') as of:
+                owner_uid = int(of.read().strip())
+        except (OSError, ValueError):
+            owner_uid = None
+        if owner_uid != current_uid:
+            return jsonify({'error': 'Batch not found'}), 404
 
     if batch_id in _eval_batch_state and _eval_batch_state[batch_id].get('status') == 'running':
         return jsonify({'error': 'Batch already running'}), 409
@@ -1367,6 +1425,7 @@ def launch_eval_batch():
 
     state = {
         'batch_id': batch_id,
+        'user_id': current_uid,
         'status': 'running',
         'total': total,
         'completed': 0,
@@ -1379,9 +1438,7 @@ def launch_eval_batch():
     }
     _eval_batch_state[batch_id] = state
 
-    # Capture user_id from request (not from client data) for background thread
-    from .auth import get_current_user_id
-    current_uid = get_current_user_id()
+    # current_uid was captured above (used for ownership + slot reservation).
 
     shared_config = {
         'user_id': current_uid,
@@ -1542,6 +1599,9 @@ def get_eval_batch_status(batch_id: str):
     s = _eval_batch_state.get(batch_id)
     if not s:
         return jsonify({'error': 'Batch not found'}), 404
+    from .auth import get_current_role, get_current_user_id
+    if get_current_role() != 'admin' and int(s.get('user_id', 0)) != int(get_current_user_id()):
+        return jsonify({'error': 'Batch not found'}), 404
     return jsonify({
         'batch_id': batch_id,
         'status': s['status'],
@@ -1560,6 +1620,9 @@ def stop_eval_batch(batch_id: str):
     """Request cancellation of a running eval batch."""
     s = _eval_batch_state.get(batch_id)
     if not s:
+        return jsonify({'error': 'Batch not found'}), 404
+    from .auth import get_current_role, get_current_user_id
+    if get_current_role() != 'admin' and int(s.get('user_id', 0)) != int(get_current_user_id()):
         return jsonify({'error': 'Batch not found'}), 404
     s['cancel_requested'] = True
 

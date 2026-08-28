@@ -20,7 +20,7 @@ from evalscope.utils.logger import get_logger
 
 logger = get_logger()
 
-RESULT_SCHEMA_VERSION = 1
+RESULT_SCHEMA_VERSION = 2
 
 
 class DatabaseColumns:
@@ -28,12 +28,14 @@ class DatabaseColumns:
     REQUEST_ID = 'request_id'
     REQUEST = 'request'
     START_TIME = 'start_time'
-    INTER_TOKEN_LATENCIES = 'inter_token_latencies'
+    INTER_TOKEN_LATENCIES = 'inter_token_latencies'  # legacy v1 name
+    INTER_CHUNK_LATENCIES = 'inter_chunk_latencies'
     SUCCESS = 'success'
     RESPONSE_MESSAGES = 'response_messages'
     COMPLETED_TIME = 'completed_time'
     LATENCY = 'latency'
     FIRST_CHUNK_LATENCY = 'first_chunk_latency'
+    FIRST_TOKEN_LATENCY = 'first_token_latency'
     PROMPT_TOKENS = 'prompt_tokens'
     COMPLETION_TOKENS = 'completion_tokens'
     MAX_GPU_MEMORY_COST = 'max_gpu_memory_cost'
@@ -189,11 +191,13 @@ def create_result_table(cursor: sqlite3.Cursor) -> None:
                       {DatabaseColumns.REQUEST} TEXT,
                       {DatabaseColumns.START_TIME} REAL,
                       {DatabaseColumns.INTER_TOKEN_LATENCIES} TEXT,
+                      {DatabaseColumns.INTER_CHUNK_LATENCIES} TEXT,
                       {DatabaseColumns.SUCCESS} INTEGER,
                       {DatabaseColumns.RESPONSE_MESSAGES} TEXT,
                       {DatabaseColumns.COMPLETED_TIME} REAL,
                       {DatabaseColumns.LATENCY} REAL,
                       {DatabaseColumns.FIRST_CHUNK_LATENCY} REAL,
+                      {DatabaseColumns.FIRST_TOKEN_LATENCY} REAL,
                       {DatabaseColumns.PROMPT_TOKENS} INTEGER,
                       {DatabaseColumns.COMPLETION_TOKENS} INTEGER,
                       {DatabaseColumns.MAX_GPU_MEMORY_COST} REAL,
@@ -213,8 +217,12 @@ def create_result_table(cursor: sqlite3.Cursor) -> None:
 
     # Reconcile old request DBs without requiring a separate migration file.
     existing = {row[1] for row in cursor.execute('PRAGMA table_info(result)').fetchall()}
+    added_first_token = DatabaseColumns.FIRST_TOKEN_LATENCY not in existing
+    added_inter_chunk = DatabaseColumns.INTER_CHUNK_LATENCIES not in existing
     additions = {
         DatabaseColumns.REQUEST_ID: 'TEXT',
+        DatabaseColumns.INTER_CHUNK_LATENCIES: 'TEXT',
+        DatabaseColumns.FIRST_TOKEN_LATENCY: 'REAL',
         DatabaseColumns.STATUS_CODE: 'INTEGER',
         DatabaseColumns.ERROR: 'TEXT',
         DatabaseColumns.TRACE_ID: 'TEXT',
@@ -229,6 +237,21 @@ def create_result_table(cursor: sqlite3.Cursor) -> None:
     for column, sql_type in additions.items():
         if column not in existing:
             cursor.execute(f'ALTER TABLE result ADD COLUMN {column} {sql_type}')
+
+    # One-time compatibility backfill.  Legacy v1 databases used first chunk
+    # as TTFT and named SSE chunk intervals "inter_token_latencies".  Copy
+    # those values only while migrating the old schema; new v2 rows may
+    # intentionally leave first_token_latency NULL for zero-token responses.
+    if added_first_token:
+        cursor.execute(
+            f'''UPDATE result SET {DatabaseColumns.FIRST_TOKEN_LATENCY} = {DatabaseColumns.FIRST_CHUNK_LATENCY}
+                WHERE {DatabaseColumns.FIRST_TOKEN_LATENCY} IS NULL'''
+        )
+    if added_inter_chunk:
+        cursor.execute(
+            f'''UPDATE result SET {DatabaseColumns.INTER_CHUNK_LATENCIES} = {DatabaseColumns.INTER_TOKEN_LATENCIES}
+                WHERE {DatabaseColumns.INTER_CHUNK_LATENCIES} IS NULL'''
+        )
 
     cursor.execute(
         f'''CREATE UNIQUE INDEX IF NOT EXISTS idx_result_request_id
@@ -254,16 +277,17 @@ def create_result_table(cursor: sqlite3.Cursor) -> None:
 
 def _benchmark_data_row(benchmark_data: BenchmarkData, *, store_payloads: bool = True) -> tuple:
     """Serialize one benchmark result into the stable DB column order."""
-    inter_token_latencies = json.dumps(benchmark_data.inter_chunk_latency, ensure_ascii=False)
+    inter_chunk_latencies = json.dumps(benchmark_data.inter_chunk_latency, ensure_ascii=False)
     response_messages = encode_data(benchmark_data.response_messages) if store_payloads else None
     request = benchmark_data.request if store_payloads else None
     turn_index = benchmark_data.input_num_turns if benchmark_data.input_num_turns > 0 else None
 
     return (
         benchmark_data.request_id, request, benchmark_data.start_time,
-        inter_token_latencies, int(bool(benchmark_data.success)), response_messages,
+        inter_chunk_latencies, inter_chunk_latencies, int(bool(benchmark_data.success)), response_messages,
         benchmark_data.completed_time, benchmark_data.query_latency if benchmark_data.success else None,
         benchmark_data.first_chunk_latency if benchmark_data.success else None,
+        benchmark_data.first_token_latency if benchmark_data.success else None,
         benchmark_data.prompt_tokens, benchmark_data.completion_tokens,
         benchmark_data.max_gpu_memory_cost if benchmark_data.success else None,
         benchmark_data.time_per_output_token if benchmark_data.success else None,
@@ -285,8 +309,10 @@ def insert_benchmark_data_batch(
         return
     columns = (
         DatabaseColumns.REQUEST_ID, DatabaseColumns.REQUEST, DatabaseColumns.START_TIME,
-        DatabaseColumns.INTER_TOKEN_LATENCIES, DatabaseColumns.SUCCESS, DatabaseColumns.RESPONSE_MESSAGES,
+        DatabaseColumns.INTER_TOKEN_LATENCIES, DatabaseColumns.INTER_CHUNK_LATENCIES,
+        DatabaseColumns.SUCCESS, DatabaseColumns.RESPONSE_MESSAGES,
         DatabaseColumns.COMPLETED_TIME, DatabaseColumns.LATENCY, DatabaseColumns.FIRST_CHUNK_LATENCY,
+        DatabaseColumns.FIRST_TOKEN_LATENCY,
         DatabaseColumns.PROMPT_TOKENS, DatabaseColumns.COMPLETION_TOKENS,
         DatabaseColumns.MAX_GPU_MEMORY_COST, DatabaseColumns.TIME_PER_OUTPUT_TOKEN,
         DatabaseColumns.STATUS_CODE, DatabaseColumns.ERROR, DatabaseColumns.TRACE_ID,
@@ -334,26 +360,40 @@ def get_result_db_path(args: Arguments):
 
 
 def calculate_percentiles(data: List[float], percentiles: List[int]) -> Dict[int, float]:
-    """
-    Calculate the percentiles for a specific list of data.
+    """Calculate percentiles using standard linear interpolation.
 
-    :param data: List of values for a specific metric.
-    :param percentiles: List of percentiles to calculate.
-    :return: Dictionary of calculated percentiles.
+    The previous ``int(n * p / 100)`` indexing made P99 equal MAX for 100
+    samples and disagreed with NumPy used elsewhere in EvalScope.
     """
-    results = {}
-    n_success_queries = len(data)
-    data.sort()
-    for percentile in percentiles:
+    import math
+
+    clean = []
+    for value in data:
+        if value is None:
+            continue
         try:
-            if percentile >= 100:
-                value = data[-1] if data else float('nan')
-            else:
-                idx = int(n_success_queries * percentile / 100)
-                value = data[idx] if data[idx] is not None else float('nan')
-            results[percentile] = round(value, 2)
-        except IndexError:
-            results[percentile] = float('nan')
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            clean.append(value)
+    clean.sort()
+    if not clean:
+        return {p: float('nan') for p in percentiles}
+
+    last = len(clean) - 1
+    results: Dict[int, float] = {}
+    for percentile in percentiles:
+        p = min(100.0, max(0.0, float(percentile)))
+        rank = last * p / 100.0
+        lo = int(math.floor(rank))
+        hi = int(math.ceil(rank))
+        if lo == hi:
+            value = clean[lo]
+        else:
+            weight = rank - lo
+            value = clean[lo] + (clean[hi] - clean[lo]) * weight
+        results[percentile] = round(value, 2)
     return results
 
 
@@ -365,19 +405,32 @@ def get_percentile_results(result_db_path: str, api_type: str = None) -> Percent
     :param api_type: The API type (e.g., 'openai', 'openai_embedding', 'openai_rerank').
     :return: :class:`~evalscope.perf.utils.perf_models.PercentileResult` instance.
     """
-    query_sql = f'''SELECT {DatabaseColumns.START_TIME}, {DatabaseColumns.INTER_TOKEN_LATENCIES}, {DatabaseColumns.SUCCESS},
-                    {DatabaseColumns.COMPLETED_TIME}, {DatabaseColumns.LATENCY}, {DatabaseColumns.FIRST_CHUNK_LATENCY},
-                    {DatabaseColumns.PROMPT_TOKENS},
-                    {DatabaseColumns.COMPLETION_TOKENS}, {DatabaseColumns.TIME_PER_OUTPUT_TOKEN}
-                    FROM result WHERE {DatabaseColumns.SUCCESS}=1'''  # noqa: E501
-
     percentiles = [1, 5, 10, 25, 50, 75, 90, 95, 99]
 
     with sqlite3.connect(result_db_path) as con:
+        available = {row[1] for row in con.execute('PRAGMA table_info(result)').fetchall()}
+        inter_chunk_col = (
+            DatabaseColumns.INTER_CHUNK_LATENCIES
+            if DatabaseColumns.INTER_CHUNK_LATENCIES in available
+            else DatabaseColumns.INTER_TOKEN_LATENCIES
+        )
+        first_token_expr = (
+            DatabaseColumns.FIRST_TOKEN_LATENCY
+            if DatabaseColumns.FIRST_TOKEN_LATENCY in available
+            else DatabaseColumns.FIRST_CHUNK_LATENCY
+        )
+        query_sql = f'''SELECT {DatabaseColumns.START_TIME}, {inter_chunk_col}, {DatabaseColumns.SUCCESS},
+                        {DatabaseColumns.COMPLETED_TIME}, {DatabaseColumns.LATENCY},
+                        {DatabaseColumns.FIRST_CHUNK_LATENCY}, {first_token_expr} AS effective_first_token_latency,
+                        {DatabaseColumns.PROMPT_TOKENS}, {DatabaseColumns.COMPLETION_TOKENS},
+                        {DatabaseColumns.TIME_PER_OUTPUT_TOKEN}
+                        FROM result WHERE {DatabaseColumns.SUCCESS}=1'''
         cursor = con.cursor()
         cursor.execute(query_sql)
         columns = [description[0] for description in cursor.description]
         rows = cursor.fetchall()
+
+    idx_start, idx_icl, idx_success, idx_completed, idx_latency, idx_ttfc, idx_ttft, idx_prompt, idx_completion, idx_tpot = range(10)
 
     # Create column index mapping
     col_indices = {col: idx for idx, col in enumerate(columns)}
@@ -400,29 +453,28 @@ def get_percentile_results(result_db_path: str, api_type: str = None) -> Percent
         inter_token_latencies_all = []
         for row in rows:
             try:
-                itl = json.loads(row[col_indices[DatabaseColumns.INTER_TOKEN_LATENCIES]]) or []
+                itl = json.loads(row[idx_icl]) or []
                 inter_token_latencies_all.extend(itl)
             except (json.JSONDecodeError, TypeError) as e:
-                logger.error(f'Error parsing inter token latencies: {e}')
+                logger.error(f'Error parsing inter-chunk latencies: {e}')
 
         metrics = {
-            PercentileMetrics.TTFT: [row[col_indices[DatabaseColumns.FIRST_CHUNK_LATENCY]] * 1000 for row in rows],
-            PercentileMetrics.ITL: [v * 1000 for v in inter_token_latencies_all],
-            PercentileMetrics.TPOT: [row[col_indices[DatabaseColumns.TIME_PER_OUTPUT_TOKEN]] * 1000 for row in rows],
-            PercentileMetrics.LATENCY: [row[col_indices[DatabaseColumns.LATENCY]] for row in rows],
-            PercentileMetrics.INPUT_TOKENS: [row[col_indices[DatabaseColumns.PROMPT_TOKENS]] for row in rows],
-            PercentileMetrics.OUTPUT_TOKENS: [row[col_indices[DatabaseColumns.COMPLETION_TOKENS]] for row in rows],
+            PercentileMetrics.TTFT: [row[idx_ttft] * 1000 for row in rows if row[idx_ttft] is not None],
+            PercentileMetrics.TTFC: [row[idx_ttfc] * 1000 for row in rows if row[idx_ttfc] is not None],
+            PercentileMetrics.ICL: [v * 1000 for v in inter_token_latencies_all],
+            PercentileMetrics.TPOT: [row[idx_tpot] * 1000 for row in rows if row[idx_tpot] is not None],
+            PercentileMetrics.LATENCY: [row[idx_latency] for row in rows],
+            PercentileMetrics.INPUT_TOKENS: [row[idx_prompt] for row in rows],
+            PercentileMetrics.OUTPUT_TOKENS: [row[idx_completion] for row in rows],
             PercentileMetrics.OUTPUT_THROUGHPUT: [
-                (row[col_indices[DatabaseColumns.COMPLETION_TOKENS]] / row[col_indices[DatabaseColumns.LATENCY]])
-                if row[col_indices[DatabaseColumns.LATENCY]] > 0 else float('nan') for row in rows
+                (row[idx_completion] / row[idx_latency])
+                if row[idx_latency] and row[idx_completion] is not None else float('nan') for row in rows
             ],
             PercentileMetrics.TOTAL_THROUGHPUT: [(
-                (row[col_indices[DatabaseColumns.PROMPT_TOKENS]] + row[col_indices[DatabaseColumns.COMPLETION_TOKENS]])
-                / row[col_indices[DatabaseColumns.LATENCY]]
-            ) if row[col_indices[DatabaseColumns.LATENCY]] > 0 else float('nan') for row in rows],
+                (row[idx_prompt] + row[idx_completion]) / row[idx_latency]
+            ) if row[idx_latency] and row[idx_prompt] is not None and row[idx_completion] is not None else float('nan') for row in rows],
             PercentileMetrics.DECODE_THROUGHPUT: [
-                (1.0 / row[col_indices[DatabaseColumns.TIME_PER_OUTPUT_TOKEN]])
-                if row[col_indices[DatabaseColumns.TIME_PER_OUTPUT_TOKEN]] > 0 else float('nan') for row in rows
+                (1.0 / row[idx_tpot]) if row[idx_tpot] and row[idx_tpot] > 0 else float('nan') for row in rows
             ]
         }
 

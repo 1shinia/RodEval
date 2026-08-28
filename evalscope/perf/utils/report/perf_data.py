@@ -127,21 +127,27 @@ class RunLoader:
             with sqlite3.connect(db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
+                columns = {r[1] for r in cursor.execute('PRAGMA table_info(result)').fetchall()}
+                icl_col = 'inter_chunk_latencies' if 'inter_chunk_latencies' in columns else 'inter_token_latencies'
+                ttft_expr = (
+                    'first_token_latency' if 'first_token_latency' in columns else 'first_chunk_latency'
+                )
                 cursor.execute(
-                    'SELECT start_time, completed_time, latency, first_chunk_latency, '
-                    'prompt_tokens, completion_tokens, inter_token_latencies, '
-                    'time_per_output_token, success FROM result'
+                    f'SELECT start_time, completed_time, latency, first_chunk_latency, '
+                    f'{ttft_expr} AS first_token_latency, prompt_tokens, completion_tokens, '
+                    f'{icl_col} AS inter_chunk_latencies, time_per_output_token, success FROM result'
                 )
                 for row in cursor.fetchall():
                     d = dict(row)
-                    itl_raw = d.get('inter_token_latencies')
+                    icl_raw = d.get('inter_chunk_latencies')
                     try:
-                        itl: List[float] = json.loads(itl_raw) if isinstance(itl_raw, str) else []
+                        icl: List[float] = json.loads(icl_raw) if isinstance(icl_raw, str) else []
                     except (json.JSONDecodeError, TypeError):
-                        itl = []
+                        icl = []
 
                     # DB stores all latency fields in seconds; convert to ms on load.
                     fcl = d.get('first_chunk_latency')
+                    ftl = d.get('first_token_latency')
                     tpot = d.get('time_per_output_token')
                     records.append(
                         RequestRecord(
@@ -149,9 +155,10 @@ class RunLoader:
                             completed_time=float(d.get('completed_time') or 0),
                             latency=float(d.get('latency') or 0),
                             first_chunk_latency=(fcl * 1000) if fcl is not None else None,
+                            first_token_latency=(ftl * 1000) if ftl is not None else None,
                             prompt_tokens=int(d.get('prompt_tokens') or 0),
                             completion_tokens=int(d.get('completion_tokens') or 0),
-                            inter_token_latencies=[v * 1000 for v in itl],
+                            inter_chunk_latencies=[v * 1000 for v in icl],
                             time_per_output_token=(tpot * 1000) if tpot is not None else None,
                             success=bool(d.get('success', 0)),
                         )

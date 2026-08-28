@@ -26,6 +26,7 @@ _DEFAULT_ADMIN = 'admin'
 # The old hardcoded 'rod-eval-jwt-secret-2024' is gone: existing tokens are
 # invalidated once on upgrade (users just log in again).
 _JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', '72'))
+_AUTH_COOKIE = 'evalscope_auth'
 
 
 def _load_or_create_jwt_secret() -> str:
@@ -169,42 +170,63 @@ def verify_token(token: str) -> dict | None:
         return None
 
 
+def _extract_request_token(*, allow_cookie: bool = True) -> str | None:
+    """Read auth from Bearer header, optionally falling back to a cookie.
+
+    Cookie fallback is intended for safe browser GET transports such as
+    EventSource/iframe/download.  State-changing API calls still require an
+    explicit Bearer token, avoiding a broad cookie-auth CSRF surface.
+    """
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header[7:]
+    if allow_cookie:
+        return request.cookies.get(_AUTH_COOKIE)
+    return None
+
+
+def _set_auth_cookie(response, token: str):
+    response.set_cookie(
+        _AUTH_COOKIE,
+        token,
+        max_age=_JWT_EXPIRY_HOURS * 60 * 60,
+        httponly=True,
+        secure=bool(request.is_secure),
+        samesite='Lax',
+        path='/',
+    )
+    return response
+
+
 def require_auth():
-    """Flask before_request hook — skip auth for public paths, require Bearer token otherwise."""
+    """Flask before_request hook — require authenticated access by default.
+
+    Browser-only transports such as EventSource and iframe no longer bypass
+    authentication: they use the HttpOnly auth cookie established at login.
+    """
     if request.method == 'OPTIONS':
         return None
 
-    # Public path prefixes (no auth required)
-    for prefix in ('/health', '/dashboard', '/api/v1/auth/',
-                   '/api/v1/config', '/api/v1/benchmarks',
-                   '/api/v1/eval/benchmarks', '/api/v1/perf/template',
-                   '/api/v1/eval/batch/template', '/api/v1/perf/batch/template',
-                   '/api/v1/aigc/file', '/api/v1/audio/file',
-                   '/api/v1/reports/media/file'):
+    # Only genuinely non-user-specific discovery/bootstrap endpoints are public.
+    for prefix in (
+        '/health', '/dashboard', '/api/v1/auth/', '/api/v1/config',
+        '/api/v1/benchmarks', '/api/v1/eval/benchmarks',
+        '/api/v1/perf/template', '/api/v1/eval/batch/template',
+        '/api/v1/perf/batch/template',
+    ):
         if request.path.startswith(prefix):
             return None
 
-    # Endpoints that can't send auth headers (EventSource / iframe / window.open)
-    for suffix in ('/log/stream', '/progress/stream', '/report', '/chart', '/html'):
-        if request.path.endswith(suffix):
-            return None
-
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+    token = _extract_request_token(allow_cookie=request.method in ('GET', 'HEAD'))
+    if not token:
         return jsonify({'error': 'Missing or invalid token'}), 401
 
-    token = auth_header[7:]
     user = verify_token(token)
     if user is None:
         return jsonify({'error': 'Token expired or invalid'}), 401
     if _is_blacklisted(user.get('jti', '')):
         return jsonify({'error': 'Token has been revoked'}), 401
 
-    # JWTs are stateless, so deleting/soft-deleting a user must be checked
-    # against the database on every authenticated request; otherwise an old
-    # token would remain usable until its natural expiry.  Refresh role and
-    # username from the DB as well so token claims cannot outlive account
-    # changes.
     try:
         uid = int(user.get('sub', '0'))
     except (TypeError, ValueError):
@@ -217,7 +239,6 @@ def require_auth():
         return jsonify({'error': 'User account is disabled or deleted'}), 401
     user['username'] = row['username']
     user['role'] = row['role']
-
     request.current_user = user
     return None
 
@@ -261,6 +282,19 @@ def check_task_ownership(table: str, task_id: str) -> tuple[bool, int | None]:
     return row[0] == uid, row[0]
 
 
+def check_task_artifact_access(task_id: str, tables: tuple[str, ...]) -> bool:
+    """Authorize reports/logs/SSE/files through the shared task policy."""
+    from ..task_access import task_artifact_owned_by
+    from ..utils import OUTPUT_DIR
+    return task_artifact_owned_by(
+        task_id,
+        tables,
+        user_id=get_current_user_id(),
+        is_admin=get_current_role() == 'admin',
+        output_dir=str(OUTPUT_DIR),
+    )
+
+
 @bp_auth.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -302,10 +336,11 @@ def register():
     if not user:
         return jsonify({'error': 'Registration failed'}), 500
     token = _create_token(user)
-    return jsonify({
+    response = jsonify({
         'token': token,
         'user': {'id': user['id'], 'username': user['username'], 'role': user['role']},
-    }), 201
+    })
+    return _set_auth_cookie(response, token), 201
 
 
 @bp_auth.route('/login', methods=['POST'])
@@ -325,25 +360,27 @@ def login():
         return jsonify({'error': '用户名或密码错误'}), 401
 
     token = _create_token(user)
-    return jsonify({
+    response = jsonify({
         'token': token,
         'user': {'id': user['id'], 'username': user['username'], 'role': user['role']},
     })
+    return _set_auth_cookie(response, token)
 
 
 @bp_auth.route('/logout', methods=['POST'])
 def logout():
     """Invalidate the current token by adding its jti to the blacklist."""
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+    token = _extract_request_token()
+    if not token:
         return jsonify({'error': 'Missing token'}), 400
-    token = auth_header[7:]
     payload = verify_token(token)
     if payload is None:
         return jsonify({'error': 'Token invalid or already expired'}), 400
     _blacklist_token(payload['jti'], payload['exp'])
     _cleanup_expired_tokens()  # opportunistic cleanup
-    return jsonify({'ok': True}), 200
+    response = jsonify({'ok': True})
+    response.delete_cookie(_AUTH_COOKIE, path='/')
+    return response, 200
 
 
 @bp_auth.route('/password', methods=['PUT'])

@@ -40,7 +40,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from pydantic import BaseModel, ConfigDict, Field
 from tabulate import tabulate
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from evalscope.perf.utils.benchmark_util import BenchmarkData
@@ -56,7 +56,7 @@ class _TraceTurn:
 
     start_time: float
     completed_time: float
-    ttft: float
+    ttft: Optional[float]
     latency: float
     prompt_tokens: int
     completion_tokens: int
@@ -77,22 +77,24 @@ class _TraceState:
         return max(self.turns[-1].completed_time - self.turns[0].start_time, 0.0)
 
     @property
-    def first_turn_ttft(self) -> float:
-        return self.turns[0].ttft if self.turns else 0.0
+    def first_turn_ttft(self) -> Optional[float]:
+        return self.turns[0].ttft if self.turns else None
 
     @property
-    def ttfat(self) -> float:
+    def ttfat(self) -> Optional[float]:
         if not self.turns:
-            return 0.0
+            return None
         last = self.turns[-1]
         first = self.turns[0]
+        if last.ttft is None:
+            return None
         return max((last.start_time + last.ttft) - first.start_time, 0.0)
 
     @property
     def decode_tps(self) -> float:
         samples: List[float] = []
         for t in self.turns:
-            if t.completion_tokens > 1 and t.latency > t.ttft:
+            if t.ttft is not None and t.completion_tokens > 1 and t.latency > t.ttft:
                 samples.append((t.completion_tokens - 1) / (t.latency - t.ttft))
         if not samples:
             return 0.0
@@ -149,7 +151,7 @@ class TraceAccumulator:
             _TraceTurn(
                 start_time=data.start_time,
                 completed_time=data.completed_time,
-                ttft=data.first_chunk_latency,
+                ttft=data.first_token_latency,
                 latency=data.query_latency,
                 prompt_tokens=data.prompt_tokens or 0,
                 completion_tokens=data.completion_tokens or 0,
@@ -206,9 +208,10 @@ class TraceMetricStats(BaseModel):
 
     @classmethod
     def from_values(cls, metric: str, values: List[float]) -> 'TraceMetricStats':
-        if not values:
+        clean = [v for v in values if v is not None and np.isfinite(v)]
+        if not clean:
             return cls(metric=metric)
-        arr = np.asarray(values, dtype=float)
+        arr = np.asarray(clean, dtype=float)
         return cls(
             metric=metric,
             mean=float(arr.mean()),
