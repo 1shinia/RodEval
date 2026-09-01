@@ -27,18 +27,39 @@ class ExactMatch(Metric):
 @register_metric(name='acc')
 class Accuracy(ExactMatch):
 
-    def __init__(self, allow_inclusion: bool = False, numeric: bool = False):
+    def __init__(
+        self,
+        allow_inclusion: bool = False,
+        numeric: bool = False,
+        inclusion_direction: str = 'prediction_in_reference',
+    ):
         self.allow_inclusion = allow_inclusion
         self.numeric = numeric
+        valid_directions = {'prediction_in_reference', 'reference_in_prediction', 'either'}
+        if inclusion_direction not in valid_directions:
+            raise ValueError(
+                f'Invalid inclusion_direction={inclusion_direction!r}. '
+                f'Expected one of {sorted(valid_directions)}.'
+            )
+        self.inclusion_direction = inclusion_direction
 
     def apply(self, predictions, references):
         if self.allow_inclusion:
             results = []
             for prediction, reference in zip(predictions, references):
-                if prediction and prediction in reference:
-                    results.append(1.0)
-                else:
+                prediction = normalize_text(prediction)
+                reference = normalize_text(reference)
+                if not prediction or not reference:
                     results.append(0.0)
+                    continue
+
+                if self.inclusion_direction == 'prediction_in_reference':
+                    matched = prediction in reference
+                elif self.inclusion_direction == 'reference_in_prediction':
+                    matched = reference in prediction
+                else:
+                    matched = prediction in reference or reference in prediction
+                results.append(float(matched))
             return results
         elif self.numeric:
             from .math_parser import math_equal, strip_answer_string
@@ -581,7 +602,12 @@ class Mean(Aggregator):
                         metric_name=metric_name,
                         aggregation_name=self.name,
                         num=len(values),
-                        ids=metric_sample_ids[metric_name]
+                        ids=metric_sample_ids[metric_name],
+                        metadata={
+                            'expected_num': len(scores),
+                            'missing_num': len(scores) - len(values),
+                            'coverage': len(values) / len(scores) if scores else 0.0,
+                        },
                     )
                 )
 
@@ -623,12 +649,16 @@ class MeanPassAtK(Aggregator):
             return []
 
         # Extract metric names present in score values
-        metrics = list(scores[0].score.value.keys())
+        metrics = list(dict.fromkeys(
+            metric_name for s in scores for metric_name in s.score.value.keys()
+        ))
 
         for metric_name in metrics:
             # group_id -> list[float] (0/1 correctness values)
             group_values: Dict[str, List[float]] = defaultdict(list)
             for s in scores:
+                if metric_name not in s.score.value:
+                    continue
                 group_id = getattr(s, 'group_id', s.sample_id)
                 value = float(s.score.value[metric_name])
                 group_values[group_id].append(value)
@@ -637,7 +667,8 @@ class MeanPassAtK(Aggregator):
                 continue
 
             # Infer k (assumes roughly uniform repeats)
-            k = int(len(scores) / len(group_values)) if len(group_values) > 0 else 1
+            valid_count = sum(len(v) for v in group_values.values())
+            k = int(valid_count / len(group_values)) if len(group_values) > 0 else 1
             if k <= 0:
                 k = 1
 
@@ -658,6 +689,8 @@ class MeanPassAtK(Aggregator):
 
             # Annotate each sample with its group's pass@n for all n
             for s in scores:
+                if metric_name not in s.score.value:
+                    continue
                 group_id = getattr(s, 'group_id', s.sample_id)
                 for n in range(1, k + 1):
                     s.score.value[f'{metric_name}_pass@{n}'] = pass_at_n_maps[n][group_id]
@@ -699,13 +732,17 @@ class MeanVoteAtK(Aggregator):
             return []
 
         # Freeze metric names before augmenting values
-        metrics = list(scores[0].score.value.keys())
+        metrics = list(dict.fromkeys(
+            metric_name for s in scores for metric_name in s.score.value.keys()
+        ))
 
         for metric_name in metrics:
             # Group samples by group_id, preserving order
             # Store: (prediction, correctness_score)
             group_samples: Dict[str, List[tuple]] = defaultdict(list)
             for score in scores:
+                if metric_name not in score.score.value:
+                    continue
                 group_id = getattr(score, 'group_id', score.sample_id)
                 prediction = getattr(score.score, 'extracted_prediction', None)
                 correctness = score.score.value[metric_name]
@@ -715,7 +752,8 @@ class MeanVoteAtK(Aggregator):
                 continue
 
             # Calculate k as the repetition count
-            k = int(len(scores) / len(group_samples)) if len(group_samples) > 0 else 1
+            valid_count = sum(len(v) for v in group_samples.values())
+            k = int(valid_count / len(group_samples)) if len(group_samples) > 0 else 1
             if k <= 0:
                 k = 1
 
@@ -744,6 +782,8 @@ class MeanVoteAtK(Aggregator):
 
             # Annotate each sample with its group's vote@n for all n
             for score in scores:
+                if metric_name not in score.score.value:
+                    continue
                 group_id = getattr(score, 'group_id', score.sample_id)
                 for n in range(1, k + 1):
                     score.score.value[f'{metric_name}_vote@{n}'] = vote_at_n_maps[n][group_id]
@@ -774,12 +814,16 @@ class MeanPassHatK(Aggregator):
             return []
 
         # Freeze metric names before augmenting values to avoid iterating injected keys
-        metrics = list(scores[0].score.value.keys())
+        metrics = list(dict.fromkeys(
+            metric_name for s in scores for metric_name in s.score.value.keys()
+        ))
 
         for metric_name in metrics:
             # group_id -> list[float] (0/1 correctness values)
             group_values: Dict[str, List[float]] = defaultdict(list)
             for s in scores:
+                if metric_name not in s.score.value:
+                    continue
                 group_id = getattr(s, 'group_id', s.sample_id)
                 value = float(s.score.value[metric_name])
                 group_values[group_id].append(value)
@@ -803,6 +847,8 @@ class MeanPassHatK(Aggregator):
 
             # Annotate each sample with its group's pass^n for all n
             for s in scores:
+                if metric_name not in s.score.value:
+                    continue
                 group_id = getattr(s, 'group_id', s.sample_id)
                 for n in range(1, k + 1):
                     s.score.value[f'{metric_name}_pass^{n}'] = pass_hat_n_maps[n][group_id]

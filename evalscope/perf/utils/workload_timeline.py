@@ -17,14 +17,12 @@ custom windows with pandas).  The SQLite layer is intentionally untouched.
 
 Per-point fields:
 
-* ``t``                  - seconds since wall-clock start (first request's
-  ``start_time``)
+* ``t``                  - seconds since wall-clock start (earliest valid
+  request ``start_time``)
 * ``cum_completion``     - cumulative completion tokens
 * ``cum_new_prompt``     - cumulative ``prompt_tokens - cached_tokens``
-  (the part actually computed; ``cached_tokens`` defaults to 0 when the
-  server doesn't report it, so single-turn runs degenerate to
-  ``cum_total_prompt``)
-* ``cum_cached_prompt``  - cumulative ``cached_tokens``
+  where ``cached_tokens`` means *server-observed* cache hits only
+* ``cum_cached_prompt``  - cumulative server-observed ``cached_tokens``
 """
 from __future__ import annotations
 
@@ -49,6 +47,16 @@ class _Point:
     cum_cached_prompt: int
 
 
+@dataclass
+class _Record:
+    start_time: float
+    completed_time: float
+    success: bool
+    completion: int
+    new_prompt: int
+    cached_prompt: int
+
+
 # Zero-anchor used for the "Overall" window: makes overall_rates share the
 # same code path as the windowed rates without a special-case branch.
 _ORIGIN = _Point(t=0.0, cum_completion=0, cum_new_prompt=0, cum_cached_prompt=0)
@@ -60,57 +68,83 @@ _ORIGIN = _Point(t=0.0, cum_completion=0, cum_new_prompt=0, cum_cached_prompt=0)
 
 @dataclass
 class WorkloadTimeline:
-    """Append-only timeline of cumulative tokens, keyed off completion time.
+    """Completion timeline rebuilt from absolute request timestamps.
 
-    Feed every successful, non-warmup :class:`BenchmarkData` via :meth:`feed`;
-    failed / warmup items are silently skipped.  Call :meth:`to_summary` at the
-    end of the run to obtain a :class:`WorkloadThroughput` snapshot.
+    Feed every non-warmup :class:`BenchmarkData` via :meth:`feed`. Failed
+    attempts contribute zero tokens but still extend the wall-clock window;
+    otherwise a slow final failure would incorrectly increase reported
+    goodput. Call :meth:`to_summary` at the end of the run to obtain a
+    :class:`WorkloadThroughput` snapshot.
+
+    Requests are stored as absolute records and sorted by completion time when
+    metrics are read.  This is important under concurrency: the first request
+    to *finish* is not necessarily the first request that *started*.
     """
 
     _wall_start: Optional[float] = None
     _points: List[_Point] = field(default_factory=list)
-
-    # Running cumulative totals (kept outside _points so feed() is O(1)).
-    _cum_completion: int = 0
-    _cum_new_prompt: int = 0
-    _cum_cached_prompt: int = 0
+    _records: List[_Record] = field(default_factory=list, repr=False)
+    _dirty: bool = field(default=False, repr=False)
 
     def feed(self, data: 'BenchmarkData') -> None:
-        if data.is_warmup or not data.success:
+        if data.is_warmup:
             return
-        # Drop items missing either timestamp or where completion is non-monotonic;
-        # both indicate the record was never actually populated by the HTTP layer.
-        if data.completed_time <= 0 or data.completed_time < data.start_time:
+        # Default-constructed failures have 0/0 timestamps.  Successful records
+        # must have a positive-width lifecycle.
+        if data.completed_time <= data.start_time:
             return
 
-        # Lock wall_start on the first feed so already-appended points keep
-        # their ``t`` value stable.  Lowering wall_start later would silently
-        # invalidate every prior point's offset (they don't get rewritten).
-        # Sub-second start_time jitter between workers is negligible at the
-        # window sizes we report on (30s tail, 20% steady-state).
-        if self._wall_start is None:
-            self._wall_start = data.start_time
-
-        prompt = data.prompt_tokens or 0
-        completion = data.completion_tokens or 0
-        cached = data.cached_tokens or 0
+        prompt = (data.prompt_tokens or 0) if data.success else 0
+        completion = (data.completion_tokens or 0) if data.success else 0
+        cached = (data.cached_tokens or 0) if data.success else 0
         # Server-side new-prompt cost.  Clamp to >=0 because some servers can
         # report cached > prompt when the chat template inflates the prompt
         # post-tokenization (rare but observed on a few OpenAI-compat backends).
         new_prompt = max(prompt - cached, 0)
 
-        self._cum_completion += completion
-        self._cum_new_prompt += new_prompt
-        self._cum_cached_prompt += cached
-
-        self._points.append(
-            _Point(
-                t=data.completed_time - self._wall_start,
-                cum_completion=self._cum_completion,
-                cum_new_prompt=self._cum_new_prompt,
-                cum_cached_prompt=self._cum_cached_prompt,
+        self._records.append(
+            _Record(
+                start_time=data.start_time,
+                completed_time=data.completed_time,
+                success=data.success,
+                completion=completion,
+                new_prompt=new_prompt,
+                cached_prompt=cached,
             )
         )
+        self._dirty = True
+
+    def _ensure_points(self) -> None:
+        """Rebuild cumulative points from absolute records when necessary."""
+        if not self._dirty:
+            return
+        if not self._records:
+            self._wall_start = None
+            self._points = []
+            self._dirty = False
+            return
+
+        self._wall_start = min(r.start_time for r in self._records)
+        records = sorted(self._records, key=lambda r: r.completed_time)
+
+        cum_completion = 0
+        cum_new_prompt = 0
+        cum_cached_prompt = 0
+        points: List[_Point] = []
+        for record in records:
+            cum_completion += record.completion
+            cum_new_prompt += record.new_prompt
+            cum_cached_prompt += record.cached_prompt
+            points.append(
+                _Point(
+                    t=record.completed_time - self._wall_start,
+                    cum_completion=cum_completion,
+                    cum_new_prompt=cum_new_prompt,
+                    cum_cached_prompt=cum_cached_prompt,
+                )
+            )
+        self._points = points
+        self._dirty = False
 
     # ------------------------------------------------------------------
     # Derived rates
@@ -118,11 +152,12 @@ class WorkloadTimeline:
 
     @property
     def n_points(self) -> int:
-        return len(self._points)
+        return sum(1 for r in self._records if r.success)
 
     @property
     def wall_time(self) -> float:
         """End-to-end wall-clock duration (first start -> last completion)."""
+        self._ensure_points()
         if not self._points:
             return 0.0
         return max(self._points[-1].t, 0.0)
@@ -133,6 +168,7 @@ class WorkloadTimeline:
 
         Returns zeros when the window has no width or no points.
         """
+        self._ensure_points()
         if not self._points:
             return [0.0, 0.0, 0.0, 0.0]
         last = self._points[-1]
@@ -158,13 +194,15 @@ class WorkloadTimeline:
         If the run is shorter than ``window_s`` we fall back to ``overall_rates``
         - quoting trie's "Last 30s" on a 5s run would otherwise be misleading.
         """
+        self._ensure_points()
         if not self._points or window_s <= 0:
             return [0.0, 0.0, 0.0, 0.0]
         wall = self.wall_time
         if wall <= window_s:
             return self.overall_rates()
-        # Anchor at the latest point with t <= (wall - window_s) so the window
-        # length closely matches window_s while staying on a real sample.
+        # Use an exact time-boundary anchor.  Cumulative completions form a step
+        # function, so the token count at an arbitrary timestamp is well-defined
+        # even when no request completed exactly at that instant.
         return self._rates_from(self._find_anchor(wall - window_s))
 
     def steady_state_rates(self, warmup_frac: float = 0.2) -> List[float]:
@@ -175,32 +213,46 @@ class WorkloadTimeline:
         Falls back to ``overall_rates`` when the timeline is too short to
         meaningfully discard a warmup region.
         """
+        self._ensure_points()
         if not self._points:
             return [0.0, 0.0, 0.0, 0.0]
         wall = self.wall_time
         if wall <= 0 or warmup_frac <= 0:
             return self.overall_rates()
-        anchor = self._find_anchor(wall * warmup_frac)
-        # If the anchor *is* the last point, the steady-state window has no
-        # data; fall back to overall rather than returning zeros.
-        if anchor is self._points[-1]:
+        if warmup_frac >= 1:
             return self.overall_rates()
+        # A single completion point cannot carve a meaningful steady-state
+        # window; fall back to overall rates rather than fabricating a rate
+        # over a window that contains no additional sample.
+        if len(self._points) < 2:
+            return self.overall_rates()
+        # If no completion landed inside the warmup window, dropping the first
+        # warmup_frac of wall time removes no output and only shrinks the
+        # denominator — inflating the steady-state rate. Fall back to overall
+        # rather than reporting a fabricated rate.
+        if self._points[0].t > wall * warmup_frac:
+            return self.overall_rates()
+        anchor = self._find_anchor(wall * warmup_frac)
         return self._rates_from(anchor)
 
     def _find_anchor(self, t_target: float) -> _Point:
-        """Return the latest point with ``t <= t_target`` (or the first point)."""
-        if not self._points or t_target <= self._points[0].t:
-            return self._points[0]
-        # Linear forward scan: points are append-only sorted by t (wall_start is
-        # locked on first feed), so we can break at the first point past t_target.
-        # Timelines are at most a few thousand entries so bisect isn't worth importing.
-        chosen = self._points[0]
+        """Return cumulative counts at the exact timestamp ``t_target``."""
+        self._ensure_points()
+        if not self._points:
+            return _Point(t=max(t_target, 0.0), cum_completion=0, cum_new_prompt=0, cum_cached_prompt=0)
+
+        chosen = _ORIGIN
         for p in self._points:
             if p.t <= t_target:
                 chosen = p
             else:
                 break
-        return chosen
+        return _Point(
+            t=max(t_target, 0.0),
+            cum_completion=chosen.cum_completion,
+            cum_new_prompt=chosen.cum_new_prompt,
+            cum_cached_prompt=chosen.cum_cached_prompt,
+        )
 
     # ------------------------------------------------------------------
     # Snapshot / serialisation
@@ -230,6 +282,7 @@ class WorkloadTimeline:
 
     def to_raw_points_dict(self) -> dict:
         """Export raw cumulative-token points for downstream pandas / plots."""
+        self._ensure_points()
         return {
             'wall_start': self._wall_start,
             'points': [{

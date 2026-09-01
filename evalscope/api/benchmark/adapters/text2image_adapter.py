@@ -152,7 +152,6 @@ class Text2ImageAdapter(DefaultDataAdapter):
                     score.value[metric_name] = metric_score.cpu().item()
             except Exception as e:
                 logger.error(f'Error calculating metric {metric}: {e}')
-                score.value[metric_name] = 0
-                score.metadata[metric_name] = f'error: {str(e)}'
+                score.metadata.setdefault('metric_errors', {})[metric_name] = str(e)
 
         return score

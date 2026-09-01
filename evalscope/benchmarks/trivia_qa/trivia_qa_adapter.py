@@ -64,7 +64,11 @@ TriviaQA is a large-scale reading comprehension dataset containing over 650K que
         eval_split='validation',
         metric_list=[{
             'acc': {
-                'allow_inclusion': True
+                'allow_inclusion': True,
+                # TriviaQA aliases are reference answers that may occur inside
+                # a longer model response.  The legacy default uses the
+                # opposite containment direction for multi-choice compatibility.
+                'inclusion_direction': 'reference_in_prediction'
             }
         }],
         prompt_template=PROMPT_TEMPLATE,
@@ -97,3 +101,43 @@ class TriviaQaAdapter(DefaultDataAdapter):
         if matches:
             return matches[-1].strip()
         return prediction.strip()
+
+    def match_score(
+        self, original_prediction: str, filtered_prediction: str, reference: str, task_state: TaskState
+    ) -> Score:
+        """Score against TriviaQA aliases without concatenating them.
+
+        ``Sample.target`` is a list of valid aliases.  ``TaskState.target`` is
+        intentionally a legacy concatenated representation because other
+        benchmarks use list targets for multi-letter multiple-choice answers.
+        TriviaQA therefore opts into alias semantics here and accepts the best
+        score across the individual references.
+        """
+        references = task_state.targets or [reference]
+        alias_scores = [
+            super(TriviaQaAdapter, self).match_score(
+                original_prediction=original_prediction,
+                filtered_prediction=filtered_prediction,
+                reference=alias,
+                task_state=task_state,
+            ) for alias in references
+        ]
+
+        final = Score(
+            extracted_prediction=filtered_prediction,
+            prediction=original_prediction,
+            metadata={'reference_count': len(references), 'reference_mode': 'any_of'},
+        )
+        metric_names = {name for score in alias_scores for name in score.value}
+        for metric_name in metric_names:
+            candidates = [score.value[metric_name] for score in alias_scores if metric_name in score.value]
+            if candidates:
+                final.value[metric_name] = max(candidates)
+
+        metric_errors = {}
+        for score in alias_scores:
+            metric_errors.update((score.metadata or {}).get('metric_errors', {}))
+        if metric_errors and not final.value:
+            final.metadata['metric_errors'] = metric_errors
+
+        return final

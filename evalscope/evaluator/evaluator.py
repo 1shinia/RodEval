@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from evalscope.api.dataset import Dataset, Sample
 from evalscope.api.evaluator import CacheManager, Evaluator, TaskState
-from evalscope.api.metric import AggScore, SampleScore
+from evalscope.api.metric import AggScore, SampleScore, Score
 from evalscope.api.registry import register_evaluator
 from evalscope.constants import HEARTBEAT_INTERVAL_SEC
 from evalscope.evaluator.batch_reviewer import BatchReviewer
@@ -112,6 +112,16 @@ class _WorkItem:
     def needs_predict(self) -> bool:
         """True when prediction has not yet been computed."""
         return self.task_state is None
+
+
+class _WorkItemProcessingError(RuntimeError):
+    """Stage-aware wrapper so ignored failures keep correct metric semantics."""
+
+    def __init__(self, stage: str, original: Exception, task_state: Optional[TaskState] = None):
+        super().__init__(f'{stage} failed: {original}')
+        self.stage = stage
+        self.original = original
+        self.task_state = task_state
 
 
 @dataclass
@@ -360,7 +370,10 @@ class DefaultEvaluator(Evaluator):
             tb_str = traceback.format_exc()
             logger.error(f'Processing item in subset={item.subset!r} failed: {exc}\nTraceback:\n{tb_str}')
             if self.task_config.ignore_errors:
-                logger.warning('Error ignored, continuing with next sample.')
+                logger.warning('Error ignored, continuing with next sample while preserving failure semantics.')
+                result = self._build_ignored_error_result(item, exc)
+                if result is not None:
+                    results_by_subset[item.subset].append(result)
                 return
             raise exc
 
@@ -378,6 +391,58 @@ class DefaultEvaluator(Evaluator):
         )
         return results_by_subset
 
+    def _configured_metric_names(self) -> List[str]:
+        """Return configured metric names without instantiating metric classes."""
+        names: List[str] = []
+        for metric in getattr(self.benchmark, 'metric_list', []) or []:
+            if isinstance(metric, str):
+                names.append(metric)
+            elif isinstance(metric, dict) and metric:
+                names.append(next(iter(metric)))
+        return list(dict.fromkeys(names))
+
+    def _build_ignored_error_result(
+        self, item: _WorkItem, exc: Exception
+    ) -> Optional[Tuple[TaskState, SampleScore]]:
+        """Convert an ignored failure into an auditable sample outcome.
+
+        Model/inference failures count as zero for configured model-quality
+        metrics: the service/model failed to produce an answer.  Scoring/judge
+        infrastructure failures produce an empty score so they do *not* count
+        as model errors; aggregators expose the resulting coverage gap.
+        """
+        stage = exc.stage if isinstance(exc, _WorkItemProcessingError) else 'unknown'
+        original = exc.original if isinstance(exc, _WorkItemProcessingError) else exc
+        task_state = exc.task_state if isinstance(exc, _WorkItemProcessingError) else item.task_state
+
+        if task_state is None and item.sample is not None:
+            task_state = TaskState(model=self.model_name, sample=item.sample, completed=True)
+        if task_state is None:
+            return None
+
+        if stage == 'inference':
+            values = {name: 0.0 for name in self._configured_metric_names()}
+            status = 'model_error'
+        else:
+            values = {}
+            status = 'scoring_error' if stage == 'scoring' else 'processing_error'
+
+        sample_score = SampleScore(
+            score=Score(
+                value=values,
+                prediction=getattr(task_state.output, 'completion', None),
+                metadata={
+                    'status': status,
+                    'error_stage': stage,
+                    'error': str(original),
+                },
+            ),
+            sample_id=task_state.sample_id,
+            group_id=task_state.group_id,
+            sample_metadata=task_state.metadata,
+        )
+        return task_state, sample_score
+
     def _process_work_item(self, item: _WorkItem, model_prediction_dir: str) -> Tuple[TaskState, Optional[SampleScore]]:
         """
         Process a single work item: predict (if needed) then review.
@@ -393,13 +458,23 @@ class DefaultEvaluator(Evaluator):
             ``(task_state, sample_score)`` where ``sample_score`` is ``None``
             for batch-scoring benchmarks (review deferred).
         """
-        task_state = (
-            self._predict_sample(item.sample, model_prediction_dir) if item.needs_predict else item.task_state
-        )
+        if item.needs_predict:
+            try:
+                task_state = self._predict_sample(item.sample, model_prediction_dir)
+            except Exception as exc:
+                raise _WorkItemProcessingError('inference', exc) from exc
+        else:
+            task_state = item.task_state
         if item.needs_predict and not self.benchmark.use_batch_scoring:
             sample_id = item.sample.metadata.get('instance_id', item.sample.metadata.get('id', '?'))
             logger.info(f'Prediction done for sample {sample_id}, starting review phase...')
-        sample_score = (None if self.benchmark.use_batch_scoring else self._review_task_state(task_state))
+        if self.benchmark.use_batch_scoring:
+            sample_score = None
+        else:
+            try:
+                sample_score = self._review_task_state(task_state)
+            except Exception as exc:
+                raise _WorkItemProcessingError('scoring', exc, task_state=task_state) from exc
         return task_state, sample_score
 
     def _persist_result(
@@ -485,11 +560,16 @@ class DefaultEvaluator(Evaluator):
 
             if self.benchmark.use_batch_scoring:
                 pending = context.review_pending_by_subset.get(subset, [])
-                new_task_states = [ts for ts, _ in pool_results]
+                # ``sample_score`` is normally None for batch-scoring items.
+                # A non-None score here is a synthetic ignored inference
+                # failure and must bypass batch review so it remains a model
+                # failure instead of being scored as an empty prediction.
+                new_task_states = [ts for ts, sc in pool_results if sc is None]
+                failure_scores = [sc for _, sc in pool_results if sc is not None]
                 batch_scores = self.batch_reviewer.review_subset(
                     subset, pending + new_task_states, review_fn=self._review_task_state
                 )
-                all_scores = cached_scores + batch_scores
+                all_scores = cached_scores + batch_scores + failure_scores
             else:
                 new_scores = [sc for _, sc in pool_results if sc is not None]
                 all_scores = cached_scores + new_scores

@@ -393,7 +393,10 @@ def calculate_percentiles(data: List[float], percentiles: List[int]) -> Dict[int
         else:
             weight = rank - lo
             value = clean[lo] + (clean[hi] - clean[lo]) * weight
-        results[percentile] = round(value, 2)
+        # Keep full precision in the data layer.  Presentation code can round
+        # for display; rounding here polluted downstream SLA/auto-tune logic
+        # and collapsed sub-10ms latency differences.
+        results[percentile] = value
     return results
 
 

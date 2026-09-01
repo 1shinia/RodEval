@@ -64,6 +64,9 @@ class BenchmarkSummary(BaseModel):
     # --- Multi-turn (optional) ---
     avg_turns: Optional[float] = Field(None, alias=Metrics.AVERAGE_INPUT_TURNS_PER_REQUEST)
     avg_cached_percent: Optional[float] = Field(None, alias=Metrics.AVERAGE_CACHED_PERCENT)
+    estimated_reusable_prefix_percent: Optional[float] = Field(
+        None, alias=Metrics.ESTIMATED_REUSABLE_PREFIX_PERCENT
+    )
     avg_first_turn_ttft: Optional[float] = Field(None, alias=Metrics.AVERAGE_FIRST_TURN_TTFT)
     avg_subsequent_turn_ttft: Optional[float] = Field(None, alias=Metrics.AVERAGE_SUBSEQUENT_TURN_TTFT)
 
@@ -155,6 +158,7 @@ class BenchmarkSummary(BaseModel):
             v is not None for v in (
                 self.avg_turns,
                 self.avg_cached_percent,
+                self.estimated_reusable_prefix_percent,
                 self.avg_first_turn_ttft,
                 self.avg_subsequent_turn_ttft,
             )
@@ -165,6 +169,11 @@ class BenchmarkSummary(BaseModel):
                 rows.append((Metrics.AVERAGE_INPUT_TURNS_PER_REQUEST, _fmt(self.avg_turns)))
             if self.avg_cached_percent is not None:
                 rows.append((Metrics.AVERAGE_CACHED_PERCENT, _fmt(self.avg_cached_percent)))
+            if self.estimated_reusable_prefix_percent is not None:
+                rows.append((
+                    Metrics.ESTIMATED_REUSABLE_PREFIX_PERCENT,
+                    _fmt(self.estimated_reusable_prefix_percent),
+                ))
             if self.avg_first_turn_ttft is not None:
                 rows.append((Metrics.AVERAGE_FIRST_TURN_TTFT, _fmt(self.avg_first_turn_ttft)))
             if self.avg_subsequent_turn_ttft is not None:

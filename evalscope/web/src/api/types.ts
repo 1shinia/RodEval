@@ -6,6 +6,7 @@ export interface SubsetData {
   name: string
   score: number
   num: number
+  metadata?: Record<string, unknown>
 }
 
 export interface CategoryData {
@@ -40,6 +41,7 @@ export interface PerfMetricsSummary {
   throughput: {
     avg_output_tps: number | null
     avg_req_ps: number | null
+    scope?: string
   }
   usage: {
     input_tokens: PercentileStats

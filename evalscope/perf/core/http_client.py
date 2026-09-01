@@ -72,18 +72,40 @@ class AioHttpClient:
         Returns:
             BenchmarkData: The benchmark data object containing request and response information.
         """
+        attempt_start = time.perf_counter()
         try:
             # Delegate the request processing to the API plugin
             output = await self.api_plugin.process_request(self.client, self.url, self.headers, body)
+            # Third-party plugins should return populated timing, but enforce
+            # the invariant at the transport boundary as a final safeguard.
+            if output.start_time <= 0:
+                output.start_time = attempt_start
+            if output.completed_time <= output.start_time:
+                output.completed_time = time.perf_counter()
+                output.query_latency = max(0.0, output.completed_time - output.start_time)
             return output
         except asyncio.TimeoutError as e:
             logger.error(
                 f'TimeoutError: total_timeout: {self.total_timeout}, connect_timeout: {self.connect_timeout}, read_timeout: {self.read_timeout}. Please set longer timeout.'  # noqa: E501
             )
-            return BenchmarkData(success=False, error=str(e))
+            end = time.perf_counter()
+            return BenchmarkData(
+                success=False,
+                error=str(e),
+                start_time=attempt_start,
+                completed_time=end,
+                query_latency=max(0.0, end - attempt_start),
+            )
         except (aiohttp.ClientConnectorError, Exception) as e:
             logger.error(e)
-            return BenchmarkData(success=False, error=str(e))
+            end = time.perf_counter()
+            return BenchmarkData(
+                success=False,
+                error=str(e),
+                start_time=attempt_start,
+                completed_time=end,
+                query_latency=max(0.0, end - attempt_start),
+            )
 
     @staticmethod
     async def on_request_start(session, context, params: aiohttp.TraceRequestStartParams):

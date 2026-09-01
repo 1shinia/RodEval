@@ -94,7 +94,6 @@ class DefaultApiPlugin(ApiPluginBase):
         st = time.perf_counter()
         output.start_time = st
         output.request = data
-        most_recent_timestamp = st
         most_recent_generated_timestamp = None
         try:
             async with client_session.post(url=url, data=data, headers=headers) as response:
@@ -164,12 +163,15 @@ class DefaultApiPlugin(ApiPluginBase):
                                             if _cached is not None:
                                                 output.real_cached_tokens = _cached
 
-                                    most_recent_timestamp = timestamp
-
                         output.generated_text = generated_text
                         output.success = True
-                        output.completed_time = most_recent_timestamp
-                        output.query_latency = most_recent_timestamp - st
+                        # E2E completes when the response stream is actually
+                        # exhausted; TPOT uses last_generated_time separately
+                        # so usage-only / DONE tail latency is not decode time.
+                        response_end_timestamp = time.perf_counter()
+                        output.completed_time = response_end_timestamp
+                        output.query_latency = response_end_timestamp - st
+                        output.last_generated_time = most_recent_generated_timestamp
                         if output.first_chunk_latency == 0.0:
                             output.first_chunk_latency = output.query_latency
 
@@ -250,5 +252,14 @@ class DefaultApiPlugin(ApiPluginBase):
             exc_info = sys.exc_info()
             output.error = ''.join(traceback.format_exception(*exc_info))
             logger.error(output.error)
+        finally:
+            # Every request attempt, including HTTP errors, connection errors,
+            # JSON/SSE parse failures and timeouts caught here, must have a
+            # valid lifecycle.  Throughput/wall-time calculations rely on this
+            # invariant and must never see the default 0/0 timestamps.
+            if output.completed_time <= output.start_time:
+                end = time.perf_counter()
+                output.completed_time = end
+                output.query_latency = max(0.0, end - output.start_time)
 
         return output

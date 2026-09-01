@@ -166,27 +166,24 @@ class MultiTurnStrategy(BenchmarkStrategy):
                 if benchmark_data.success:
                     benchmark_data.finalize(self.api_plugin)
 
-                # Compute KV-cache hit count (absolute tokens, not a percentage).
-                #
-                # Priority:
-                #   1. real_cached_tokens – server-reported cached token count
-                #      (from usage.prompt_tokens_details.cached_tokens).
-                #   2. Estimation heuristic – prev_prompt_tokens + prev_completion_tokens,
-                #      i.e. the full context that was already in the KV cache after turn N-1.
-                #
-                # Turn 1 always yields cached_tokens = 0 because there is no prior
-                # context.  The 0 is stored explicitly so the aggregator can include
-                # this turn's prompt_tokens in the denominator, producing an unbiased
-                # global ratio: total_cached_tokens / total_prompt_tokens.
+                # Track *observed* KV-cache hits separately from the amount of
+                # context that is merely reusable in principle.  A reusable
+                # prefix is not proof of a cache hit: the server may have cache
+                # disabled, evicted the entry, or routed the next turn to a
+                # different replica.
                 if benchmark_data.prompt_tokens is not None and benchmark_data.prompt_tokens > 0:
                     if benchmark_data.real_cached_tokens is not None:
                         benchmark_data.cached_tokens = benchmark_data.real_cached_tokens
-                    elif prev_prompt_tokens > 0:
-                        cacheable_tokens = prev_prompt_tokens + prev_completion_tokens
-                        benchmark_data.cached_tokens = cacheable_tokens
+                    # If the server does not expose cache telemetry, do not
+                    # fabricate ``cached_tokens``.  Keep a separately named
+                    # estimate for capacity/planning analysis.
+                    if prev_prompt_tokens > 0:
+                        benchmark_data.estimated_cacheable_tokens = min(
+                            prev_prompt_tokens + prev_completion_tokens,
+                            benchmark_data.prompt_tokens,
+                        )
                     else:
-                        # Turn 1: no prior context, cached_tokens = 0.
-                        benchmark_data.cached_tokens = 0
+                        benchmark_data.estimated_cacheable_tokens = 0
                 if benchmark_data.prompt_tokens:
                     prev_prompt_tokens = benchmark_data.prompt_tokens
                 if benchmark_data.completion_tokens:

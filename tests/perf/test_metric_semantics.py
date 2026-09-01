@@ -38,6 +38,36 @@ def test_tpot_uses_first_generated_token_not_first_sse_chunk():
     assert math.isclose(data.time_per_output_token, 0.10)
 
 
+def test_tpot_excludes_protocol_tail_after_last_generated_token():
+    data = BenchmarkData(
+        success=True,
+        start_time=100.0,
+        completed_time=100.50,      # includes usage/DONE tail
+        last_generated_time=100.30, # last actual generated token
+        query_latency=0.50,
+        first_token_latency=0.10,
+        prompt_tokens=10,
+        completion_tokens=3,
+    )
+    data.finalize(_Plugin())
+    assert math.isclose(data.time_per_output_token, 0.10)
+
+
+def test_sse_chunk_count_is_not_used_as_speculative_decode_telemetry():
+    data = BenchmarkData(
+        success=True,
+        start_time=1.0,
+        completed_time=1.4,
+        query_latency=0.4,
+        first_token_latency=0.1,
+        prompt_tokens=10,
+        completion_tokens=9,
+        chunk_times=[1.1, 1.2, 1.3],
+    )
+    data.finalize(_Plugin())
+    assert data.decoded_tokens_per_iter is None
+
+
 def test_ttft_average_excludes_successful_zero_token_responses():
     acc = MetricsAccumulator()
     with_token = BenchmarkData(
@@ -75,3 +105,51 @@ def test_percentiles_use_linear_interpolation_not_off_by_one_indexing():
     assert result[50] == 49.5
     assert result[99] == 98.01
     assert result[100] == 99.0
+
+
+def test_percentiles_keep_full_precision_in_data_layer():
+    result = calculate_percentiles([0.004, 0.006], [50])
+    assert result[50] == 0.005
+
+
+def test_invalid_zero_timestamp_failure_does_not_corrupt_wall_clock():
+    acc = MetricsAccumulator()
+    acc.update(BenchmarkData(
+        success=True, start_time=10.0, completed_time=11.0,
+        query_latency=1.0, prompt_tokens=10, completion_tokens=5,
+    ), _Plugin())
+    acc.update(BenchmarkData(success=False), _Plugin())
+    assert math.isclose(acc.wall_time, 1.0)
+
+
+def test_timed_failure_extends_wall_clock_and_reduces_goodput():
+    acc = MetricsAccumulator()
+    acc.update(BenchmarkData(
+        success=True, start_time=10.0, completed_time=11.0,
+        query_latency=1.0, prompt_tokens=10, completion_tokens=5,
+    ), _Plugin())
+    acc.update(BenchmarkData(
+        success=False, start_time=10.5, completed_time=15.0,
+        query_latency=4.5,
+    ), _Plugin())
+    result = acc.to_result()
+    assert math.isclose(acc.wall_time, 5.0)
+    assert math.isclose(result.qps, 1 / 5)
+
+
+def test_embedding_input_throughput_uses_concurrent_workload_wall_time():
+    # Embedding/rerank workloads have no completion tokens; input throughput
+    # must be computed against the concurrent wall-clock window, not the sum of
+    # per-request latencies.  MetricsAccumulator computes input throughput
+    # against wall time unconditionally, so no api_type discriminator is needed.
+    acc = MetricsAccumulator()
+    acc.update(BenchmarkData(
+        success=True, start_time=10.0, completed_time=11.0,
+        query_latency=1.0, prompt_tokens=1000, completion_tokens=0,
+    ), _Plugin())
+    acc.update(BenchmarkData(
+        success=True, start_time=10.0, completed_time=11.0,
+        query_latency=1.0, prompt_tokens=1000, completion_tokens=0,
+    ), _Plugin())
+    result = acc.to_result()
+    assert math.isclose(result.avg_input_token_throughput, 2000.0)

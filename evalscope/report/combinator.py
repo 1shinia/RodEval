@@ -239,7 +239,7 @@ def gen_perf_table(
             'Avg Lat\n(s)': round(ps.avg_latency, 4),
             'Avg TTFT\n(ms)': round(ps.avg_ttft * 1000, 2) if ps.avg_ttft is not None else '-',
             'Avg TPOT\n(ms)': round(ps.avg_tpot * 1000, 2) if ps.avg_tpot is not None else '-',
-            'Avg Thpt\n(tok/s)': ps.avg_output_tps,
+            'Mean Req E2E\n(tok/s)': ps.avg_output_tps,
             'Avg In\nTok': ps.avg_input_tokens,
             'Avg Out\nTok': ps.avg_output_tokens,
         }
