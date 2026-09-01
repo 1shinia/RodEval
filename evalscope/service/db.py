@@ -83,7 +83,7 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 18  # Bump when adding migrations below
+SCHEMA_VERSION = 19  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -382,6 +382,19 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
                   )
             ) THEN RAISE(ABORT, 'task registry conflict for task state') END;
         END;
+    '''
+    ),
+    (
+        19, 'add password reset tokens table', '''
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            token       TEXT PRIMARY KEY,
+            user_id     INTEGER NOT NULL,
+            expires_at  TEXT NOT NULL,
+            used        INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user
+            ON password_reset_tokens(user_id);
     '''
     ),
 ]

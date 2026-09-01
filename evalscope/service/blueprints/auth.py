@@ -2,6 +2,7 @@
 
 import datetime
 import os
+import secrets
 import sqlite3
 import threading
 import time
@@ -564,4 +565,87 @@ def reset_password(user_id: int):
         'UPDATE users SET password_hash = ? WHERE id = ? AND deleted_at IS NULL', (pw_hash, user_id)).rowcount)
     if updated == 0:
         return jsonify({'error': '用户不存在'}), 404
+    return jsonify({'ok': True}), 200
+
+
+_RESET_TOKEN_TTL_HOURS = int(os.environ.get('RESET_TOKEN_TTL_HOURS', '24'))
+
+
+@bp_auth.route('/users/<int:user_id>/reset-token', methods=['POST'])
+def create_reset_token(user_id: int):
+    """Generate a one-time password reset token for a user (admin only).
+
+    Invalidate any previous unused tokens for the user so only the newest one
+    is valid; also opportunistically purge expired tokens.
+    """
+    admin = _require_admin()
+    if admin is None:
+        return jsonify({'error': 'Admin access required'}), 403
+    conn = _get_conn()
+    user = conn.execute(
+        'SELECT id, username FROM users WHERE id = ? AND deleted_at IS NULL', (user_id,)
+    ).fetchone()
+    if user is None:
+        return jsonify({'error': '用户不存在'}), 404
+
+    token = secrets.token_urlsafe(32)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_at = (now + datetime.timedelta(hours=_RESET_TOKEN_TTL_HOURS)).isoformat()
+
+    def _op(c):
+        c.execute('DELETE FROM password_reset_tokens WHERE expires_at < ?', (now.isoformat(),))
+        c.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', (user_id,))
+        c.execute(
+            'INSERT INTO password_reset_tokens (token, user_id, expires_at, used, created_at) '
+            'VALUES (?, ?, ?, 0, ?)',
+            (token, user_id, expires_at, now.isoformat()),
+        )
+    _write(_op)
+
+    return jsonify({'token': token, 'expires_at': expires_at}), 201
+
+
+@bp_auth.route('/reset-password', methods=['POST'])
+def reset_password_with_token():
+    """Reset a user's password using a one-time reset token (public).
+
+    The token must be unused and unexpired, and the target user must still be
+    active.  Every invalid-token case returns the same message so this endpoint
+    does not leak whether a token or user exists.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+    token = (data.get('token') or '').strip()
+    password = (data.get('password') or '').strip()
+    if not token or not password:
+        return jsonify({'error': 'token and password are required'}), 400
+    if len(password) < 6:
+        return jsonify({'error': '新密码至少6个字符'}), 400
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    conn = _get_conn()
+    row = conn.execute(
+        'SELECT user_id FROM password_reset_tokens '
+        'WHERE token = ? AND used = 0 AND expires_at > ?',
+        (token, now),
+    ).fetchone()
+    if row is None:
+        return jsonify({'error': '链接无效或已过期'}), 400
+    user_id = row['user_id']
+    user = conn.execute(
+        'SELECT id FROM users WHERE id = ? AND deleted_at IS NULL', (user_id,)
+    ).fetchone()
+    if user is None:
+        return jsonify({'error': '链接无效或已过期'}), 400
+
+    pw_hash = generate_password_hash(password)
+
+    def _op(c):
+        c.execute('UPDATE users SET password_hash = ? WHERE id = ?', (pw_hash, user_id))
+        c.execute('UPDATE password_reset_tokens SET used = 1 WHERE token = ?', (token,))
+    _write(_op)
+
+    with _user_cache_lock:
+        _user_cache.pop(user_id, None)
     return jsonify({'ok': True}), 200
