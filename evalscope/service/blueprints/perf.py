@@ -61,6 +61,10 @@ bp_perf = Blueprint('perf', __name__, url_prefix='/api/v1/perf')
 BATCH_CSV_TEMPLATE = os.path.join(os.path.dirname(OUTPUT_DIR), 'data', 'model_list.csv')
 BATCH_UPLOAD_DIR = os.path.join(OUTPUT_DIR, '_batch_uploads')
 
+# Uploaded batch CSVs carry model api_keys in plaintext; cap the size to bound
+# the in-memory parse (memory DoS guard), mirroring eval.py's batch upload.
+MAX_BATCH_CSV_BYTES = 5 * 1024 * 1024
+
 
 def _write_owner_marker(task_dir: str, user_id: int) -> None:
     """Persist task ownership next to the task directory (survives meta.db loss)."""
@@ -134,8 +138,17 @@ def upload_batch_csv():
     if not f.filename or not f.filename.lower().endswith('.csv'):
         return jsonify({'error': 'Only .csv files are accepted'}), 400
 
+    # Reject an oversized upload before buffering its bytes, using the part's
+    # Content-Length when present; the post-read check covers the case where it
+    # is absent or untrustworthy.
+    if f.content_length is not None and f.content_length > MAX_BATCH_CSV_BYTES:
+        return jsonify({'error': 'CSV 文件过大（上限 5MB）'}), 413
+    raw = f.read()
+    if len(raw) > MAX_BATCH_CSV_BYTES:
+        return jsonify({'error': 'CSV 文件过大（上限 5MB）'}), 413
+
     import csv as csv_mod
-    content = f.read().decode('utf-8-sig')
+    content = raw.decode('utf-8-sig')
     reader = csv_mod.DictReader(content.splitlines())
 
     rows = []
@@ -167,6 +180,11 @@ def upload_batch_csv():
     saved_path = os.path.join(BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     with open(saved_path, 'w', encoding='utf-8') as outf:
         outf.write(content)
+    # Record the uploader so launch/status/stop can enforce ownership.  A
+    # marker file (rather than the in-memory state) survives a service restart.
+    from .auth import get_current_user_id
+    with open(saved_path + '.owner', 'w', encoding='utf-8') as of:
+        of.write(str(get_current_user_id()))
 
     return jsonify({
         'batch_id': batch_id,
@@ -185,16 +203,34 @@ def launch_batch_perf():
     """
     import csv as csv_mod
     import threading
-    from .auth import get_current_user_id
 
     data = request.get_json()
     if not data or not data.get('batch_id'):
         return jsonify({'error': 'batch_id is required'}), 400
 
     batch_id = data['batch_id']
+    try:
+        validate_task_id(batch_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    from .auth import get_current_user_id, get_current_role
+    current_uid = get_current_user_id()
+
     csv_path = os.path.join(BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     if not os.path.isfile(csv_path):
         return jsonify({'error': f'Batch file not found: {batch_id}. Please re-upload.'}), 404
+
+    # Ownership: only the uploader (or an admin) may launch this batch.  A
+    # missing marker (legacy/manual file) is treated as admin-only.
+    if get_current_role() != 'admin':
+        try:
+            with open(csv_path + '.owner', encoding='utf-8') as of:
+                owner_uid = int(of.read().strip())
+        except (OSError, ValueError):
+            owner_uid = None
+        if owner_uid != current_uid:
+            return jsonify({'error': 'Batch not found'}), 404
 
     if batch_id in _batch_state and _batch_state[batch_id].get('status') == 'running':
         return jsonify({'error': 'Batch already running'}), 409
@@ -209,6 +245,7 @@ def launch_batch_perf():
 
     state = {
         'batch_id': batch_id,
+        'user_id': current_uid,
         'status': 'running',
         'total': total,
         'completed': 0,
@@ -222,7 +259,7 @@ def launch_batch_perf():
 
     # Capture user_id for the background thread
     shared_config = {
-        'user_id': get_current_user_id(),
+        'user_id': current_uid,
         'parallel': data.get('parallel', [1]),
         'number': data.get('number', [10]),
         'rate': data.get('rate'),
@@ -491,6 +528,9 @@ def get_batch_status(batch_id: str):
     state = _batch_state.get(batch_id)
     if not state:
         return jsonify({'error': 'Batch not found'}), 404
+    from .auth import get_current_role, get_current_user_id
+    if get_current_role() != 'admin' and int(state.get('user_id', 0)) != int(get_current_user_id()):
+        return jsonify({'error': 'Batch not found'}), 404
     return jsonify({
         'batch_id': batch_id,
         'status': state['status'],
@@ -509,6 +549,9 @@ def stop_batch_perf(batch_id: str):
     """Request cancellation of a running batch test."""
     state = _batch_state.get(batch_id)
     if not state:
+        return jsonify({'error': 'Batch not found'}), 404
+    from .auth import get_current_role, get_current_user_id
+    if get_current_role() != 'admin' and int(state.get('user_id', 0)) != int(get_current_user_id()):
         return jsonify({'error': 'Batch not found'}), 404
     if state['status'] != 'running':
         return jsonify({'error': f'Batch is not running (status: {state["status"]})'}), 400
@@ -862,6 +905,7 @@ def launch_performance_test():
             'max': max_perf,
         }), 429
 
+    thread_started = False
     try:
         api_type = data.get('api', 'openai')
         required_fields = ['model']
@@ -945,17 +989,24 @@ def launch_performance_test():
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()
+        thread_started = True
 
         return jsonify({'task_id': task_id, 'status': 'launched'}), 202
 
     except Exception as e:
-        unregister_process(task_id)
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] [{task_id}] Launch setup failed: {e}', exc_info=True)
         return jsonify({
             'status': 'error', 'task_id': task_id,
             'error': 'Failed to start performance test', 'error_id': error_id,
         }), 500
+    finally:
+        # Release the reserved slot on every path that did NOT hand off to the
+        # background thread (e.g. missing required field). The success path sets
+        # thread_started=True and the background thread's own finally releases
+        # the slot after the benchmark finishes.
+        if not thread_started:
+            unregister_process(task_id)
 
 
 @bp_perf.route('/stop', methods=['POST'])

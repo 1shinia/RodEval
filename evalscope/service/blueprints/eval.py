@@ -748,6 +748,7 @@ def launch_evaluation():
         }), 429
 
     launch_result: LaunchResult | None = None
+    thread_started = False
     try:
         model_source = data.get('model_source')
         if model_source == ModelSource.LOCAL:
@@ -838,19 +839,26 @@ def launch_evaluation():
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()
+        thread_started = True
 
         return jsonify({'task_id': task_id, 'status': 'launched'}), 202
 
     except Exception as e:
         if launch_result:
             launcher_stop(launch_result)
-        unregister_process(task_id)
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] [{task_id}] Launch setup failed: {e}', exc_info=True)
         return jsonify({
             'status': 'error', 'task_id': task_id,
             'error': 'Failed to start evaluation', 'error_id': error_id,
         }), 500
+    finally:
+        # Release the reserved slot on every path that did NOT hand off to the
+        # background thread (early validation 400s, model-launch 500). The
+        # success path sets thread_started=True and the background thread's own
+        # finally releases the slot after the task finishes.
+        if not thread_started:
+            unregister_process(task_id)
 
 
 @bp_eval.route('/resume/invoke', methods=['POST'])
