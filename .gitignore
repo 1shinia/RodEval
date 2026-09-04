@@ -175,3 +175,6 @@ ragas_mini_testset_score.json
 eval_results.db
 evalscope/service/eval_db.sqlite
 evalscope/service/eval_results.db
+
+# Cursor 编辑器本地配置，不入仓库
+.cursor/

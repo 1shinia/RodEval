@@ -4,7 +4,7 @@ import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
 import Collapsible from '@/components/ui/Collapsible'
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS, inputClass } from '@/components/ui/formStyles'
-import { getTemplateDownloadUrl, uploadBatchCsv, runBatchPerf } from '@/api/perf'
+import { getTemplateDownloadUrl, uploadBatchCsv } from '@/api/perf'
 import type { BatchUploadResponse } from '@/api/perf'
 
 interface Props {
@@ -43,11 +43,8 @@ interface SlaRule {
 
 export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit, onModeChange }: Props) {
   const { t } = useLocale()
-  const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
   const [testMode, setTestMode] = useState<'single' | 'batch'>('single')
-  const isLocal = modelSource === 'local'
   const isBatch = testMode === 'batch'
-  const modelManualRef = useRef(false)
 
   // OpenAI API fields
   const [model, setModel] = useState('')
@@ -55,25 +52,8 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   const [apiKey, setApiKey] = useState('')
   const [api, setApi] = useState('openai')
 
-  // Clear mode-specific fields when switching model source
-  useEffect(() => {
-    setModel('')
-    if (isLocal) {
-      setUrl('')
-      setApiKey('')
-      setApi('openai')
-    } else {
-      setModelPath('')
-      setBackend('auto')
-    }
-  }, [isLocal])  // eslint-disable-line react-hooks/exhaustive-deps
-
   // Sync API key to parent for resume
   useEffect(() => { onApiKeyChange?.(apiKey) }, [apiKey, onApiKeyChange])
-
-  // Local model fields
-  const [modelPath, setModelPath] = useState('')
-  const [backend, setBackend] = useState('auto')
 
   // Common fields
   const [parallel, setParallel] = useState('1')
@@ -88,7 +68,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   const [datasetPath, setDatasetPath] = useState('')
   const [maxPromptLen, setMaxPromptLen] = useState('')
   const [minPromptLen, setMinPromptLen] = useState('')
-  const [tokenizerPath, setTokenizerPath] = useState('')
   const [prefixLength, setPrefixLength] = useState('')
   const [thinkingMode, setThinkingMode] = useState('auto')
   const [extraArgs, setExtraArgs] = useState('')
@@ -158,13 +137,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Auto-fill model name from path for local models
-  useEffect(() => {
-    if (!isLocal || !modelPath || modelManualRef.current) return
-    const name = modelPath.split('/').pop() || ''
-    if (name) setModel(name)
-  }, [modelPath, isLocal])
-
   const buildSharedConfig = (): Record<string, unknown> => {
     const config: Record<string, unknown> = {
       parallel: parallel.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
@@ -181,7 +153,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     if (maxPromptLen) config.max_prompt_length = Number(maxPromptLen)
     if (minPromptLen) config.min_prompt_length = Number(minPromptLen)
     if (prefixLength) config.prefix_length = Number(prefixLength)
-    if (tokenizerPath) config.tokenizer_path = tokenizerPath
     if (thinkingMode !== 'auto') {
       config.extra_args = { enable_thinking: thinkingMode === 'on' }
     }
@@ -225,16 +196,12 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
 
     // Single mode validation
     const newErrors: Record<string, string> = {}
-    if (isLocal) {
-      if (!modelPath.trim()) newErrors.modelPath = 'Required'
-    } else {
-      if (!model.trim()) newErrors.model = 'Required'
-      if (!url.trim()) newErrors.url = 'Required'
-      if (!apiKey.trim()) newErrors.apiKey = 'Required'
-    }
+    if (!model.trim()) newErrors.model = 'Required'
+    if (!url.trim()) newErrors.url = 'Required'
+    if (!apiKey.trim()) newErrors.apiKey = 'Required'
 
     // URL format
-    if (!isLocal && url.trim()) {
+    if (url.trim()) {
       try {
         const u = new URL(url.trim())
         if (!['http:', 'https:'].includes(u.protocol)) {
@@ -311,24 +278,10 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
 
     const config = buildSharedConfig()
 
-    if (isLocal) {
-      config.model = modelPath
-      config.model_path = modelPath
-      if (backend === 'auto') {
-        config.api = 'local'
-      } else if (backend === 'vllm') {
-        config.api = 'local_vllm'
-      } else {
-        config.api = 'local'
-      }
-      if (tokenizerPath) config.tokenizer_path = tokenizerPath
-    } else {
-      config.model = model
-      config.api = api
-      config.url = url.trim()
-      if (apiKey) config.api_key = apiKey
-      if (tokenizerPath) config.tokenizer_path = tokenizerPath
-    }
+    config.model = model
+    config.api = api
+    config.url = url.trim()
+    if (apiKey) config.api_key = apiKey
 
     if (extraArgs.trim()) {
       try { config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), ...JSON.parse(extraArgs) } }
@@ -425,19 +378,13 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         </div>
       )}
 
-      {/* ── Model Source (single mode only) ── */}
+      {/* ── Model Source (single mode only) — API only ── */}
       {!isBatch && (
       <div className="flex items-center gap-6">
         <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="ms" value="openai" checked={!isLocal}
-            onChange={() => setModelSource('openai')} className="accent-[var(--accent)]" />
+          <input type="radio" name="ms" value="openai" checked readOnly className="accent-[var(--accent)]" />
           <span className="text-sm text-[var(--text)]">API</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="ms" value="local" checked={isLocal}
-            onChange={() => setModelSource('local')} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">{t('eval.modelSourceLocal')}</span>
         </label>
       </div>
       )}
@@ -445,7 +392,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* ── OpenAI API fields ── */}
-        {!isBatch && !isLocal && (<>
+        {!isBatch && (<>
           <FormField label={t('eval.modelName')} required error={errors.model}>
             <input
               value={model}
@@ -475,31 +422,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
 
           <FormField label={t('eval.apiKey')} required error={errors.apiKey}>
             <input type="password" value={apiKey} onChange={(e) => { setApiKey(e.target.value); if (errors.apiKey) setErrors((p) => ({ ...p, apiKey: '' })) }} className={inputClass(errors.apiKey)} placeholder="sk-..." />
-          </FormField>
-        </>)}
-
-        {/* ── Local model fields ── */}
-        {!isBatch && isLocal && (<>
-          <FormField label={t('eval.modelPath')} required error={errors.modelPath}>
-            <input value={modelPath}
-              onChange={(e) => { setModelPath(e.target.value); if (errors.modelPath) setErrors((p) => ({ ...p, modelPath: '' })) }}
-              className={inputClass(errors.modelPath)} placeholder="/data/models/qwen.gguf" />
-          </FormField>
-          <FormField label={t('eval.modelName')}>
-            <input value={model} onChange={(e) => { setModel(e.target.value); modelManualRef.current = true }} className={FORM_INPUT_CLASS}
-              placeholder={t('eval.modelNamePlaceholder')} />
-          </FormField>
-          <FormField label={t('eval.backend')}>
-            <select value={backend} onChange={(e) => setBackend(e.target.value)} className={FORM_INPUT_CLASS}>
-              <option value="auto">Auto Detect</option>
-              <option value="transformers">Transformers</option>
-              <option value="vllm">vLLM</option>
-              <option value="sglang">SGLang</option>
-              <option value="llama_cpp">llama.cpp</option>
-            </select>
-          </FormField>
-          <FormField label={t('perf.tokenizerPath')}>
-            <input value={tokenizerPath} onChange={(e) => setTokenizerPath(e.target.value)} className={FORM_INPUT_CLASS} placeholder="/data/models/Qwen3-8B/" />
           </FormField>
         </>)}
 

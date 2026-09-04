@@ -13,71 +13,6 @@ interface Props {
   context: EvalTabContext
 }
 
-interface ParamDef {
-  key: string
-  label: string
-  type: 'number' | 'select' | 'checkbox'
-  options?: string[]
-  step?: string
-  min?: number
-  max?: number
-  placeholder?: string
-  showWhen?: (b: string) => boolean
-}
-
-const BACKEND_PARAMS: Record<string, ParamDef[]> = {
-  llama_cpp: [
-    { key: 'n_ctx', label: 'eval.params.contextLength', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'n_threads', label: 'eval.params.threadCount', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-  ],
-  transformers: [
-    { key: 'precision', label: 'eval.params.precision', type: 'select', options: ['float16', 'bfloat16', 'float32', 'auto'] },
-    { key: 'device_map', label: 'eval.params.deviceMap', type: 'select', options: ['auto', 'cuda:0', 'cuda:1', 'cpu'] },
-    { key: 'attn_implementation', label: 'eval.params.attnImpl', type: 'select', options: ['sdpa', 'eager', 'flash_attention_2'] },
-    { key: 'trust_remote_code', label: 'eval.params.trustRemoteCode', type: 'checkbox' },
-  ],
-  vllm: [
-    { key: 'max_model_len', label: 'eval.params.contextLength', type: 'number', min: 1, placeholder: 'eval.params.defaultModelLen' },
-    { key: 'dtype', label: 'eval.params.precision', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
-    { key: 'quantization', label: 'eval.params.quantization', type: 'select', options: ['eval.params.none', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
-    { key: 'kv_cache_dtype', label: 'eval.params.kvCacheDtype', type: 'select', options: ['auto', 'fp8'] },
-    { key: 'tensor_parallel_size', label: 'eval.params.tensorParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultAutoGpu' },
-    { key: 'pipeline_parallel_size', label: 'eval.params.pipelineParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'data_parallel_size', label: 'eval.params.dataParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'expert_parallel_size', label: 'eval.params.expertParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'gpu_memory_utilization', label: 'eval.params.gpuMemUtil', type: 'number', min: 0, max: 1, step: '0.05', placeholder: 'eval.params.defaultVal' },
-    { key: 'max_num_seqs', label: 'eval.params.maxConcurrent', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'trust_remote_code', label: 'eval.params.trustRemoteCode', type: 'checkbox' },
-  ],
-  sglang: [
-    { key: 'context_length', label: 'eval.params.contextLength', type: 'number', min: 1, placeholder: 'eval.params.defaultModelLen' },
-    { key: 'dtype', label: 'eval.params.precision', type: 'select', options: ['auto', 'float16', 'bfloat16', 'float32'] },
-    { key: 'quantization', label: 'eval.params.quantization', type: 'select', options: ['eval.params.none', 'fp8', 'awq', 'gptq', 'marlin', 'gguf', 'bitsandbytes'] },
-    { key: 'kv_cache_dtype', label: 'eval.params.kvCacheDtype', type: 'select', options: ['auto', 'fp8'] },
-    { key: 'tp_size', label: 'eval.params.tensorParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultAutoGpu' },
-    { key: 'pp_size', label: 'eval.params.pipelineParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'dp_size', label: 'eval.params.dataParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'ep_size', label: 'eval.params.expertParallel', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'mem_fraction_static', label: 'eval.params.gpuMemUtil', type: 'number', min: 0, max: 1, step: '0.05', placeholder: 'eval.params.defaultVal' },
-    { key: 'max_running_requests', label: 'eval.params.maxConcurrent', type: 'number', min: 1, placeholder: 'eval.params.defaultVal' },
-    { key: 'trust_remote_code', label: 'eval.params.trustRemoteCode', type: 'checkbox' },
-  ],
-}
-
-const DEFAULT_PARAM_VALUES: Record<string, string> = {
-  n_ctx: '4096',
-  n_threads: '8',
-  precision: 'auto',
-  device_map: 'auto',
-  attn_implementation: 'sdpa',
-  dtype: 'auto',
-}
-
-function getParams(backend: string): ParamDef[] {
-  if (backend === 'auto') return []
-  return BACKEND_PARAMS[backend] || []
-}
-
 const ALL_LOCAL_TYPES = ['general_qa', 'general_mcq', 'general_fc', 'general_vqa', 'general_vmcq', 'general_arena', 'general_t2i', 'data_collection']
 const LOCAL_TYPE_LABEL: Record<string, string> = {
   general_qa: 'eval.datasetLocalTypeQA',
@@ -115,9 +50,8 @@ export default function LLMEvalForm({ context }: Props) {
     }
   }
 
-  // Model source
-  const [modelSource, setModelSource] = useState<'openai' | 'local'>('openai')
-  const isLocal = modelSource === 'local'
+  // Model source — API only. Local (backend / model-path) evaluation is not
+  // offered; the model is always reached through an OpenAI/Anthropic API.
 
   // OpenAI API
   const [model, setModel] = useState('')
@@ -125,28 +59,10 @@ export default function LLMEvalForm({ context }: Props) {
   const [apiKey, setApiKey] = useState('')
   const [evalType, setEvalType] = useState('openai')
 
-  // Clear mode-specific fields when switching model source
-  useEffect(() => {
-    setModel('')
-    if (isLocal) {
-      setApiUrl('')
-      setApiKey('')
-    } else {
-      setModelPath('')
-      setBackend('auto')
-    }
-  }, [isLocal]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // Notify parent of apiKey changes
   useEffect(() => {
     onApiKeyChange?.(apiKey)
   }, [apiKey, onApiKeyChange])
-
-  // Local model
-  const [modelPath, setModelPath] = useState('')
-  const [backend, setBackend] = useState('auto')
-  const [backendParamValues, setBackendParamValues] = useState<Record<string, string>>(DEFAULT_PARAM_VALUES)
-  const [showBackendOpts, setShowBackendOpts] = useState(false)
 
   // Dataset
   const [datasetHub, setDatasetHub] = useState('modelscope')
@@ -265,10 +181,6 @@ export default function LLMEvalForm({ context }: Props) {
     return name
   }
 
-  const setParam = (key: string, value: string) => {
-    setBackendParamValues((prev) => ({ ...prev, [key]: value }))
-  }
-
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
 
@@ -311,10 +223,9 @@ export default function LLMEvalForm({ context }: Props) {
 
     const newErrors: Record<string, string> = {}
 
-    if (!isLocal && !model.trim()) newErrors.model = 'Required'
-    if (isLocal && !modelPath.trim()) newErrors.modelPath = 'Required'
-    if (!isLocal && !apiUrl.trim()) newErrors.apiUrl = 'Required'
-    if (!isLocal && !apiKey.trim()) newErrors.apiKey = 'Required'
+    if (!model.trim()) newErrors.model = 'Required'
+    if (!apiUrl.trim()) newErrors.apiUrl = 'Required'
+    if (!apiKey.trim()) newErrors.apiKey = 'Required'
     if (isLocalDataset) {
       if (!datasetPath.trim()) newErrors.datasetPath = 'Required'
       if (!datasets.trim()) newErrors.datasets = 'Required'
@@ -323,7 +234,7 @@ export default function LLMEvalForm({ context }: Props) {
     }
 
     // URL format
-    if (!isLocal && apiUrl.trim()) {
+    if (apiUrl.trim()) {
       try {
         const u = new URL(apiUrl.trim())
         if (!['http:', 'https:'].includes(u.protocol)) {
@@ -371,37 +282,17 @@ export default function LLMEvalForm({ context }: Props) {
     setErrors({})
 
     const config: Record<string, unknown> = {
-      model_source: modelSource,
-      model: isLocal ? (model || modelPath.split('/').pop() || 'local-model') : model,
+      model_source: 'openai',
+      model,
       limit: limit ? Number(limit) : undefined,
       random_sample: limit && randomSample ? true : undefined,
       eval_batch_size: evalBatchSize ? Number(evalBatchSize) : undefined,
     }
 
-    // Model
-    if (isLocal) {
-      config.model_path = modelPath
-      config.backend = backend
-      const ba: Record<string, unknown> = {}
-      const params = getParams(backend)
-      for (const p of params) {
-        const val = backendParamValues[p.key]
-        if (val === '' || val === undefined) continue
-        if (p.type === 'checkbox') {
-          if (val === 'true') ba[p.key] = true
-        } else if (p.type === 'number') {
-          const n = Number(val)
-          if (!isNaN(n)) ba[p.key] = n
-        } else {
-          ba[p.key] = val
-        }
-      }
-      if (Object.keys(ba).length > 0) config.backend_args = ba
-    } else {
-      if (apiUrl) config.api_url = apiUrl.trim()
-      if (apiKey) config.api_key = apiKey
-      config.eval_type = evalType === 'anthropic' ? 'anthropic_api' : 'openai_api'
-    }
+    // Model (API)
+    if (apiUrl) config.api_url = apiUrl.trim()
+    if (apiKey) config.api_key = apiKey
+    config.eval_type = evalType === 'anthropic' ? 'anthropic_api' : 'openai_api'
 
     // Datasets
     if (isLocalDataset) {
@@ -430,14 +321,8 @@ export default function LLMEvalForm({ context }: Props) {
     if (Object.keys(genConfig).length > 0) config.generation_config = genConfig
     // Thinking mode
     if (thinkingMode !== 'auto') {
-      const enableThinking = thinkingMode === 'on'
-      if (isLocal) {
-        const ma = (config.model_args || {}) as Record<string, unknown>
-        config.model_args = { ...ma, enable_thinking: enableThinking }
-      } else {
-        genConfig.extra_body = { ...(genConfig.extra_body || {}), enable_thinking: enableThinking }
-        config.generation_config = genConfig
-      }
+      genConfig.extra_body = { ...(genConfig.extra_body || {}), enable_thinking: thinkingMode === 'on' }
+      config.generation_config = genConfig
     }
     if (seed && seed !== '42') config.seed = Number(seed)
     if (judgeStrategy && judgeStrategy !== 'auto') config.judge_strategy = judgeStrategy
@@ -510,118 +395,21 @@ export default function LLMEvalForm({ context }: Props) {
         </div>
       )}
 
-      {/* Model Source */}
+      {/* Model Source — API only.  Local (backend / model-path) evaluation is not
+        offered, so the model is always reached through an OpenAI/Anthropic API. */}
       {!isBatch && (<>
       <div className="flex items-center gap-6">
         <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="ms" value="openai" checked={!isLocal}
-            onChange={() => setModelSource('openai')} className="accent-[var(--accent)]" />
+          <input type="radio" name="ms" value="openai" checked readOnly className="accent-[var(--accent)]" />
           <span className="text-sm text-[var(--text)]">{t('eval.modelSourceOpenAI')}</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="ms" value="local" checked={isLocal}
-            onChange={() => setModelSource('local')} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">{t('eval.modelSourceLocal')}</span>
         </label>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-        {/* Local model fields */}
-        {isLocal && (<>
-          <FormField label={t('eval.modelPath')} required error={errors.modelPath}>
-            <input value={modelPath}
-              onChange={(e) => { setModelPath(e.target.value); if (errors.modelPath) setErrors((p) => ({ ...p, modelPath: '' })) }}
-              className={inputClass(errors.modelPath)} placeholder="/data/models/qwen.gguf" />
-          </FormField>
-          <FormField label={t('eval.modelName')}>
-            <input value={model} onChange={(e) => setModel(e.target.value)} className={FORM_INPUT_CLASS}
-              placeholder={modelPath ? modelPath.split('/').pop() || '' : t('eval.modelNamePlaceholder')} />
-          </FormField>
-          <FormField label={t('eval.backend')}>
-            <select value={backend} onChange={(e) => setBackend(e.target.value)} className={FORM_INPUT_CLASS}>
-              <option value="auto">{t('eval.backendAuto')}</option>
-              <option value="vllm">{t('eval.backendVllm')}</option>
-              <option value="sglang">{t('eval.backendSglang')}</option>
-              <option value="llama_cpp">{t('eval.backendLlamaCpp')}</option>
-              <option value="transformers">{t('eval.backendTransformers')}</option>
-            </select>
-          </FormField>
-          <div className="md:col-span-2">
-          {backend !== 'auto' && (
-            <>
-              <button type="button" onClick={() => setShowBackendOpts(!showBackendOpts)}
-                className="flex items-center gap-1 text-sm text-[var(--accent)] hover:underline cursor-pointer">
-                {t('eval.backendAdvanced')}
-                {showBackendOpts ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </button>
-              {showBackendOpts && (
-              <Card className="!p-0 mt-2">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3">
-                  {getParams(backend).map((p) => {
-                    const val = backendParamValues[p.key] || ''
-                    const label = t(p.label)
-                    const ph = p.placeholder ? t(p.placeholder, { v: DEFAULT_PARAM_VALUES[p.key] || '' }) : undefined
-                    if (p.type === 'checkbox') {
-                      return (
-                        <div key={p.key} className="flex items-end pb-0.5">
-                          <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] cursor-pointer">
-                            <input type="checkbox"
-                              checked={val === 'true'}
-                              onChange={(e) => setParam(p.key, e.target.checked ? 'true' : 'false')}
-                              className="accent-[var(--accent)]" />
-                            {label}
-                          </label>
-                        </div>
-                      )
-                    }
-                    if (p.type === 'select' && p.options) {
-                      return (
-                        <FormField key={p.key} label={label}>
-                          <select value={val}
-                            onChange={(e) => setParam(p.key, e.target.value)}
-                            className={FORM_INPUT_CLASS}>
-                            {p.options.map((opt) => (
-                              <option key={opt} value={opt === 'eval.params.none' ? '' : opt}>{opt.includes('eval.params.') ? t(opt) : opt}</option>
-                            ))}
-                          </select>
-                        </FormField>
-                      )
-                    }
-                    return (
-                      <FormField key={p.key} label={label}>
-                        <input type="number" step={p.step || '1'} min={p.min} max={p.max}
-                          value={val}
-                          onChange={(e) => {
-                            let v = e.target.value
-                            const isInt = !p.step
-                            if (isInt) {
-                              v = v.replace(/[^0-9]/g, '')
-                            } else {
-                              v = v.replace(/[^0-9.]/g, '')
-                              const parts = v.split('.')
-                              if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('')
-                            }
-                            if (v !== '' && p.min !== undefined && Number(v) < p.min) v = ''
-                            if (v !== '' && p.max !== undefined && Number(v) > p.max) v = String(p.max)
-                            setParam(p.key, v)
-                          }}
-                          className={FORM_INPUT_CLASS}
-                          placeholder={ph} />
-                      </FormField>
-                    )
-                  })}
-                </div>
-              </Card>
-            )}
-            </>
-            )}
-          </div>
-        </>)}
-
         {/* OpenAI API fields */}
-        {!isLocal && (<>
+        <>
           <FormField label={t('eval.modelName')} required error={errors.model}>
             <input value={model}
               onChange={(e) => { setModel(e.target.value.trimStart()); if (errors.model) setErrors((p) => ({ ...p, model: '' })) }}
@@ -643,7 +431,7 @@ export default function LLMEvalForm({ context }: Props) {
               onChange={(e) => { setApiKey(e.target.value); if (errors.apiKey) setErrors((p) => ({ ...p, apiKey: '' })) }}
               className={inputClass(errors.apiKey)} placeholder="sk-..." />
           </FormField>
-        </>)}
+        </>
 
       </div>
       </>)}
