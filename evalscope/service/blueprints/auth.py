@@ -347,6 +347,100 @@ def check_task_artifact_access(task_id: str, tables: tuple[str, ...]) -> bool:
     )
 
 
+# ---------------------------------------------------------------------------
+# Login brute-force protection
+#
+# Failures are counted per (client IP, username) pair: an attacker hammering
+# one account gets locked out, while other users behind the same NAT are not
+# affected.  State is per-process memory (no DB migration): a restart merely
+# grants the attacker a fresh attempt window, which is acceptable here, and
+# keeps the hot login path free of SQLite writes.
+#
+# Tunables (env vars):
+#   LOGIN_MAX_ATTEMPTS     failures within the window that trigger a lockout
+#   LOGIN_WINDOW_SECONDS   sliding window in which failures are counted
+#   LOGIN_LOCKOUT_SECONDS  how long the (IP, username) pair stays locked
+# ---------------------------------------------------------------------------
+_LOGIN_MAX_ATTEMPTS = int(os.environ.get('LOGIN_MAX_ATTEMPTS', '5'))
+_LOGIN_WINDOW_SECONDS = int(os.environ.get('LOGIN_WINDOW_SECONDS', '300'))
+_LOGIN_LOCKOUT_SECONDS = int(os.environ.get('LOGIN_LOCKOUT_SECONDS', '300'))
+
+_login_guard = threading.Lock()
+_login_failures: dict[str, list[float]] = {}   # key -> failure timestamps
+_login_locks: dict[str, float] = {}            # key -> lock expiry (epoch)
+
+# Same trust rule as the access log in app.py: X-Forwarded-For is honoured
+# only when the direct peer is a known reverse proxy, so external clients
+# cannot spoof their rate-limit identity with a forged header.
+_LOGIN_TRUSTED_PROXIES = set(
+    p.strip() for p in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',') if p.strip()
+)
+
+# Pre-computed hash used to equalise response timing when the username does
+# not exist, so latency does not reveal whether an account is registered.
+_DUMMY_PASSWORD_HASH = generate_password_hash('brute-force-timing-dummy')
+
+
+def _login_client_ip() -> str:
+    remote = request.remote_addr or ''
+    if remote in _LOGIN_TRUSTED_PROXIES:
+        return (
+            request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+            or request.headers.get('X-Real-IP', '') or remote or '-'
+        )
+    return remote or '-'
+
+
+def _login_guard_key(ip: str, username: str) -> str:
+    return f'{ip}|{username.lower()}'
+
+
+def _check_login_locked(ip: str, username: str) -> tuple[bool, int]:
+    """Return (locked, retry_after_seconds) for this (IP, username) pair."""
+    now = time.time()
+    key = _login_guard_key(ip, username)
+    with _login_guard:
+        expiry = _login_locks.get(key)
+        if expiry is None:
+            return False, 0
+        if expiry <= now:
+            _login_locks.pop(key, None)
+            return False, 0
+        return True, int(expiry - now) + 1
+
+
+def _record_login_failure(ip: str, username: str) -> None:
+    """Count a failed attempt; lock the pair out once the budget is spent."""
+    now = time.time()
+    key = _login_guard_key(ip, username)
+    with _login_guard:
+        window_start = now - _LOGIN_WINDOW_SECONDS
+        stamps = [t for t in _login_failures.get(key, []) if t > window_start]
+        stamps.append(now)
+        if len(stamps) >= _LOGIN_MAX_ATTEMPTS:
+            _login_locks[key] = now + _LOGIN_LOCKOUT_SECONDS
+            _login_failures.pop(key, None)
+            logger.warning(
+                f'Login brute-force guard: locked out {key!r} for '
+                f'{_LOGIN_LOCKOUT_SECONDS}s after {len(stamps)} failed attempts'
+            )
+        else:
+            _login_failures[key] = stamps
+        # Opportunistic prune so a spray of random usernames cannot grow
+        # the dict without bound.
+        if len(_login_failures) > 10000:
+            for k in [k for k, v in _login_failures.items() if not any(t > window_start for t in v)]:
+                _login_failures.pop(k, None)
+
+
+def _clear_login_failures(ip: str, username: str) -> None:
+    """Reset the failure budget after a successful login."""
+    key = _login_guard_key(ip, username)
+    with _login_guard:
+        _login_failures.pop(key, None)
+        _login_locks.pop(key, None)
+
+
 @bp_auth.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -407,10 +501,28 @@ def login():
     if not username or not password:
         return jsonify({'error': 'username and password are required'}), 400
 
+    client_ip = _login_client_ip()
+
+    # Locked pairs are rejected outright — even with the correct password —
+    # so a brute-force attempt cannot probe further until the lock expires.
+    locked, retry_after = _check_login_locked(client_ip, username)
+    if locked:
+        response = jsonify({'error': f'尝试次数过多，请 {retry_after} 秒后再试'})
+        response.headers['Retry-After'] = str(retry_after)
+        return response, 429
+
     user = _user_by_username(username)
-    if not user or not check_password_hash(user['password_hash'], password):
+    if user is None:
+        # Burn the same hash-check time as a real account so response latency
+        # does not reveal whether the username exists.
+        check_password_hash(_DUMMY_PASSWORD_HASH, password)
+        _record_login_failure(client_ip, username)
+        return jsonify({'error': '用户名或密码错误'}), 401
+    if not check_password_hash(user['password_hash'], password):
+        _record_login_failure(client_ip, username)
         return jsonify({'error': '用户名或密码错误'}), 401
 
+    _clear_login_failures(client_ip, username)
     token = _create_token(user)
     response = jsonify({
         'token': token,
