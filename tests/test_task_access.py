@@ -91,3 +91,22 @@ def test_task_state_table_also_checked(meta_db):
     conn.commit()
     assert task_artifact_owned_by('eval_running', ('eval_reports', 'task_state'), user_id=3, is_admin=False, output_dir='') is True
     assert task_artifact_owned_by('eval_running', ('eval_reports', 'task_state'), user_id=2, is_admin=False, output_dir='') is False
+
+
+def test_task_registry_authorizes_unfinished_owner(meta_db):
+    """Interrupted tasks may have registry ownership before any result row."""
+    _, db = meta_db
+    conn = db._get_conn()
+    conn.execute(
+        "INSERT INTO task_registry(task_id, task_kind, user_id, created_at) "
+        "VALUES ('eval_unfinished', 'eval', 2, '2026-01-01')"
+    )
+    conn.commit()
+    assert task_artifact_owned_by(
+        'eval_unfinished', ('task_registry', 'task_state', 'eval_reports'),
+        user_id=2, is_admin=False, output_dir=''
+    ) is True
+    assert task_artifact_owned_by(
+        'eval_unfinished', ('task_registry', 'task_state', 'eval_reports'),
+        user_id=3, is_admin=False, output_dir=''
+    ) is False

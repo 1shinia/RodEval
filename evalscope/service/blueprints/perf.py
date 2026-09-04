@@ -27,6 +27,55 @@ from ..utils import (
 
 logger = get_logger()
 
+_TERMINAL_PROGRESS_STATUSES = {'completed', 'error', 'stopped', 'cancelled', 'failed'}
+
+
+def _resume_safe_perf_config(data: dict) -> dict:
+    """Return a recursively redacted config safe to persist for retry/resume.
+
+    The service previously removed only a top-level ``api_key`` field while
+    preserving credentials embedded in custom headers (for example
+    ``Authorization`` or ``X-API-Key``).  Keep non-sensitive request settings
+    intact but drop common secret-bearing keys at any nesting depth.
+    """
+    sensitive_exact = {
+        'api_key',
+        'apikey',
+        'authorization',
+        'proxy_authorization',
+        'cookie',
+        'set_cookie',
+        'password',
+        'secret',
+        'token',
+        'access_token',
+        'refresh_token',
+        'x_api_key',
+        'x_auth_token',
+    }
+
+    def _is_sensitive_key(key: object) -> bool:
+        normalized = str(key).strip().lower().replace('-', '_')
+        return (
+            normalized in sensitive_exact
+            or normalized.endswith('_api_key')
+            or normalized.endswith('_token')
+            or normalized.endswith('_access_token')
+            or normalized.endswith('_refresh_token')
+            or normalized.endswith('_password')
+            or normalized.endswith('_secret')
+            or normalized.endswith('_secret_key')
+        )
+
+    def _clean(value):
+        if isinstance(value, dict):
+            return {k: _clean(v) for k, v in value.items() if not _is_sensitive_key(k)}
+        if isinstance(value, list):
+            return [_clean(v) for v in value]
+        return value
+
+    return _clean(dict(data))
+
 
 def _build_perf_table(result, api_type: str = None) -> str:
     """Build a Markdown pipe-table from perf benchmark results with Chinese headers.
@@ -87,27 +136,46 @@ def _metadata_task_id(task_ref: str) -> str:
 
 
 def _mark_perf_completed(task_id: str) -> None:
-    """Write a ``completed`` progress.json marker for a finished perf task.
+    """Persist terminal completion for both perf progress and retention.
 
-    Perf task dirs do not otherwise write progress.json, so the startup
-    retention cleanup (log.py ``cleanup_old_task_logs``) treats every perf
-    dir as incomplete and deletes it after the 7-day retention window.
-    This marker aligns perf dirs with completed eval dirs, which are kept
-    forever. Called after a perf task finishes successfully.
+    The live perf tracker writes ``<task>/perf/progress.json`` while startup
+    retention checks ``<task>/progress.json``.  Update the canonical live file
+    without discarding its counters, and also write a lightweight root marker
+    so completed perf tasks are not later treated as incomplete log folders.
     """
 
     try:
-        pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
-        os.makedirs(os.path.dirname(pj), exist_ok=True)
-        tmp = f'{pj}.tmp'
+        updated_at = utc_now_iso()
+        live_pj = os.path.join(OUTPUT_DIR, task_id, 'perf', 'progress.json')
+        os.makedirs(os.path.dirname(live_pj), exist_ok=True)
+        live_data = {}
+        if os.path.isfile(live_pj):
+            try:
+                with open(live_pj, encoding='utf-8') as f:
+                    live_data = json.load(f)
+            except (OSError, ValueError, json.JSONDecodeError):
+                live_data = {}
+        live_data.update({
+            'status': 'completed',
+            'phase': 'completed',
+            'pipeline': 'perf',
+            'updated_at': updated_at,
+        })
+        tmp = f'{live_pj}.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(live_data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, live_pj)
+
+        retention_pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+        tmp = f'{retention_pj}.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump({
                 'status': 'completed',
                 'phase': 'completed',
                 'pipeline': 'perf',
-                'updated_at': utc_now_iso(),
+                'updated_at': updated_at,
             }, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, pj)
+        os.replace(tmp, retention_pj)
     except Exception as e:
         logger.warning(f'[{task_id}] Failed to write perf completion marker: {e}')
 
@@ -411,7 +479,7 @@ def launch_batch_perf():
                         perf_args.read_timeout = 300
 
                     os.makedirs(perf_args.outputs_dir, exist_ok=True)
-                    save_data = {k: v for k, v in perf_data.items() if k != 'api_key'}
+                    save_data = _resume_safe_perf_config(perf_data)
                     config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
                     with open(config_file, 'w') as cf:
                         json.dump(save_data, cf, ensure_ascii=False)
@@ -611,11 +679,13 @@ def list_perf_tasks():
     if not os.path.isdir(root):
         return jsonify({'tasks': [], 'root_path': root, 'error': f'Directory not found: {root}'}), 200
 
+    from .auth import get_current_role, get_current_user_id
+    current_uid = get_current_user_id()
+    current_is_admin = get_current_role() == 'admin'
+
     # --- Try SQLite first ---
     try:
         from .. import db as _db
-        from .auth import get_current_user_id
-        current_uid = get_current_user_id()
         removed = _db.cleanup_perf_tasks(root, user_id=current_uid)
         if removed:
             logger.info(f'Cleaned up {removed} stale perf task(s) from DB')
@@ -653,6 +723,20 @@ def list_perf_tasks():
         perf_dir = os.path.join(task_dir, 'perf')
         if not os.path.isdir(task_dir) or not os.path.isdir(perf_dir):
             continue
+
+        # Filesystem fallback must remain fail-closed for tenant isolation.
+        # The durable .owner marker survives metadata DB failures.  Legacy
+        # directories without a marker remain visible only to admins, while an
+        # explicit marker owned by somebody else never grants admin bypass.
+        marker = os.path.join(task_dir, '.owner')
+        try:
+            with open(marker, encoding='utf-8') as f:
+                marker_uid = int(f.read().strip())
+            if marker_uid != current_uid:
+                continue
+        except (OSError, ValueError):
+            if not current_is_admin:
+                continue
 
         meta = {
             'task_id': entry,
@@ -800,10 +884,10 @@ def run_performance_test():
         if perf_args.read_timeout is None:
             perf_args.read_timeout = 300
 
-        # Save task config for resume capability (strip api_key for security)
+        # Save a resume-safe config with API keys/auth headers removed.
         os.makedirs(perf_args.outputs_dir, exist_ok=True)
         try:
-            save_data = {k: v for k, v in data.items() if k != 'api_key'}
+            save_data = _resume_safe_perf_config(data)
             config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
             with open(config_file, 'w') as f:
                 json.dump(save_data, f, ensure_ascii=False)
@@ -929,7 +1013,7 @@ def launch_performance_test():
 
         os.makedirs(perf_args.outputs_dir, exist_ok=True)
         try:
-            save_data = {k: v for k, v in data.items() if k != 'api_key'}
+            save_data = _resume_safe_perf_config(data)
             config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
             with open(config_file, 'w') as f:
                 json.dump(save_data, f, ensure_ascii=False)
@@ -1020,10 +1104,10 @@ def stop_performance_test():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
-    # Ownership: cannot stop another user's task
-    from .auth import check_task_ownership
-    allowed, _owner = check_task_ownership('task_state', task_id)
-    if not allowed:
+    # Registry/.owner authorization covers the startup window before
+    # task_state exists, so stop-before-spawn works for the owning user.
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'perf_tasks')):
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
 
     stopped = stop_process(task_id)
@@ -1061,7 +1145,12 @@ def resume_performance_test():
     work_dir = os.path.join(OUTPUT_DIR, task_id)
     config_file = os.path.join(work_dir, 'task_config.json')
 
-    # Check if task exists
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'perf_tasks')):
+        return jsonify({'error': f'Task not found or not resumable: {task_id}'}), 404
+
+    # Check for the resumable config only after authorization so one user's
+    # filesystem artifacts do not disclose task existence to another user.
     if not os.path.exists(config_file):
         return jsonify({'error': f'Task not found or not resumable: {task_id}'}), 404
 
@@ -1070,12 +1159,6 @@ def resume_performance_test():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
-
-    # Ownership: only the owner (or admin) may resume a task
-    from .auth import check_task_ownership
-    allowed, _owner = check_task_ownership('perf_tasks', task_id)
-    if not allowed:
-        return jsonify({'error': f'Task not found or not resumable: {task_id}'}), 404
 
     if not try_reserve_slot(task_id, 'perf', model=model, user_id=uid):
         max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
@@ -1105,6 +1188,18 @@ def resume_performance_test():
         # Re-inject API key (stripped from saved config for security)
         if api_key:
             saved_data['api_key'] = api_key
+
+        # Custom auth headers are also intentionally stripped from the saved
+        # config.  Allow callers to provide them again for a retry without
+        # persisting those secrets back to disk.
+        resume_headers = data.get('headers')
+        if resume_headers is not None:
+            if not isinstance(resume_headers, dict):
+                return jsonify({'error': 'headers must be an object'}), 400
+            existing_headers = saved_data.get('headers')
+            if not isinstance(existing_headers, dict):
+                existing_headers = {}
+            saved_data['headers'] = {**existing_headers, **resume_headers}
 
         # Build PerfArguments from saved config
         perf_args = PerfArguments.from_dict(saved_data)
@@ -1244,7 +1339,7 @@ def get_performance_report():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
         return jsonify({'error': 'Task not found'}), 404
 
     try:
@@ -1279,7 +1374,7 @@ def get_perf_sla():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
         return jsonify({'error': 'Task not found'}), 404
 
     try:
@@ -1316,7 +1411,7 @@ def get_performance_log():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
         return jsonify({'error': 'Task not found'}), 404
 
     start_line = request.args.get('start_line', type=int)
@@ -1348,7 +1443,7 @@ def stream_performance_log():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
         return jsonify({'error': 'Task not found'}), 404
     # Support resume: client can pass last_pos (byte offset) to skip already-seen content
     try:
@@ -1415,7 +1510,7 @@ def get_performance_progress():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
         return jsonify({'error': 'Task not found'}), 404
 
     try:
@@ -1461,7 +1556,7 @@ def stream_performance_progress():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('perf_tasks', 'task_state')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
         return jsonify({'error': 'Task not found'}), 404
 
     try:
@@ -1485,7 +1580,7 @@ def stream_performance_progress():
                         with open(progress_file, 'r') as f:
                             data = json.load(f)
                         yield f'data: {json.dumps(data)}\n\n'
-                        if data.get('percent', 0) >= 100:
+                        if str(data.get('status', '')).lower() in _TERMINAL_PROGRESS_STATUSES:
                             break
                     else:
                         idle_count += 1

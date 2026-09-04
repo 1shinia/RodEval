@@ -1022,6 +1022,7 @@ def _get_conn() -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 _TASK_ID_TABLES = ('eval_reports', 'perf_tasks', 'task_state')
+_TASK_OWNERSHIP_TABLES = _TASK_ID_TABLES + ('task_registry',)
 
 
 def _task_kind_for_type(task_type: str) -> str:
@@ -1247,14 +1248,18 @@ def checkpoint_db() -> dict:
 def _compute_total_num(report_list) -> int:
     """Sample count for a report list, shared by live eval and backfill.
 
-    Multi-metric reports (e.g. vendor verifiers) carry one entry per metric
-    whose ``num`` is the count of rows that triggered that validator (0 = not
-    triggered).  Summing them over-counts and treating any 0 row as "full
-    dataset" would wrongly yield the -1 sentinel.  Return the max positive
-    count, or -1 (全量, limits was null) only when nothing is > 0.
+    Each entry in ``report_list`` is a dataset/benchmark report.  Per-metric
+    de-duplication already happens inside :attr:`Report.num` (which takes the
+    max across metrics that score the same sample set), so the task-level
+    count must SUM positive report counts across benchmarks.  Taking the max
+    here under-counts multi-benchmark evaluations (e.g. 100 GSM8K + 200 MMLU
+    would incorrectly be shown as 200 instead of 300).
+
+    ``-1`` remains the legacy sentinel when no report exposes a positive
+    sample count.
     """
     positive = [r.num for r in report_list if (r.num or 0) > 0]
-    return max(positive) if positive else -1
+    return sum(positive) if positive else -1
 
 
 def _replace_eval_report_datasets(

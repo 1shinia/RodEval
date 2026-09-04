@@ -155,33 +155,42 @@ def create_app(outputs: str = None):
     except Exception as e:
         logger.debug(f'Startup log cleanup failed (non-fatal): {e}')
 
-    # --- Clean up orphaned sandbox containers from previous runs ----------
-    try:
-        import subprocess
-        orphaned = subprocess.run(
-            ['docker', 'ps', '-a', '-q', '--filter', 'name=sandbox-'],
-            capture_output=True, text=True, timeout=10
+    # --- Legacy Docker cleanup (disabled by default) -----------------------
+    # Historical startup cleanup matched containers only by a broad name or
+    # image pattern.  On a shared Docker host that can delete containers owned
+    # by unrelated services.  Keep the old behaviour behind an explicit
+    # compatibility opt-in until all sandbox creators attach EvalScope-owned
+    # labels that can be filtered safely.
+    if os.environ.get('EVALSCOPE_ENABLE_LEGACY_DOCKER_CLEANUP', '').strip().lower() in ('1', 'true', 'yes'):
+        logger.warning(
+            'EVALSCOPE_ENABLE_LEGACY_DOCKER_CLEANUP is enabled; startup Docker cleanup uses '
+            'broad name/image matching and should only be used on a dedicated Docker host.'
         )
-        if orphaned.stdout.strip():
-            ids = orphaned.stdout.strip().split()
-            subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
-            logger.info('Startup cleanup: removed %d orphaned sandbox container(s)', len(ids))
-    except Exception as e:
-        logger.debug(f'Startup sandbox cleanup failed (non-fatal): {e}')
+        try:
+            import subprocess
+            orphaned = subprocess.run(
+                ['docker', 'ps', '-a', '-q', '--filter', 'name=sandbox-'],
+                capture_output=True, text=True, timeout=10
+            )
+            if orphaned.stdout.strip():
+                ids = orphaned.stdout.strip().split()
+                subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
+                logger.info('Startup cleanup: removed %d orphaned sandbox container(s)', len(ids))
+        except Exception as e:
+            logger.debug(f'Startup sandbox cleanup failed (non-fatal): {e}')
 
-    # --- Clean up orphaned SWE-bench containers from previous runs ---------
-    try:
-        import subprocess
-        orphaned = subprocess.run(
-            ['docker', 'ps', '-a', '-q', '--filter', 'ancestor=swebench/sweb.eval.*'],
-            capture_output=True, text=True, timeout=10
-        )
-        if orphaned.stdout.strip():
-            ids = orphaned.stdout.strip().split()
-            subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
-            logger.info('Startup cleanup: removed %d orphaned SWE-bench container(s)', len(ids))
-    except Exception as e:
-        logger.debug(f'Startup SWE-bench cleanup failed (non-fatal): {e}')
+        try:
+            import subprocess
+            orphaned = subprocess.run(
+                ['docker', 'ps', '-a', '-q', '--filter', 'ancestor=swebench/sweb.eval.*'],
+                capture_output=True, text=True, timeout=10
+            )
+            if orphaned.stdout.strip():
+                ids = orphaned.stdout.strip().split()
+                subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
+                logger.info('Startup cleanup: removed %d orphaned SWE-bench container(s)', len(ids))
+        except Exception as e:
+            logger.debug(f'Startup SWE-bench cleanup failed (non-fatal): {e}')
 
     # --- API Key authentication (optional) --------------------------------
     # Set EVALSCOPE_API_KEY env var to enable.  When set, all /api/* requests

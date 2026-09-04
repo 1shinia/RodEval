@@ -37,6 +37,25 @@ logger = get_logger()
 
 bp_eval = Blueprint('eval', __name__, url_prefix='/api/v1/eval')
 
+_TERMINAL_PROGRESS_STATUSES = {'completed', 'error', 'stopped', 'cancelled', 'failed'}
+
+
+def _task_response_status_code(response) -> int:
+    """Return an HTTP status code from a Flask response or ``(response, code)`` tuple."""
+    if isinstance(response, tuple) and len(response) >= 2:
+        return int(response[1])
+    return int(getattr(response, 'status_code', 200))
+
+
+def _task_response_error(response) -> str:
+    """Extract the public error string from an eval task response when available."""
+    body = response[0] if isinstance(response, tuple) else response
+    try:
+        payload = body.get_json(silent=True) or {}
+    except Exception:
+        payload = {}
+    return str(payload.get('error') or 'Evaluation task failed')
+
 
 def _parse_mteb_results(work_dir: str) -> List:
     """Parse MTEB JSON results from results/ directory.
@@ -423,8 +442,9 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                 report_list = get_report_list([reports_dir])
             if report_list:
                 first = report_list[0]
-                # Sample count: max of positive per-metric counts, -1 (全量)
-                # only when none is > 0 (see db._compute_total_num).
+                # Sample count: Report.num already de-duplicates metrics within
+                # one benchmark; sum positive report counts across benchmarks.
+                # Fall back to -1 only when no report exposes a positive count.
                 total_num = _db._compute_total_num(report_list)
                 dataset_names = [r.dataset_name for r in report_list]
                 score_sum = sum(r.score for r in report_list if r.score is not None)
@@ -704,10 +724,11 @@ def run_evaluation():
 
         # ── Execute ────────────────────────────────────────────────────
         try:
-            use_direct = (
-                launch_result is not None
-                and (is_direct_eval_type(task_config.eval_type or '') or launch_result.api_url is not None)
-            )
+            # A local API server is already a separate process.  Keep the
+            # evaluation worker in its own subprocess as well so task_state,
+            # stop and resume semantics remain identical to remote-API evals.
+            # Only explicitly declared direct eval types may opt out.
+            use_direct = is_direct_eval_type(task_config.eval_type or '')
             return _execute_task(task_id, task_config, label='Task', use_direct=use_direct)
         finally:
             if launch_result:
@@ -811,10 +832,10 @@ def launch_evaluation():
         except Exception as e:
             logger.warning(f'[{task_id}] Failed to save task config: {e}')
 
-        use_direct = (
-            launch_result is not None
-            and (is_direct_eval_type(task_config.eval_type or '') or launch_result.api_url is not None)
-        )
+        # Do not force direct execution merely because a locally-launched
+        # backend exposes an API URL.  The model server and eval worker are
+        # intentionally separate processes so the worker can be stopped.
+        use_direct = is_direct_eval_type(task_config.eval_type or '')
 
         logger.info(f'[{task_id}] Launching: model={task_config.model} '
                     f'eval_type={task_config.eval_type} datasets={task_config.datasets}')
@@ -890,7 +911,14 @@ def resume_evaluation():
     config_file = os.path.join(work_dir, 'task_config.yaml')
     progress_file = os.path.join(work_dir, 'progress.json')
 
-    # Check if task exists
+    # Ownership is based on the durable task registry first, then running/
+    # result metadata and finally the .owner marker for legacy/startup races.
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'eval_reports')):
+        return jsonify({'error': f'Task not found: {task_id}'}), 404
+
+    # Check if task exists only after authorization to avoid leaking whether
+    # another user's resumable config is present.
     if not os.path.exists(config_file):
         return jsonify({'error': f'Task not found: {task_id}'}), 404
 
@@ -914,12 +942,6 @@ def resume_evaluation():
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
     model = ''  # We'll extract this from the config after loading
-
-    # Ownership: only the owner (or admin) may resume a task
-    from .auth import check_task_ownership
-    allowed, _owner = check_task_ownership('eval_reports', task_id)
-    if not allowed:
-        return jsonify({'error': f'Task not found: {task_id}'}), 404
 
     if not try_reserve_slot(task_id, 'eval', model=model, user_id=uid):
         max_eval = int(os.environ.get('MAX_EVAL_PER_USER', '2'))
@@ -975,10 +997,10 @@ def stop_evaluation():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
-    # Ownership: cannot stop another user's task
-    from .auth import check_task_ownership
-    allowed, _owner = check_task_ownership('task_state', task_id)
-    if not allowed:
+    # The registry/.owner marker also authorizes the startup window before a
+    # real subprocess has populated task_state, allowing stop-before-spawn.
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'eval_reports')):
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
 
     stopped = stop_process(task_id)
@@ -1012,6 +1034,10 @@ def get_evaluation_progress():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'eval_reports')):
+        return jsonify({'error': 'Task not found'}), 404
 
     try:
         validate_task_id(task_id)
@@ -1054,7 +1080,7 @@ def stream_evaluation_progress():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('task_state', 'eval_reports')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'eval_reports')):
         return jsonify({'error': 'Task not found'}), 404
 
     try:
@@ -1078,7 +1104,7 @@ def stream_evaluation_progress():
                         with open(progress_file, 'r') as f:
                             data = json.load(f)
                         yield f'data: {json.dumps(data)}\n\n'
-                        if data.get('percent', 0) >= 100 and data.get('status') == 'completed':
+                        if str(data.get('status', '')).lower() in _TERMINAL_PROGRESS_STATUSES:
                             break
                     else:
                         idle_count += 1
@@ -1116,7 +1142,7 @@ def get_evaluation_report():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('eval_reports', 'task_state')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'eval_reports', 'task_state')):
         return jsonify({'error': 'Task not found'}), 404
 
     try:
@@ -1148,7 +1174,7 @@ def get_evaluation_log():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('task_state', 'eval_reports')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'eval_reports')):
         return jsonify({'error': 'Task not found'}), 404
 
     start_line = request.args.get('start_line', type=int)
@@ -1180,7 +1206,7 @@ def stream_evaluation_log():
         return jsonify({'error': 'task_id is required'}), 400
 
     from .auth import check_task_artifact_access
-    if not check_task_artifact_access(task_id, ('task_state', 'eval_reports')):
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'eval_reports')):
         return jsonify({'error': 'Task not found'}), 404
     # Support resume: client can pass last_pos (byte offset) to skip already-seen content
     try:
@@ -1564,7 +1590,14 @@ def launch_eval_batch():
                     create_log_file(task_id, 'eval.log')
 
                     with app.app_context():
-                        _execute_task(task_id, task_config, label='Batch Eval', user_id=shared_config['user_id'])
+                        task_response = _execute_task(
+                            task_id,
+                            task_config,
+                            label='Batch Eval',
+                            user_id=shared_config['user_id'],
+                        )
+                    if _task_response_status_code(task_response) >= 400:
+                        raise RuntimeError(_task_response_error(task_response))
 
                     s['completed'] += 1
                     s['results'].append({

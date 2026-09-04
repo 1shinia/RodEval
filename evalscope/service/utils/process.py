@@ -33,6 +33,7 @@ class TaskInfo:
     user_id: int = 0
     start_time: float = field(default_factory=time.time)
     process: multiprocessing.Process | None = None
+    cancel_requested: bool = False
 
 
 _active_processes: dict[str, TaskInfo] = {}
@@ -169,37 +170,67 @@ def try_reserve_new_slot(task_id: str, task_type: str, model: str = '', user_id:
     return RESERVE_NEW_LIMIT
 
 
-def finalize_slot(task_id: str, proc: multiprocessing.Process) -> None:
+def finalize_slot(task_id: str, proc: multiprocessing.Process) -> bool:
     """Attach the real subprocess to a previously reserved slot.
 
-    If no placeholder exists (e.g. ``run_in_subprocess`` was called
-    without a prior ``try_reserve_slot``), a fresh entry is created.
+    Returns ``False`` when the placeholder was cancelled before the subprocess
+    could be attached.  In that case the just-created subprocess is terminated
+    immediately and must not be allowed to resurrect a task that the user has
+    already stopped.
+
+    If no placeholder exists (e.g. ``run_in_subprocess`` was called without a
+    prior ``try_reserve_slot``), a fresh entry is still created for backward
+    compatibility.  A stopped placeholder is deliberately kept in the
+    registry until the worker observes ``cancel_requested``, so the "missing
+    placeholder" case is no longer ambiguous with cancellation.
     """
+    cancelled = False
     with _active_lock:
         info = _active_processes.get(task_id)
         if info is not None:
-            info.process = proc
+            if info.cancel_requested:
+                cancelled = True
+            else:
+                info.process = proc
         else:
             # No placeholder — register fresh (backward compatible).
-            _active_processes[task_id] = TaskInfo(
+            info = TaskInfo(
                 task_id=task_id,
                 task_type='',
                 model='',
                 process=proc,
             )
+            _active_processes[task_id] = info
+
+    if cancelled:
+        logger.info(f'Task {task_id} was cancelled before subprocess registration; terminating new worker.')
+        try:
+            if proc.is_alive():
+                # At this point the child may not have reached os.setsid() yet,
+                # so terminate the process itself rather than its process group.
+                proc.terminate()
+                proc.join(timeout=3)
+                if proc.is_alive():
+                    proc.kill()
+                    proc.join(timeout=2)
+        except (ProcessLookupError, AttributeError):
+            pass
+        return False
+
     # Persist to SQLite
     try:
         from .. import db as _db
         _db.upsert_task_state(
             task_id=task_id,
-            task_type=info.task_type if info else '',
+            task_type=info.task_type,
             status='running',
             pid=proc.pid,
-            model=info.model if info else '',
-            user_id=info.user_id if info else 0,
+            model=info.model,
+            user_id=info.user_id,
         )
     except Exception as e:
         logger.debug(f'Failed to persist task state for {task_id}: {e}')
+    return True
 
 
 def unregister_process(task_id: str) -> None:
@@ -223,17 +254,23 @@ def stop_process(task_id: str) -> bool:
     are also terminated, preventing orphaned GPU workers or model servers.
     """
     with _active_lock:
-        info = _active_processes.pop(task_id, None)
+        info = _active_processes.get(task_id)
+        if info is not None:
+            # Keep the entry until the launching/executing thread reaches its
+            # normal unregister path.  This is the cancellation tombstone that
+            # closes the stop-before-spawn race with finalize_slot().
+            info.cancel_requested = True
     if info is None:
         return False
-    # Allow stopping placeholder tasks (process not yet attached):
-    # the subprocess will find no registry entry and exit cleanly.
+    # Allow stopping placeholder tasks (process not yet attached).  The
+    # placeholder intentionally remains registered with cancel_requested=True;
+    # finalize_slot() will terminate any subprocess that gets spawned after
+    # this point instead of re-registering it as a live task.
     if info.process is None:
         logger.info(f'Task {task_id} (placeholder) stopped by user.')
         try:
             from .. import db as _db
             _db.delete_task_state(task_id)
-            _db.release_task_id_reservation(task_id)
         except Exception:
             pass
         return True
@@ -367,7 +404,8 @@ def _run_in_subprocess_impl(func, *args, task_id=None, task_type='', model='', *
     if task_id:
         # If a placeholder was reserved by try_reserve_slot, attach the
         # real process to it; otherwise register a fresh entry.
-        finalize_slot(task_id, p)
+        if not finalize_slot(task_id, p):
+            raise RuntimeError(f'Task {task_id} was stopped before its subprocess started.')
 
     res = None
     # Poll for the result while the child is alive so we continuously drain

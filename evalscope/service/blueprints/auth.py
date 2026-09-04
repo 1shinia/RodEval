@@ -318,8 +318,8 @@ def check_task_ownership(table: str, task_id: str) -> tuple[bool, int | None]:
       - Row exists, belongs to someone else      -> denied
       - No row (unindexed/legacy directory)      -> admin only
     """
-    from ..db import _TASK_ID_TABLES, _get_conn
-    if table not in _TASK_ID_TABLES:
+    from ..db import _TASK_OWNERSHIP_TABLES, _get_conn
+    if table not in _TASK_OWNERSHIP_TABLES:
         raise ValueError(f'Unsupported task table: {table}')
     uid = get_current_user_id()
     row = _get_conn().execute(

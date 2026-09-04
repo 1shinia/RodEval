@@ -24,7 +24,7 @@ def task_artifact_owned_by(
     example while it is starting), the durable ``.owner`` marker is used.
     Legacy directories with neither metadata nor marker are admin-only.
     """
-    from .db import _TASK_ID_TABLES, _get_conn
+    from .db import _TASK_OWNERSHIP_TABLES, _get_conn
     from .utils.log import validate_task_id
 
     try:
@@ -34,7 +34,7 @@ def task_artifact_owned_by(
 
     conn = _get_conn()
     for table in tables:
-        if table not in _TASK_ID_TABLES:
+        if table not in _TASK_OWNERSHIP_TABLES:
             raise ValueError(f'Unsupported task table: {table}')
         row = conn.execute(f'SELECT user_id FROM {table} WHERE task_id = ?', (task_id,)).fetchone()
         if row is not None:
