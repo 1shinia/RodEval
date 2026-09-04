@@ -108,6 +108,11 @@ class _WorkItem:
     task_state: Optional[TaskState] = None
     """Cached task state. Set when only review is required."""
 
+    sample_idx: Optional[int] = None
+    """Position of ``sample`` within its subset (0-based). Used only as a
+    display fallback for the progress log when a sample has no intrinsic id
+    (e.g. plain-text datasets like GSM8K); None for review-only items."""
+
     @property
     def needs_predict(self) -> bool:
         """True when prediction has not yet been computed."""
@@ -303,8 +308,8 @@ class DefaultEvaluator(Evaluator):
             if self.benchmark.use_batch_scoring:
                 # Prediction runs in the pool; review is deferred until all
                 # task_states for this subset are available (after pool).
-                for sample in remaining_dataset:
-                    work_items.append(_WorkItem(subset=subset, sample=sample))
+                for idx, sample in enumerate(remaining_dataset):
+                    work_items.append(_WorkItem(subset=subset, sample=sample, sample_idx=idx))
 
                 if self.use_cache and not self.task_config.rerun_review:
                     cached_scores, need_review = self.cache_manager.filter_review_cache(subset, cached_pred_states)
@@ -326,8 +331,8 @@ class DefaultEvaluator(Evaluator):
                     for ts in cached_pred_states:  # Prediction cached, review cleared
                         work_items.append(_WorkItem(subset=subset, task_state=ts))
 
-                for sample in remaining_dataset:  # Tier 3: full predict+review
-                    work_items.append(_WorkItem(subset=subset, sample=sample))
+                for idx, sample in enumerate(remaining_dataset):  # Tier 3: full predict+review
+                    work_items.append(_WorkItem(subset=subset, sample=sample, sample_idx=idx))
 
         model_prediction_dir = os.path.dirname(self.cache_manager.get_prediction_cache_path(next(iter(dataset_dict))))
         total_cached = sum(len(v) for v in cached_scores_by_subset.values())
@@ -465,8 +470,10 @@ class DefaultEvaluator(Evaluator):
                 raise _WorkItemProcessingError('inference', exc) from exc
         else:
             task_state = item.task_state
-        if item.needs_predict and not self.benchmark.use_batch_scoring:
-            sample_id = item.sample.metadata.get('instance_id', item.sample.metadata.get('id', '?'))
+        if item.needs_predict and not self.benchmark.use_batch_scoring and item.sample is not None:
+            sample_id = (item.sample.metadata.get('instance_id')
+                         or (item.sample.id if item.sample.id is not None else None)
+                         or f"#{item.sample_idx}")
             logger.info(f'Prediction done for sample {sample_id}, starting review phase...')
         if self.benchmark.use_batch_scoring:
             sample_score = None
