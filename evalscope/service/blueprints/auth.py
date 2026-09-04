@@ -2,7 +2,10 @@
 
 import datetime
 import os
+import secrets
 import sqlite3
+import threading
+import time
 import uuid
 
 import jwt
@@ -26,6 +29,7 @@ _DEFAULT_ADMIN = 'admin'
 # The old hardcoded 'rod-eval-jwt-secret-2024' is gone: existing tokens are
 # invalidated once on upgrade (users just log in again).
 _JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', '72'))
+_AUTH_COOKIE = 'evalscope_auth'
 
 
 def _load_or_create_jwt_secret() -> str:
@@ -139,11 +143,27 @@ def _create_token(user: dict) -> str:
     return jwt.encode(payload, _JWT_SECRET, algorithm='HS256')
 
 
+# Short-TTL cache for token blacklist lookups; a logout writes the entry into
+# the cache immediately (see _blacklist_token) so revocation takes effect at
+# once within this process, while the TTL bounds staleness across processes.
+_blacklist_cache: dict[str, tuple[float, bool]] = {}
+_blacklist_cache_ttl = float(os.environ.get('AUTH_BLACKLIST_CACHE_TTL', '30'))
+_blacklist_cache_lock = threading.Lock()
+
+
 def _is_blacklisted(jti: str) -> bool:
-    """Return True if the token jti is in the blacklist."""
+    """Return True if the token jti is in the blacklist (short-TTL cached)."""
+    now = time.monotonic()
+    with _blacklist_cache_lock:
+        cached = _blacklist_cache.get(jti)
+        if cached is not None and cached[0] > now:
+            return cached[1]
     conn = _get_conn()
     row = conn.execute('SELECT 1 FROM token_blacklist WHERE jti = ?', (jti,)).fetchone()
-    return row is not None
+    result = row is not None
+    with _blacklist_cache_lock:
+        _blacklist_cache[jti] = (now + _blacklist_cache_ttl, result)
+    return result
 
 
 def _blacklist_token(jti: str, exp: float) -> None:
@@ -151,6 +171,9 @@ def _blacklist_token(jti: str, exp: float) -> None:
     exp_str = datetime.datetime.fromtimestamp(exp, datetime.timezone.utc).isoformat()
     _write(lambda conn: conn.execute(
         'INSERT OR IGNORE INTO token_blacklist (jti, expires_at) VALUES (?, ?)', (jti, exp_str)))
+    # Refresh the cache so revocation takes effect immediately on this process.
+    with _blacklist_cache_lock:
+        _blacklist_cache[jti] = (time.monotonic() + _blacklist_cache_ttl, True)
 
 
 def _cleanup_expired_tokens() -> None:
@@ -169,63 +192,109 @@ def verify_token(token: str) -> dict | None:
         return None
 
 
+def _extract_request_token(*, allow_cookie: bool = True) -> str | None:
+    """Read auth from Bearer header, optionally falling back to a cookie.
+
+    Cookie fallback is intended for safe browser GET transports such as
+    EventSource/iframe/download.  State-changing API calls still require an
+    explicit Bearer token, avoiding a broad cookie-auth CSRF surface.
+    """
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header[7:]
+    if allow_cookie:
+        return request.cookies.get(_AUTH_COOKIE)
+    return None
+
+
+def _set_auth_cookie(response, token: str):
+    response.set_cookie(
+        _AUTH_COOKIE,
+        token,
+        max_age=_JWT_EXPIRY_HOURS * 60 * 60,
+        httponly=True,
+        secure=bool(request.is_secure),
+        samesite='Lax',
+        path='/',
+    )
+    return response
+
+
+# Process-local cache for the per-request user lookup in require_auth.  A short
+# TTL keeps soft-delete / role changes visible within seconds while avoiding a
+# SQLite read on every polled request.  Invalidated explicitly on user mutation.
+_user_cache: dict[int, tuple[float, dict | None]] = {}
+_user_cache_ttl = float(os.environ.get('AUTH_USER_CACHE_TTL', '30'))
+_user_cache_lock = threading.Lock()
+
+
+def _get_user_row(uid: int) -> dict | None:
+    """Return the active user row (dict) for *uid*, cached for a short TTL."""
+    now = time.monotonic()
+    with _user_cache_lock:
+        cached = _user_cache.get(uid)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+    row = _get_conn().execute(
+        'SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL', (uid,)
+    ).fetchone()
+    result = dict(row) if row else None
+    with _user_cache_lock:
+        _user_cache[uid] = (now + _user_cache_ttl, result)
+    return result
+
+
 def require_auth():
-    """Flask before_request hook — skip auth for public paths, require Bearer token otherwise."""
+    """Flask before_request hook — require authenticated access by default.
+
+    Browser-only transports such as EventSource and iframe no longer bypass
+    authentication: they use the HttpOnly auth cookie established at login.
+    """
     if request.method == 'OPTIONS':
         return None
 
-    # Public path prefixes (no auth required)
-    for prefix in ('/health', '/dashboard', '/api/v1/auth/',
-                   '/api/v1/config', '/api/v1/benchmarks',
-                   '/api/v1/eval/benchmarks', '/api/v1/perf/template',
-                   '/api/v1/eval/batch/template', '/api/v1/perf/batch/template',
-                   '/api/v1/aigc/file', '/api/v1/audio/file',
-                   '/api/v1/reports/media/file'):
+    # Only genuinely non-user-specific discovery/bootstrap endpoints are public.
+    for prefix in (
+        '/health', '/dashboard', '/api/v1/auth/', '/api/v1/config',
+        '/api/v1/benchmarks', '/api/v1/eval/benchmarks',
+        '/api/v1/perf/template', '/api/v1/eval/batch/template',
+        '/api/v1/perf/batch/template',
+    ):
         if request.path.startswith(prefix):
             return None
 
-    # Endpoints that can't send auth headers (EventSource / iframe / window.open)
-    for suffix in ('/log/stream', '/progress/stream', '/report', '/chart', '/html'):
-        if request.path.endswith(suffix):
-            return None
-
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+    token = _extract_request_token(allow_cookie=request.method in ('GET', 'HEAD'))
+    if not token:
         return jsonify({'error': 'Missing or invalid token'}), 401
 
-    token = auth_header[7:]
     user = verify_token(token)
     if user is None:
         return jsonify({'error': 'Token expired or invalid'}), 401
     if _is_blacklisted(user.get('jti', '')):
         return jsonify({'error': 'Token has been revoked'}), 401
 
-    # JWTs are stateless, so deleting/soft-deleting a user must be checked
-    # against the database on every authenticated request; otherwise an old
-    # token would remain usable until its natural expiry.  Refresh role and
-    # username from the DB as well so token claims cannot outlive account
-    # changes.
     try:
         uid = int(user.get('sub', '0'))
     except (TypeError, ValueError):
         return jsonify({'error': 'Token user is invalid'}), 401
-    row = _get_conn().execute(
-        'SELECT id, username, role FROM users WHERE id = ? AND deleted_at IS NULL',
-        (uid,),
-    ).fetchone()
+    row = _get_user_row(uid)
     if row is None:
         return jsonify({'error': 'User account is disabled or deleted'}), 401
     user['username'] = row['username']
     user['role'] = row['role']
-
     request.current_user = user
     return None
 
 
-def get_current_user_id() -> int:
-    """Return the current authenticated user_id (1 = admin default for public endpoints)."""
+def get_current_user_id() -> int | None:
+    """Return the current authenticated user_id, or None when unauthenticated.
+
+    Fail-closed: public endpoints must not silently assume an admin identity.
+    Authenticated routes always get a real id because require_auth populates
+    ``request.current_user`` before dispatch.
+    """
     user = getattr(request, 'current_user', None)
-    return int(user['sub']) if user else 1
+    return int(user['sub']) if user else None
 
 
 def get_user_output_dir(user_id: int = None) -> str:
@@ -249,8 +318,8 @@ def check_task_ownership(table: str, task_id: str) -> tuple[bool, int | None]:
       - Row exists, belongs to someone else      -> denied
       - No row (unindexed/legacy directory)      -> admin only
     """
-    from ..db import _TASK_ID_TABLES, _get_conn
-    if table not in _TASK_ID_TABLES:
+    from ..db import _TASK_OWNERSHIP_TABLES, _get_conn
+    if table not in _TASK_OWNERSHIP_TABLES:
         raise ValueError(f'Unsupported task table: {table}')
     uid = get_current_user_id()
     row = _get_conn().execute(
@@ -259,6 +328,117 @@ def check_task_ownership(table: str, task_id: str) -> tuple[bool, int | None]:
     if row is None:
         return get_current_role() == 'admin', None
     return row[0] == uid, row[0]
+
+
+def check_task_artifact_access(task_id: str, tables: tuple[str, ...]) -> bool:
+    """Authorize reports/logs/SSE/files through the shared task policy."""
+    uid = get_current_user_id()
+    if uid is None:
+        # Unauthenticated requests must never be treated as admin (fail-closed).
+        return False
+    from ..task_access import task_artifact_owned_by
+    from ..utils import OUTPUT_DIR
+    return task_artifact_owned_by(
+        task_id,
+        tables,
+        user_id=uid,
+        is_admin=get_current_role() == 'admin',
+        output_dir=str(OUTPUT_DIR),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Login brute-force protection
+#
+# Failures are counted per (client IP, username) pair: an attacker hammering
+# one account gets locked out, while other users behind the same NAT are not
+# affected.  State is per-process memory (no DB migration): a restart merely
+# grants the attacker a fresh attempt window, which is acceptable here, and
+# keeps the hot login path free of SQLite writes.
+#
+# Tunables (env vars):
+#   LOGIN_MAX_ATTEMPTS     failures within the window that trigger a lockout
+#   LOGIN_WINDOW_SECONDS   sliding window in which failures are counted
+#   LOGIN_LOCKOUT_SECONDS  how long the (IP, username) pair stays locked
+# ---------------------------------------------------------------------------
+_LOGIN_MAX_ATTEMPTS = int(os.environ.get('LOGIN_MAX_ATTEMPTS', '5'))
+_LOGIN_WINDOW_SECONDS = int(os.environ.get('LOGIN_WINDOW_SECONDS', '300'))
+_LOGIN_LOCKOUT_SECONDS = int(os.environ.get('LOGIN_LOCKOUT_SECONDS', '300'))
+
+_login_guard = threading.Lock()
+_login_failures: dict[str, list[float]] = {}   # key -> failure timestamps
+_login_locks: dict[str, float] = {}            # key -> lock expiry (epoch)
+
+# Same trust rule as the access log in app.py: X-Forwarded-For is honoured
+# only when the direct peer is a known reverse proxy, so external clients
+# cannot spoof their rate-limit identity with a forged header.
+_LOGIN_TRUSTED_PROXIES = set(
+    p.strip() for p in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',') if p.strip()
+)
+
+# Pre-computed hash used to equalise response timing when the username does
+# not exist, so latency does not reveal whether an account is registered.
+_DUMMY_PASSWORD_HASH = generate_password_hash('brute-force-timing-dummy')
+
+
+def _login_client_ip() -> str:
+    remote = request.remote_addr or ''
+    if remote in _LOGIN_TRUSTED_PROXIES:
+        return (
+            request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+            or request.headers.get('X-Real-IP', '') or remote or '-'
+        )
+    return remote or '-'
+
+
+def _login_guard_key(ip: str, username: str) -> str:
+    return f'{ip}|{username.lower()}'
+
+
+def _check_login_locked(ip: str, username: str) -> tuple[bool, int]:
+    """Return (locked, retry_after_seconds) for this (IP, username) pair."""
+    now = time.time()
+    key = _login_guard_key(ip, username)
+    with _login_guard:
+        expiry = _login_locks.get(key)
+        if expiry is None:
+            return False, 0
+        if expiry <= now:
+            _login_locks.pop(key, None)
+            return False, 0
+        return True, int(expiry - now) + 1
+
+
+def _record_login_failure(ip: str, username: str) -> None:
+    """Count a failed attempt; lock the pair out once the budget is spent."""
+    now = time.time()
+    key = _login_guard_key(ip, username)
+    with _login_guard:
+        window_start = now - _LOGIN_WINDOW_SECONDS
+        stamps = [t for t in _login_failures.get(key, []) if t > window_start]
+        stamps.append(now)
+        if len(stamps) >= _LOGIN_MAX_ATTEMPTS:
+            _login_locks[key] = now + _LOGIN_LOCKOUT_SECONDS
+            _login_failures.pop(key, None)
+            logger.warning(
+                f'Login brute-force guard: locked out {key!r} for '
+                f'{_LOGIN_LOCKOUT_SECONDS}s after {len(stamps)} failed attempts'
+            )
+        else:
+            _login_failures[key] = stamps
+        # Opportunistic prune so a spray of random usernames cannot grow
+        # the dict without bound.
+        if len(_login_failures) > 10000:
+            for k in [k for k, v in _login_failures.items() if not any(t > window_start for t in v)]:
+                _login_failures.pop(k, None)
+
+
+def _clear_login_failures(ip: str, username: str) -> None:
+    """Reset the failure budget after a successful login."""
+    key = _login_guard_key(ip, username)
+    with _login_guard:
+        _login_failures.pop(key, None)
+        _login_locks.pop(key, None)
 
 
 @bp_auth.route('/register', methods=['POST'])
@@ -302,10 +482,11 @@ def register():
     if not user:
         return jsonify({'error': 'Registration failed'}), 500
     token = _create_token(user)
-    return jsonify({
+    response = jsonify({
         'token': token,
         'user': {'id': user['id'], 'username': user['username'], 'role': user['role']},
-    }), 201
+    })
+    return _set_auth_cookie(response, token), 201
 
 
 @bp_auth.route('/login', methods=['POST'])
@@ -320,30 +501,50 @@ def login():
     if not username or not password:
         return jsonify({'error': 'username and password are required'}), 400
 
+    client_ip = _login_client_ip()
+
+    # Locked pairs are rejected outright — even with the correct password —
+    # so a brute-force attempt cannot probe further until the lock expires.
+    locked, retry_after = _check_login_locked(client_ip, username)
+    if locked:
+        response = jsonify({'error': f'尝试次数过多，请 {retry_after} 秒后再试'})
+        response.headers['Retry-After'] = str(retry_after)
+        return response, 429
+
     user = _user_by_username(username)
-    if not user or not check_password_hash(user['password_hash'], password):
+    if user is None:
+        # Burn the same hash-check time as a real account so response latency
+        # does not reveal whether the username exists.
+        check_password_hash(_DUMMY_PASSWORD_HASH, password)
+        _record_login_failure(client_ip, username)
+        return jsonify({'error': '用户名或密码错误'}), 401
+    if not check_password_hash(user['password_hash'], password):
+        _record_login_failure(client_ip, username)
         return jsonify({'error': '用户名或密码错误'}), 401
 
+    _clear_login_failures(client_ip, username)
     token = _create_token(user)
-    return jsonify({
+    response = jsonify({
         'token': token,
         'user': {'id': user['id'], 'username': user['username'], 'role': user['role']},
     })
+    return _set_auth_cookie(response, token)
 
 
 @bp_auth.route('/logout', methods=['POST'])
 def logout():
     """Invalidate the current token by adding its jti to the blacklist."""
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+    token = _extract_request_token()
+    if not token:
         return jsonify({'error': 'Missing token'}), 400
-    token = auth_header[7:]
     payload = verify_token(token)
     if payload is None:
         return jsonify({'error': 'Token invalid or already expired'}), 400
     _blacklist_token(payload['jti'], payload['exp'])
     _cleanup_expired_tokens()  # opportunistic cleanup
-    return jsonify({'ok': True}), 200
+    response = jsonify({'ok': True})
+    response.delete_cookie(_AUTH_COOKIE, path='/')
+    return response, 200
 
 
 @bp_auth.route('/password', methods=['PUT'])
@@ -454,6 +655,8 @@ def delete_user(user_id: int):
     ).rowcount)
     if removed == 0:
         return jsonify({'error': '用户不存在'}), 404
+    with _user_cache_lock:
+        _user_cache.pop(user_id, None)
     return jsonify({'ok': True}), 200
 
 
@@ -474,4 +677,87 @@ def reset_password(user_id: int):
         'UPDATE users SET password_hash = ? WHERE id = ? AND deleted_at IS NULL', (pw_hash, user_id)).rowcount)
     if updated == 0:
         return jsonify({'error': '用户不存在'}), 404
+    return jsonify({'ok': True}), 200
+
+
+_RESET_TOKEN_TTL_HOURS = int(os.environ.get('RESET_TOKEN_TTL_HOURS', '24'))
+
+
+@bp_auth.route('/users/<int:user_id>/reset-token', methods=['POST'])
+def create_reset_token(user_id: int):
+    """Generate a one-time password reset token for a user (admin only).
+
+    Invalidate any previous unused tokens for the user so only the newest one
+    is valid; also opportunistically purge expired tokens.
+    """
+    admin = _require_admin()
+    if admin is None:
+        return jsonify({'error': 'Admin access required'}), 403
+    conn = _get_conn()
+    user = conn.execute(
+        'SELECT id, username FROM users WHERE id = ? AND deleted_at IS NULL', (user_id,)
+    ).fetchone()
+    if user is None:
+        return jsonify({'error': '用户不存在'}), 404
+
+    token = secrets.token_urlsafe(32)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_at = (now + datetime.timedelta(hours=_RESET_TOKEN_TTL_HOURS)).isoformat()
+
+    def _op(c):
+        c.execute('DELETE FROM password_reset_tokens WHERE expires_at < ?', (now.isoformat(),))
+        c.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', (user_id,))
+        c.execute(
+            'INSERT INTO password_reset_tokens (token, user_id, expires_at, used, created_at) '
+            'VALUES (?, ?, ?, 0, ?)',
+            (token, user_id, expires_at, now.isoformat()),
+        )
+    _write(_op)
+
+    return jsonify({'token': token, 'expires_at': expires_at}), 201
+
+
+@bp_auth.route('/reset-password', methods=['POST'])
+def reset_password_with_token():
+    """Reset a user's password using a one-time reset token (public).
+
+    The token must be unused and unexpired, and the target user must still be
+    active.  Every invalid-token case returns the same message so this endpoint
+    does not leak whether a token or user exists.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+    token = (data.get('token') or '').strip()
+    password = (data.get('password') or '').strip()
+    if not token or not password:
+        return jsonify({'error': 'token and password are required'}), 400
+    if len(password) < 6:
+        return jsonify({'error': '新密码至少6个字符'}), 400
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    conn = _get_conn()
+    row = conn.execute(
+        'SELECT user_id FROM password_reset_tokens '
+        'WHERE token = ? AND used = 0 AND expires_at > ?',
+        (token, now),
+    ).fetchone()
+    if row is None:
+        return jsonify({'error': '链接无效或已过期'}), 400
+    user_id = row['user_id']
+    user = conn.execute(
+        'SELECT id FROM users WHERE id = ? AND deleted_at IS NULL', (user_id,)
+    ).fetchone()
+    if user is None:
+        return jsonify({'error': '链接无效或已过期'}), 400
+
+    pw_hash = generate_password_hash(password)
+
+    def _op(c):
+        c.execute('UPDATE users SET password_hash = ? WHERE id = ?', (pw_hash, user_id))
+        c.execute('UPDATE password_reset_tokens SET used = 1 WHERE token = ?', (token,))
+    _write(_op)
+
+    with _user_cache_lock:
+        _user_cache.pop(user_id, None)
     return jsonify({'ok': True}), 200

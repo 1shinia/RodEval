@@ -33,6 +33,7 @@ const AIGCReportDetailPage = lazy(() => import('@/pages/AIGCReportDetailPage'))
 const AudioReportDetailPage = lazy(() => import('@/pages/AudioReportDetailPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'))
+const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'))
 const UserManagementPage = lazy(() => import('@/pages/UserManagementPage'))
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -60,6 +61,7 @@ function AppRoutes() {
         {/* Auth pages — guest only */}
         <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
         <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
+        <Route path="/reset-password" element={<GuestOnly><ResetPasswordPage /></GuestOnly>} />
 
         {/* All other routes require auth */}
         <Route element={<RequireAuth><MainLayout /></RequireAuth>}>

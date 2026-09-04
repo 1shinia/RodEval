@@ -38,8 +38,11 @@ class Metrics:
     OUTPUT_TOKEN_THROUGHPUT = 'Output Throughput (tok/s)'
     TOTAL_TOKEN_THROUGHPUT = 'Total Throughput (tok/s)'
     AVERAGE_TIME_TO_FIRST_TOKEN = 'TTFT (ms)'
+    AVERAGE_TIME_TO_FIRST_CHUNK = 'TTFC (ms)'
     AVERAGE_TIME_PER_OUTPUT_TOKEN = 'TPOT (ms)'
-    AVERAGE_INTER_TOKEN_LATENCY = 'ITL (ms)'
+    AVERAGE_INTER_CHUNK_LATENCY = 'ICL (ms)'
+    # Backward-compatible symbol: SSE chunk cadence is not true token-level ITL.
+    AVERAGE_INTER_TOKEN_LATENCY = AVERAGE_INTER_CHUNK_LATENCY
     AVERAGE_OUTPUT_TOKENS_PER_REQUEST = 'Avg Output Tokens'
 
     # Embedding / Rerank-specific
@@ -48,6 +51,7 @@ class Metrics:
     # Multi-turn specific
     AVERAGE_INPUT_TURNS_PER_REQUEST = 'Avg Turns/Request'
     AVERAGE_CACHED_PERCENT = 'KV Cache Hit Rate (%)'
+    ESTIMATED_REUSABLE_PREFIX_PERCENT = 'Estimated Reusable Prefix (%)'
     AVERAGE_FIRST_TURN_TTFT = 'First-Turn TTFT (ms)'
     AVERAGE_SUBSEQUENT_TURN_TTFT = 'Subsequent-Turn TTFT (ms)'
 
@@ -77,7 +81,9 @@ class PercentileMetrics:
     """
 
     TTFT = 'TTFT (ms)'
-    ITL = 'ITL (ms)'
+    TTFC = 'TTFC (ms)'
+    ICL = 'ICL (ms)'
+    ITL = ICL  # backward-compatible symbol
     TPOT = 'TPOT (ms)'
     LATENCY = 'Latency (s)'
     INPUT_TOKENS = 'Input tokens'

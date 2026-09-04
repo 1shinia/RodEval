@@ -152,12 +152,28 @@ def format_example(
     return f'{question}\n{choices_text}\nANSWER: {answer.text}'
 
 
-def _fallback_parse_answer(completion: str) -> Optional[set[str]]:
-    # Fallback to find the last upper case letter
-    for letter in reversed(completion):
-        if letter.isupper():
-            return {letter}
-    return None
+def _fallback_parse_answer(completion: str, allowed_options: set[str]) -> Optional[set[str]]:
+    """Conservative fallback for common explicit answer phrasings.
+
+    The old implementation returned the last uppercase character anywhere in
+    the response.  That could turn an unrelated trailing acronym (for example
+    ``NASA``) into a valid multiple-choice answer.  Fallback matching is now
+    restricted to answer-like phrases and validated against the actual option
+    set.
+    """
+    patterns = [
+        r'(?i)(?:final\s+answer|final|option|choice)\s*[:：]?\s*[\(\[]?([A-Za-z0-9])[\)\]]?',
+        r'(?i)(?:答案|选项)\s*[:：]?\s*[\(\[]?([A-Za-z0-9])[\)\]]?',
+        r'(?i)[\(\[]([A-Za-z0-9])[\)\]]\s*[。.!！?？]?\s*$',
+    ]
+    candidates = []
+    for pattern in patterns:
+        candidates.extend(re.finditer(pattern, completion))
+    if not candidates:
+        return None
+    match = max(candidates, key=lambda m: m.start())
+    answer = match.group(1).upper()
+    return {answer} if answer in allowed_options else None
 
 
 def parse_answers(state: TaskState, multiple_correct: bool = False) -> set[str]:
@@ -174,41 +190,43 @@ def parse_answers(state: TaskState, multiple_correct: bool = False) -> set[str]:
     # First check whether the string strictly ends with the expected answer
     # In this case, we're looking for a single line which contains the expected
     # ANSWER: <answer> string with only whitespace or a period/full stop at the end.
-    match = re.search(
+    allowed_options = set(answer_character(i) for i in range(len(state.choices)))
+
+    strict_matches = list(re.finditer(
         r'(?i)^ANSWER\s*:\s*([A-Za-z\d ,]+)\s*(?:$|\n|\.)',
         state.output.completion,
         flags=re.MULTILINE,
-    )
+    ))
+    match = strict_matches[-1] if strict_matches else None
 
     # If we couldn't match the strict version, we can try the less strict
     # version for backward compatibility
     if match is None:
-        match = re.search(
+        loose_matches = list(re.finditer(
             r'(?i)ANSWER\s*:\s*([A-Za-z\d ,]+)(?:[^\w]|\n|$|\.)',
             state.output.completion,
-        )
+        ))
+        match = loose_matches[-1] if loose_matches else None
 
     if match is None:
-        fallback_answer = _fallback_parse_answer(state.output.completion)
+        fallback_answer = _fallback_parse_answer(state.output.completion, allowed_options)
         if fallback_answer:
             return fallback_answer
 
     if match is None:
         return set()
 
-    matched = match.group(1)
+    matched = match.group(1).upper()
 
     # Strip trailing period / full stop
     matched = matched.strip()
     matched = matched.rstrip('.')
 
-    allowed_options = set(answer_character(i) for i in range(len(state.choices)))
-
     if multiple_correct:
         # Match must contain only the allowed choices
         # (may be separated by commas, spaces, the word 'and', or nothing at all)
 
-        matched = matched.replace(' and ', '')
+        matched = re.sub(r'(?i)\band\b', '', matched)
 
         matched = matched.replace(' ', '')
 
@@ -241,18 +259,20 @@ def parse_answers_zh(state: TaskState, multiple_correct: bool = False) -> set[st
     """
     # Simple pattern to capture answers with optional bold markdown
     pattern = r'答案\s*[:：]\s*([A-Za-z0-9,，]+)'
-    match = re.search(pattern, state.output.completion, flags=re.MULTILINE)
+    matches = list(re.finditer(pattern, state.output.completion, flags=re.MULTILINE))
+    match = matches[-1] if matches else None
+
+    allowed_options = set(answer_character(i) for i in range(len(state.choices)))
 
     if match is None:
-        fallback_answer = _fallback_parse_answer(state.output.completion)
+        fallback_answer = _fallback_parse_answer(state.output.completion, allowed_options)
         if fallback_answer:
             return fallback_answer
 
     if match is None:
         return set()
 
-    matched = match.group(1).strip().rstrip('。.')
-    allowed_options = set(answer_character(i) for i in range(len(state.choices)))
+    matched = match.group(1).strip().rstrip('。.').upper()
 
     if multiple_correct:
         # Handle comma-separated or continuous letters

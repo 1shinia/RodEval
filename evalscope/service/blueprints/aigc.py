@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from evalscope.backend.aigc_eval.backend_manager import AIGCBackendManager
-from evalscope.service.utils.log import create_log_file, validate_task_id
+from evalscope.service.utils.log import OUTPUT_DIR as _OUTPUT_DIR, create_log_file, validate_task_id
 from evalscope.service.utils.process import register_process, try_reserve_new_slot, unregister_process
 from evalscope.utils.logger import configure_logging, get_logger
 from evalscope.service.time_utils import epoch_to_utc_iso
@@ -17,10 +17,21 @@ logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 bp_aigc = Blueprint('aigc', __name__, url_prefix='/api/v1/aigc')
 
-OUTPUT_DIR = Path(os.getenv('EVALSCOPE_OUTPUT_DIR', './outputs'))
+OUTPUT_DIR = Path(_OUTPUT_DIR)
 
 # Max concurrent AIGC tasks (read from env, default 1)
 MAX_CONCURRENT_AIGC = int(os.environ.get('MAX_CONCURRENT_AIGC', '1'))
+
+
+def _require_task_access(task_id: str):
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('eval_reports', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+    return None
 
 
 @bp_aigc.route('/invoke', methods=['POST'])
@@ -89,6 +100,9 @@ def get_aigc_progress():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'Missing task_id parameter'}), 400
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
 
     progress_file = OUTPUT_DIR / task_id / 'progress.json'
 
@@ -116,6 +130,9 @@ def stop_aigc_evaluation():
     task_id = data.get('task_id')
     if not task_id:
         return jsonify({'error': 'Missing task_id'}), 400
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
 
     # Update progress file to mark as stopped
     progress_file = OUTPUT_DIR / task_id / 'progress.json'
@@ -123,8 +140,10 @@ def stop_aigc_evaluation():
         with open(progress_file) as f:
             progress = json.load(f)
         progress['status'] = 'stopped'
-        with open(progress_file, 'w') as f:
+        tmp = progress_file.with_name(progress_file.name + '.tmp')
+        with open(tmp, 'w') as f:
             json.dump(progress, f)
+        os.replace(tmp, progress_file)
 
     unregister_process(task_id)
     return jsonify({'status': 'stopped'})
@@ -133,10 +152,13 @@ def stop_aigc_evaluation():
 @bp_aigc.route('/media/<task_id>/<path:filename>', methods=['GET'])
 def serve_media(task_id: str, filename: str):
     """Serve generated media files."""
-    safe_path = os.path.realpath(os.path.join(OUTPUT_DIR, task_id, 'media', filename))
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
+    base_dir = os.path.realpath(os.path.join(OUTPUT_DIR, task_id, 'media'))
+    safe_path = os.path.realpath(os.path.join(base_dir, filename))
 
-    # Path traversal protection
-    if not safe_path.startswith(os.path.realpath(OUTPUT_DIR)):
+    if os.path.commonpath([base_dir, safe_path]) != base_dir:
         return jsonify({'error': 'Invalid path'}), 403
 
     if not os.path.exists(safe_path):
@@ -148,10 +170,13 @@ def serve_media(task_id: str, filename: str):
 @bp_aigc.route('/thumbnails/<task_id>/<path:filename>', methods=['GET'])
 def serve_thumbnail(task_id: str, filename: str):
     """Serve thumbnail files."""
-    safe_path = os.path.realpath(os.path.join(OUTPUT_DIR, task_id, 'thumbnails', filename))
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
+    base_dir = os.path.realpath(os.path.join(OUTPUT_DIR, task_id, 'thumbnails'))
+    safe_path = os.path.realpath(os.path.join(base_dir, filename))
 
-    # Path traversal protection
-    if not safe_path.startswith(os.path.realpath(OUTPUT_DIR)):
+    if os.path.commonpath([base_dir, safe_path]) != base_dir:
         return jsonify({'error': 'Invalid path'}), 403
 
     if not os.path.exists(safe_path):
@@ -166,6 +191,9 @@ def get_aigc_report():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'Missing task_id parameter'}), 400
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
 
     task_dir = OUTPUT_DIR / task_id
     if not task_dir.exists():
@@ -195,11 +223,13 @@ def get_aigc_report():
 @bp_aigc.route('/file/<task_id>/<path:filename>', methods=['GET'])
 def serve_file(task_id: str, filename: str):
     """Serve any file from the task output directory with path traversal protection."""
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
     task_dir = os.path.realpath(os.path.join(OUTPUT_DIR, task_id))
     safe_path = os.path.realpath(os.path.join(task_dir, filename))
 
-    # Path traversal protection
-    if not safe_path.startswith(task_dir + os.sep) and safe_path != task_dir:
+    if os.path.commonpath([task_dir, safe_path]) != task_dir:
         return jsonify({'error': 'Invalid path'}), 403
 
     if not os.path.exists(safe_path):
@@ -319,10 +349,9 @@ def stream_aigc_log():
     except (ValueError, TypeError):
         initial_pos = 0
 
-    try:
-        validate_task_id(task_id)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
 
     log_file = os.path.join(OUTPUT_DIR, task_id, 'logs', 'aigc_log.log')
 
@@ -378,10 +407,9 @@ def stream_aigc_progress():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
-    try:
-        validate_task_id(task_id)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
 
     progress_file_path = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
 

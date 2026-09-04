@@ -316,6 +316,19 @@ RELEASED: list[tuple[int, str, str]] = [
         END;
     '''
     ),
+    (
+        19, 'add password reset tokens table', '''
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            token       TEXT PRIMARY KEY,
+            user_id     INTEGER NOT NULL,
+            expires_at  TEXT NOT NULL,
+            used        INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user
+            ON password_reset_tokens(user_id);
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -401,9 +414,9 @@ def test_released_migrations_immutable():
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 18
+    assert len(RELEASED) == 19
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 18
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 19
 
 
 def test_fresh_db_converges(tmp_path):

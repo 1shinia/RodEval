@@ -24,6 +24,7 @@ def _turn(
     d.start_time = start
     d.completed_time = completed
     d.first_chunk_latency = ttft
+    d.first_token_latency = ttft
     d.query_latency = completed - start
     d.prompt_tokens = prompt_tokens
     d.completion_tokens = completion_tokens

@@ -127,13 +127,23 @@ class PerfCollector:
         output_tokens = pd.Series([s.output_tokens for s in samples], dtype=float)
         total_tokens = input_tokens + output_tokens
 
-        avg_latency = float(latencies.mean())
-        avg_output = float(output_tokens.mean())
-
         latency_stats = _series_stats(latencies)
+
+        # This collector only receives per-request durations and token counts; it
+        # does not receive absolute request start/end timestamps.  Therefore a
+        # true concurrent workload req/s cannot be reconstructed here.  Report
+        # the mean per-request E2E output-token rate and leave req/s unavailable
+        # rather than presenting 1 / mean(latency) as workload throughput.
+        request_output_tps = [
+            s.output_tokens / s.latency
+            for s in samples
+            if s.latency > 0
+        ]
         throughput = {
-            'avg_output_tps': round(avg_output / avg_latency, 2) if avg_latency > 0 else 0.0,
-            'avg_req_ps': round(1.0 / avg_latency, 4) if avg_latency > 0 else 0.0,
+            'avg_output_tps': round(float(pd.Series(request_output_tps, dtype=float).mean()), 2)
+            if request_output_tps else None,
+            'avg_req_ps': None,
+            'scope': 'mean_per_request_e2e',
         }
         usage = {
             'input_tokens': _series_stats(input_tokens),

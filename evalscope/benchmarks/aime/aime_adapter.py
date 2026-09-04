@@ -164,8 +164,7 @@ class AIME24Adapter(DefaultDataAdapter):
             score.value['acc'] = accuracy_score
         except Exception as e:
             logger.error(f'Error in custom grading: {e}')
-            score.value['acc'] = 0.0
-            score.metadata['acc'] = f'grading_error: {str(e)}'
+            score.metadata.setdefault('metric_errors', {})['acc'] = str(e)
         return score
 
     def llm_match_score(

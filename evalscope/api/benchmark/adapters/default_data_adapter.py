@@ -661,8 +661,12 @@ class DefaultDataAdapter(DataAdapter):
                 score.value[metric_name] = metric_score
             except Exception as e:
                 logger.error(f'Error calculating metric {metric}: {e}')
-                score.value[metric_name] = 0
-                score.metadata[metric_name] = f'error: {str(e)}'
+                # Evaluator/scorer failures are infrastructure failures, not
+                # evidence that the model answered incorrectly.  Do not inject
+                # a synthetic zero into the metric denominator; leave the
+                # metric absent and record the failure explicitly so aggregate
+                # coverage can be reported.
+                score.metadata.setdefault('metric_errors', {})[metric_name] = str(e)
 
         return score
 

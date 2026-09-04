@@ -1,5 +1,6 @@
 import os
 import re
+import time
 from typing import Any, Dict, List, Optional
 
 from evalscope.api.messages import ChatMessage, ChatMessageSystem, ChatMessageUser
@@ -28,12 +29,15 @@ Just return the letters "A" or "B", with no text around it.
 """  # noqa: E501
 
 
-DEFAULT_NUMERIC_SCORE_TEMPLATE = """Please act as an impartial judge and evaluate the quality of the response provided by an AI assistant to the user question displayed below. Your evaluation should consider factors such as the helpfulness, relevance, accuracy, depth, creativity, and level of detail of the response.
+DEFAULT_NUMERIC_SCORE_TEMPLATE = """Please act as an impartial judge and evaluate the correctness and quality of the response provided by an AI assistant to the user question displayed below. Use the reference answer as the ground truth. Your evaluation should prioritize factual correctness, then consider relevance, completeness, and clarity.
 Begin your evaluation by providing a short explanation. Be as objective as possible.
 After providing your explanation, you must rate the response on a scale of 0 (worst) to 1 (best) by strictly following this format: \"[[rating]]\", for example: \"Rating: [[0.5]]\"
 
 [Question]
 {question}
+
+[Reference Answer]
+{gold}
 
 [Response]
 {pred}
@@ -41,6 +45,14 @@ After providing your explanation, you must rate the response on a scale of 0 (wo
 
 DEFAULT_JUDGE_MODEL = 'Qwen/Qwen3-235B-A22B'
 DEFAULT_API_URL = 'https://api-inference.modelscope.cn/v1/'
+
+
+class LLMJudgeError(RuntimeError):
+    """Base error for judge transport/generation failures."""
+
+
+class LLMJudgeParseError(LLMJudgeError):
+    """Raised when a judge response cannot be parsed into a valid score."""
 
 
 class LLMJudge:
@@ -61,6 +73,8 @@ class LLMJudge:
         score_pattern: Optional[str] = None,
         score_mapping: Optional[Dict[str, float]] = None,
         score_type: str = JudgeScoreType.PATTERN,  # 'pattern', 'numeric'
+        max_retries: int = 2,
+        retry_backoff: float = 1.0,
         **kwargs
     ):
         """
@@ -88,6 +102,8 @@ class LLMJudge:
         self.system_prompt = system_prompt or os.environ.get('JUDGE_SYSTEM_PROMPT', None)
         self.generation_config = generation_config or {'temperature': 0.0, 'max_tokens': 8192, 'do_sample': False}
         self.model_args = model_args or {}
+        self.max_retries = max(0, int(max_retries))
+        self.retry_backoff = max(0.0, float(retry_backoff))
 
         # Default score mapping for A/B pattern
         self.score_type = score_type
@@ -143,17 +159,24 @@ class LLMJudge:
             input_messages = [ChatMessageUser(content=prompt)]
             if system_content:
                 input_messages.insert(0, ChatMessageSystem(content=system_content))
-        try:
-            # Send request using ServerModelAdapter
-            response = self.model.generate(input_messages)
+        last_error = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.model.generate(input_messages)
+                llm_response = response.completion
+                if llm_response is None:
+                    raise LLMJudgeError('Judge returned an empty completion.')
+                return llm_response
+            except Exception as e:
+                last_error = e
+                error_message = f'Error occurred during {self.model_id}@{self.api_url} LLM judge evaluation: {e}'
+                logger.error(error_message)
+                if attempt < self.max_retries and self.retry_backoff > 0:
+                    time.sleep(self.retry_backoff * (2**attempt))
 
-            # Extract content from response
-            llm_response = response.completion
-            return llm_response
-        except Exception as e:
-            error_message = f'Error occurred during {self.model_id}@{self.api_url} LLM judge evaluation: {e}'
-            logger.error(error_message)
-            return f'[ERROR] {error_message}'
+        raise LLMJudgeError(
+            f'LLM judge failed after {self.max_retries + 1} attempt(s): {last_error}'
+        ) from last_error
 
     def build_prompt(self, pred: str, gold: str, question: Optional[str] = None):
         if question is None:
@@ -180,7 +203,7 @@ class LLMJudge:
             float: The numeric score extracted from the response
         """
         if response is None:
-            return 0.0
+            raise LLMJudgeParseError('Judge response is None; cannot extract a score.')
 
         # choose extraction method based on score_type
         if self.score_type == JudgeScoreType.NUMERIC:
@@ -193,8 +216,9 @@ class LLMJudge:
         # Find all numeric tokens like [[0.5]] and take the last one (most decisive)
         matches = list(re.finditer(self.score_pattern, response))
         if not matches:
-            logger.warning(f"No match found for pattern '{self.score_pattern}' in response: {response}")
-            return 0.0
+            raise LLMJudgeParseError(
+                f"No match found for pattern '{self.score_pattern}' in judge response: {response}"
+            )
 
         # iterate from last to first to pick the final rating
         for match in reversed(matches):
@@ -215,8 +239,7 @@ class LLMJudge:
             except (ValueError, TypeError):
                 continue
 
-        logger.warning(f'Failed to convert extracted values to float in response: {response}')
-        return 0.0
+        raise LLMJudgeParseError(f'Failed to convert judge score to float: {response}')
 
     def _extract_pattern_score(self, response: str) -> float:
         """use the score_pattern to extract categorical scores"""
@@ -224,7 +247,12 @@ class LLMJudge:
         match = re.search(self.score_pattern, response, re.MULTILINE)
         if match:
             answer = match.group(1) if match.lastindex else match.group(0).strip()
-            return self.score_mapping.get(answer, 0.0)
+            if answer not in self.score_mapping:
+                raise LLMJudgeParseError(
+                    f'Judge answer {answer!r} is not present in score_mapping={self.score_mapping!r}.'
+                )
+            return self.score_mapping[answer]
         else:
-            logger.warning(f"No match found for pattern '{self.score_pattern}' in response: {response}")
-            return 0.0
+            raise LLMJudgeParseError(
+                f"No match found for pattern '{self.score_pattern}' in judge response: {response}"
+            )

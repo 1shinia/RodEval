@@ -27,6 +27,55 @@ from ..utils import (
 
 logger = get_logger()
 
+_TERMINAL_PROGRESS_STATUSES = {'completed', 'error', 'stopped', 'cancelled', 'failed'}
+
+
+def _resume_safe_perf_config(data: dict) -> dict:
+    """Return a recursively redacted config safe to persist for retry/resume.
+
+    The service previously removed only a top-level ``api_key`` field while
+    preserving credentials embedded in custom headers (for example
+    ``Authorization`` or ``X-API-Key``).  Keep non-sensitive request settings
+    intact but drop common secret-bearing keys at any nesting depth.
+    """
+    sensitive_exact = {
+        'api_key',
+        'apikey',
+        'authorization',
+        'proxy_authorization',
+        'cookie',
+        'set_cookie',
+        'password',
+        'secret',
+        'token',
+        'access_token',
+        'refresh_token',
+        'x_api_key',
+        'x_auth_token',
+    }
+
+    def _is_sensitive_key(key: object) -> bool:
+        normalized = str(key).strip().lower().replace('-', '_')
+        return (
+            normalized in sensitive_exact
+            or normalized.endswith('_api_key')
+            or normalized.endswith('_token')
+            or normalized.endswith('_access_token')
+            or normalized.endswith('_refresh_token')
+            or normalized.endswith('_password')
+            or normalized.endswith('_secret')
+            or normalized.endswith('_secret_key')
+        )
+
+    def _clean(value):
+        if isinstance(value, dict):
+            return {k: _clean(v) for k, v in value.items() if not _is_sensitive_key(k)}
+        if isinstance(value, list):
+            return [_clean(v) for v in value]
+        return value
+
+    return _clean(dict(data))
+
 
 def _build_perf_table(result, api_type: str = None) -> str:
     """Build a Markdown pipe-table from perf benchmark results with Chinese headers.
@@ -43,7 +92,7 @@ def _build_perf_table(result, api_type: str = None) -> str:
             headers = ['并发数', '请求速率', '每秒请求数', '平均延迟(s)', 'P99延迟(s)', '平均输入TPS', 'P99输入TPS', '平均输入Token数', '成功率']
         else:
             headers = [
-                '并发数', '请求速率', '请求数', '每秒请求数', '平均延迟(s)', 'P99延迟(s)', '平均首字延迟(s)', 'P99首字延迟(s)', '平均每Token延迟(s)',
+                '并发数', '请求速率', '请求数', '每秒请求数', '平均延迟(s)', 'P99延迟(s)', '平均首Token延迟(s)', 'P99首Token延迟(s)', '平均每Token延迟(s)',
                 'P99每Token延迟(s)', '生成速度(toks/s)', '成功率'
             ]
         return tabulate([list(r.values()) for r in analysis.rows], headers=headers, tablefmt='pipe')
@@ -60,6 +109,10 @@ bp_perf = Blueprint('perf', __name__, url_prefix='/api/v1/perf')
 
 BATCH_CSV_TEMPLATE = os.path.join(os.path.dirname(OUTPUT_DIR), 'data', 'model_list.csv')
 BATCH_UPLOAD_DIR = os.path.join(OUTPUT_DIR, '_batch_uploads')
+
+# Uploaded batch CSVs carry model api_keys in plaintext; cap the size to bound
+# the in-memory parse (memory DoS guard), mirroring eval.py's batch upload.
+MAX_BATCH_CSV_BYTES = 5 * 1024 * 1024
 
 
 def _write_owner_marker(task_dir: str, user_id: int) -> None:
@@ -83,25 +136,46 @@ def _metadata_task_id(task_ref: str) -> str:
 
 
 def _mark_perf_completed(task_id: str) -> None:
-    """Write a ``completed`` progress.json marker for a finished perf task.
+    """Persist terminal completion for both perf progress and retention.
 
-    Perf task dirs do not otherwise write progress.json, so the startup
-    retention cleanup (log.py ``cleanup_old_task_logs``) treats every perf
-    dir as incomplete and deletes it after the 7-day retention window.
-    This marker aligns perf dirs with completed eval dirs, which are kept
-    forever. Called after a perf task finishes successfully.
+    The live perf tracker writes ``<task>/perf/progress.json`` while startup
+    retention checks ``<task>/progress.json``.  Update the canonical live file
+    without discarding its counters, and also write a lightweight root marker
+    so completed perf tasks are not later treated as incomplete log folders.
     """
 
     try:
-        pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
-        os.makedirs(os.path.dirname(pj), exist_ok=True)
-        with open(pj, 'w', encoding='utf-8') as f:
+        updated_at = utc_now_iso()
+        live_pj = os.path.join(OUTPUT_DIR, task_id, 'perf', 'progress.json')
+        os.makedirs(os.path.dirname(live_pj), exist_ok=True)
+        live_data = {}
+        if os.path.isfile(live_pj):
+            try:
+                with open(live_pj, encoding='utf-8') as f:
+                    live_data = json.load(f)
+            except (OSError, ValueError, json.JSONDecodeError):
+                live_data = {}
+        live_data.update({
+            'status': 'completed',
+            'phase': 'completed',
+            'pipeline': 'perf',
+            'updated_at': updated_at,
+        })
+        tmp = f'{live_pj}.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(live_data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, live_pj)
+
+        retention_pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+        tmp = f'{retention_pj}.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump({
                 'status': 'completed',
                 'phase': 'completed',
                 'pipeline': 'perf',
-                'updated_at': utc_now_iso(),
+                'updated_at': updated_at,
             }, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, retention_pj)
     except Exception as e:
         logger.warning(f'[{task_id}] Failed to write perf completion marker: {e}')
 
@@ -132,8 +206,17 @@ def upload_batch_csv():
     if not f.filename or not f.filename.lower().endswith('.csv'):
         return jsonify({'error': 'Only .csv files are accepted'}), 400
 
+    # Reject an oversized upload before buffering its bytes, using the part's
+    # Content-Length when present; the post-read check covers the case where it
+    # is absent or untrustworthy.
+    if f.content_length is not None and f.content_length > MAX_BATCH_CSV_BYTES:
+        return jsonify({'error': 'CSV 文件过大（上限 5MB）'}), 413
+    raw = f.read()
+    if len(raw) > MAX_BATCH_CSV_BYTES:
+        return jsonify({'error': 'CSV 文件过大（上限 5MB）'}), 413
+
     import csv as csv_mod
-    content = f.read().decode('utf-8-sig')
+    content = raw.decode('utf-8-sig')
     reader = csv_mod.DictReader(content.splitlines())
 
     rows = []
@@ -165,6 +248,11 @@ def upload_batch_csv():
     saved_path = os.path.join(BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     with open(saved_path, 'w', encoding='utf-8') as outf:
         outf.write(content)
+    # Record the uploader so launch/status/stop can enforce ownership.  A
+    # marker file (rather than the in-memory state) survives a service restart.
+    from .auth import get_current_user_id
+    with open(saved_path + '.owner', 'w', encoding='utf-8') as of:
+        of.write(str(get_current_user_id()))
 
     return jsonify({
         'batch_id': batch_id,
@@ -183,16 +271,34 @@ def launch_batch_perf():
     """
     import csv as csv_mod
     import threading
-    from .auth import get_current_user_id
 
     data = request.get_json()
     if not data or not data.get('batch_id'):
         return jsonify({'error': 'batch_id is required'}), 400
 
     batch_id = data['batch_id']
+    try:
+        validate_task_id(batch_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    from .auth import get_current_user_id, get_current_role
+    current_uid = get_current_user_id()
+
     csv_path = os.path.join(BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     if not os.path.isfile(csv_path):
         return jsonify({'error': f'Batch file not found: {batch_id}. Please re-upload.'}), 404
+
+    # Ownership: only the uploader (or an admin) may launch this batch.  A
+    # missing marker (legacy/manual file) is treated as admin-only.
+    if get_current_role() != 'admin':
+        try:
+            with open(csv_path + '.owner', encoding='utf-8') as of:
+                owner_uid = int(of.read().strip())
+        except (OSError, ValueError):
+            owner_uid = None
+        if owner_uid != current_uid:
+            return jsonify({'error': 'Batch not found'}), 404
 
     if batch_id in _batch_state and _batch_state[batch_id].get('status') == 'running':
         return jsonify({'error': 'Batch already running'}), 409
@@ -207,6 +313,7 @@ def launch_batch_perf():
 
     state = {
         'batch_id': batch_id,
+        'user_id': current_uid,
         'status': 'running',
         'total': total,
         'completed': 0,
@@ -220,7 +327,7 @@ def launch_batch_perf():
 
     # Capture user_id for the background thread
     shared_config = {
-        'user_id': get_current_user_id(),
+        'user_id': current_uid,
         'parallel': data.get('parallel', [1]),
         'number': data.get('number', [10]),
         'rate': data.get('rate'),
@@ -372,7 +479,7 @@ def launch_batch_perf():
                         perf_args.read_timeout = 300
 
                     os.makedirs(perf_args.outputs_dir, exist_ok=True)
-                    save_data = {k: v for k, v in perf_data.items() if k != 'api_key'}
+                    save_data = _resume_safe_perf_config(perf_data)
                     config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
                     with open(config_file, 'w') as cf:
                         json.dump(save_data, cf, ensure_ascii=False)
@@ -435,9 +542,10 @@ def launch_batch_perf():
                         try:
                             from .. import db as _db
                             perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
-                            has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
-                    os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
-                )
+                            has_report = (
+                            os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                            or os.path.exists(os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json'))
+                        )
                             runs = 0
                             for sd in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
                                 if os.path.isdir(sd):
@@ -455,6 +563,7 @@ def launch_batch_perf():
                         except Exception as e:
                             logger.error(f'Failed to write perf to SQLite (data remains on disk, will backfill on restart): {e}')
 
+                        _mark_perf_completed(task_id)
                         state['completed'] += 1
                         state['results'].append({'task_id': task_id, 'name': model_name, 'model': model_name, 'status': 'completed'})
                         logger.info(f'[batch:{batch_id}] [{task_id}] {model_name} completed ({state["completed"]}/{total})')
@@ -487,6 +596,9 @@ def get_batch_status(batch_id: str):
     state = _batch_state.get(batch_id)
     if not state:
         return jsonify({'error': 'Batch not found'}), 404
+    from .auth import get_current_role, get_current_user_id
+    if get_current_role() != 'admin' and int(state.get('user_id', 0)) != int(get_current_user_id()):
+        return jsonify({'error': 'Batch not found'}), 404
     return jsonify({
         'batch_id': batch_id,
         'status': state['status'],
@@ -505,6 +617,9 @@ def stop_batch_perf(batch_id: str):
     """Request cancellation of a running batch test."""
     state = _batch_state.get(batch_id)
     if not state:
+        return jsonify({'error': 'Batch not found'}), 404
+    from .auth import get_current_role, get_current_user_id
+    if get_current_role() != 'admin' and int(state.get('user_id', 0)) != int(get_current_user_id()):
         return jsonify({'error': 'Batch not found'}), 404
     if state['status'] != 'running':
         return jsonify({'error': f'Batch is not running (status: {state["status"]})'}), 400
@@ -564,11 +679,13 @@ def list_perf_tasks():
     if not os.path.isdir(root):
         return jsonify({'tasks': [], 'root_path': root, 'error': f'Directory not found: {root}'}), 200
 
+    from .auth import get_current_role, get_current_user_id
+    current_uid = get_current_user_id()
+    current_is_admin = get_current_role() == 'admin'
+
     # --- Try SQLite first ---
     try:
         from .. import db as _db
-        from .auth import get_current_user_id
-        current_uid = get_current_user_id()
         removed = _db.cleanup_perf_tasks(root, user_id=current_uid)
         if removed:
             logger.info(f'Cleaned up {removed} stale perf task(s) from DB')
@@ -606,6 +723,20 @@ def list_perf_tasks():
         perf_dir = os.path.join(task_dir, 'perf')
         if not os.path.isdir(task_dir) or not os.path.isdir(perf_dir):
             continue
+
+        # Filesystem fallback must remain fail-closed for tenant isolation.
+        # The durable .owner marker survives metadata DB failures.  Legacy
+        # directories without a marker remain visible only to admins, while an
+        # explicit marker owned by somebody else never grants admin bypass.
+        marker = os.path.join(task_dir, '.owner')
+        try:
+            with open(marker, encoding='utf-8') as f:
+                marker_uid = int(f.read().strip())
+            if marker_uid != current_uid:
+                continue
+        except (OSError, ValueError):
+            if not current_is_admin:
+                continue
 
         meta = {
             'task_id': entry,
@@ -753,10 +884,10 @@ def run_performance_test():
         if perf_args.read_timeout is None:
             perf_args.read_timeout = 300
 
-        # Save task config for resume capability (strip api_key for security)
+        # Save a resume-safe config with API keys/auth headers removed.
         os.makedirs(perf_args.outputs_dir, exist_ok=True)
         try:
-            save_data = {k: v for k, v in data.items() if k != 'api_key'}
+            save_data = _resume_safe_perf_config(data)
             config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
             with open(config_file, 'w') as f:
                 json.dump(save_data, f, ensure_ascii=False)
@@ -858,6 +989,7 @@ def launch_performance_test():
             'max': max_perf,
         }), 429
 
+    thread_started = False
     try:
         api_type = data.get('api', 'openai')
         required_fields = ['model']
@@ -881,7 +1013,7 @@ def launch_performance_test():
 
         os.makedirs(perf_args.outputs_dir, exist_ok=True)
         try:
-            save_data = {k: v for k, v in data.items() if k != 'api_key'}
+            save_data = _resume_safe_perf_config(data)
             config_file = os.path.join(perf_args.outputs_dir, 'task_config.json')
             with open(config_file, 'w') as f:
                 json.dump(save_data, f, ensure_ascii=False)
@@ -912,9 +1044,10 @@ def launch_performance_test():
                     try:
                         from .. import db as _db
                         perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
-                        has_report = os.path.exists(os.path.join(perf_dir, 'perf_report.html')) or os.path.exists(
-                    os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json')
-                )
+                        has_report = (
+                            os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
+                            or os.path.exists(os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json'))
+                        )
                         runs = 0
                         for search_dir in [os.path.join(OUTPUT_DIR, task_id), perf_dir]:
                             if os.path.isdir(search_dir):
@@ -933,20 +1066,31 @@ def launch_performance_test():
                         logger.error(f'[{task_id}] Failed to write perf to SQLite (data remains on disk, will backfill on restart): {e}')
             except Exception as e:
                 logger.error(f'[{task_id}] Background perf failed: {e}', exc_info=True)
+            finally:
+                # Idempotent with run_in_subprocess and covers setup failures
+                # that happen inside the background thread before spawning.
+                unregister_process(task_id)
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()
+        thread_started = True
 
         return jsonify({'task_id': task_id, 'status': 'launched'}), 202
 
     except Exception as e:
-        unregister_process(task_id)
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] [{task_id}] Launch setup failed: {e}', exc_info=True)
         return jsonify({
             'status': 'error', 'task_id': task_id,
             'error': 'Failed to start performance test', 'error_id': error_id,
         }), 500
+    finally:
+        # Release the reserved slot on every path that did NOT hand off to the
+        # background thread (e.g. missing required field). The success path sets
+        # thread_started=True and the background thread's own finally releases
+        # the slot after the benchmark finishes.
+        if not thread_started:
+            unregister_process(task_id)
 
 
 @bp_perf.route('/stop', methods=['POST'])
@@ -960,10 +1104,10 @@ def stop_performance_test():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
-    # Ownership: cannot stop another user's task
-    from .auth import check_task_ownership
-    allowed, _owner = check_task_ownership('task_state', task_id)
-    if not allowed:
+    # Registry/.owner authorization covers the startup window before
+    # task_state exists, so stop-before-spawn works for the owning user.
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'perf_tasks')):
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
 
     stopped = stop_process(task_id)
@@ -1001,7 +1145,12 @@ def resume_performance_test():
     work_dir = os.path.join(OUTPUT_DIR, task_id)
     config_file = os.path.join(work_dir, 'task_config.json')
 
-    # Check if task exists
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'task_state', 'perf_tasks')):
+        return jsonify({'error': f'Task not found or not resumable: {task_id}'}), 404
+
+    # Check for the resumable config only after authorization so one user's
+    # filesystem artifacts do not disclose task existence to another user.
     if not os.path.exists(config_file):
         return jsonify({'error': f'Task not found or not resumable: {task_id}'}), 404
 
@@ -1010,12 +1159,6 @@ def resume_performance_test():
     from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
-
-    # Ownership: only the owner (or admin) may resume a task
-    from .auth import check_task_ownership
-    allowed, _owner = check_task_ownership('perf_tasks', task_id)
-    if not allowed:
-        return jsonify({'error': f'Task not found or not resumable: {task_id}'}), 404
 
     if not try_reserve_slot(task_id, 'perf', model=model, user_id=uid):
         max_perf = int(os.environ.get('MAX_PERF_PER_USER', '2'))
@@ -1045,6 +1188,18 @@ def resume_performance_test():
         # Re-inject API key (stripped from saved config for security)
         if api_key:
             saved_data['api_key'] = api_key
+
+        # Custom auth headers are also intentionally stripped from the saved
+        # config.  Allow callers to provide them again for a retry without
+        # persisting those secrets back to disk.
+        resume_headers = data.get('headers')
+        if resume_headers is not None:
+            if not isinstance(resume_headers, dict):
+                return jsonify({'error': 'headers must be an object'}), 400
+            existing_headers = saved_data.get('headers')
+            if not isinstance(existing_headers, dict):
+                existing_headers = {}
+            saved_data['headers'] = {**existing_headers, **resume_headers}
 
         # Build PerfArguments from saved config
         perf_args = PerfArguments.from_dict(saved_data)
@@ -1183,6 +1338,10 @@ def get_performance_report():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
     try:
         validate_task_id(task_id)
     except ValueError as e:
@@ -1213,6 +1372,10 @@ def get_perf_sla():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
 
     try:
         validate_task_id(task_id)
@@ -1247,6 +1410,10 @@ def get_performance_log():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
     start_line = request.args.get('start_line', type=int)
     page = request.args.get('page', 500, type=int)
 
@@ -1274,6 +1441,10 @@ def stream_performance_log():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
+
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
     # Support resume: client can pass last_pos (byte offset) to skip already-seen content
     try:
         initial_pos = int(request.args.get('last_pos', 0))
@@ -1338,6 +1509,10 @@ def get_performance_progress():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
     try:
         validate_task_id(task_id)
     except ValueError as e:
@@ -1380,6 +1555,10 @@ def stream_performance_progress():
     if not task_id:
         return jsonify({'error': 'task_id is required'}), 400
 
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
     try:
         validate_task_id(task_id)
     except ValueError as e:
@@ -1401,7 +1580,7 @@ def stream_performance_progress():
                         with open(progress_file, 'r') as f:
                             data = json.load(f)
                         yield f'data: {json.dumps(data)}\n\n'
-                        if data.get('percent', 0) >= 100:
+                        if str(data.get('status', '')).lower() in _TERMINAL_PROGRESS_STATUSES:
                             break
                     else:
                         idle_count += 1

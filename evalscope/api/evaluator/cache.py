@@ -1,5 +1,8 @@
 import copy
+import hashlib
+import json
 import os
+import time
 from pydantic import BaseModel, Field, model_validator
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -25,7 +28,15 @@ class CacheManager:
     avoid redundant computations.
     """
 
-    def __init__(self, outputs: OutputsStructure, model_name: str, benchmark_name: str):
+    def __init__(
+        self,
+        outputs: OutputsStructure,
+        model_name: str,
+        benchmark_name: str,
+        prediction_fingerprint: Optional[str] = None,
+        review_fingerprint: Optional[str] = None,
+        run_manifest: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize the cache manager.
 
@@ -37,6 +48,100 @@ class CacheManager:
         self.outputs = outputs
         self.model_name = model_name
         self.benchmark_name = benchmark_name
+        self.prediction_fingerprint = prediction_fingerprint
+        self.review_fingerprint = review_fingerprint
+        self.run_manifest = run_manifest or {}
+        if self.run_manifest and self.outputs.is_make:
+            self._write_run_manifest()
+
+    @staticmethod
+    def fingerprint(payload: Dict[str, Any]) -> str:
+        """Return a stable SHA-256 fingerprint for a JSON-like configuration."""
+        encoded = json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False, default=str)
+        return hashlib.sha256(encoded.encode('utf-8')).hexdigest()
+
+    def _write_run_manifest(self) -> None:
+        """Persist cache identity for every benchmark in a multi-benchmark run."""
+        path = os.path.join(self.outputs.outputs_dir, 'run_manifest.json')
+        tmp = f'{path}.tmp'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        payload: Dict[str, Any] = {'schema_version': 1, 'benchmarks': {}}
+        if os.path.exists(path):
+            try:
+                with open(path, encoding='utf-8') as f:
+                    existing = json.load(f)
+                if isinstance(existing, dict) and isinstance(existing.get('benchmarks'), dict):
+                    payload = existing
+            except Exception:
+                logger.warning(f'Ignoring unreadable run manifest: {path}')
+        payload.setdefault('benchmarks', {})[self.benchmark_name] = self.run_manifest
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        os.replace(tmp, path)
+
+    @staticmethod
+    def _meta_path(cache_file: str) -> str:
+        return f'{cache_file}.meta.json'
+
+    def _expected_fingerprint(self, cache_kind: str) -> Optional[str]:
+        return self.prediction_fingerprint if cache_kind == 'prediction' else self.review_fingerprint
+
+    def _archive_incompatible_cache(self, cache_file: str, reason: str) -> None:
+        if not os.path.exists(cache_file):
+            return
+        stamp = time.strftime('%Y%m%d_%H%M%S')
+        archived = f'{cache_file}.{reason}.{stamp}'
+        os.replace(cache_file, archived)
+        meta = self._meta_path(cache_file)
+        if os.path.exists(meta):
+            os.replace(meta, f'{archived}.meta.json')
+        logger.warning(f'Archived incompatible evaluation cache: {cache_file} -> {archived}')
+
+    def _cache_matches(self, cache_file: str, cache_kind: str) -> bool:
+        expected = self._expected_fingerprint(cache_kind)
+        if expected is None:
+            return True
+        meta_path = self._meta_path(cache_file)
+        if not os.path.exists(meta_path):
+            # Legacy caches did not record configuration identity. Reusing them
+            # silently can mix model/prompt/dataset/judge settings, so fail safe.
+            self._archive_incompatible_cache(cache_file, 'legacy')
+            return False
+        try:
+            with open(meta_path, encoding='utf-8') as f:
+                meta = json.load(f)
+        except Exception:
+            self._archive_incompatible_cache(cache_file, 'invalid-meta')
+            return False
+        if meta.get('fingerprint') != expected:
+            self._archive_incompatible_cache(cache_file, 'fingerprint-mismatch')
+            return False
+        return True
+
+    def _ensure_cache_meta(self, cache_file: str, cache_kind: str) -> None:
+        fingerprint = self._expected_fingerprint(cache_kind)
+        if fingerprint is None:
+            return
+        meta_path = self._meta_path(cache_file)
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, encoding='utf-8') as f:
+                    existing = json.load(f)
+                if existing.get('fingerprint') == fingerprint:
+                    return
+            except Exception:
+                pass
+        payload = {
+            'schema_version': 1,
+            'cache_kind': cache_kind,
+            'fingerprint': fingerprint,
+            'benchmark': self.benchmark_name,
+            'model': self.model_name,
+        }
+        tmp = f'{meta_path}.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, sort_keys=True)
+        os.replace(tmp, meta_path)
 
     def filter_prediction_cache(self, subset: str, dataset: Dataset) -> Tuple[List[TaskState], Dataset]:
         """
@@ -56,6 +161,8 @@ class CacheManager:
         cache_file = self.get_prediction_cache_path(subset)
         if not os.path.exists(cache_file):
             # No cache file exists, return empty cache and full dataset
+            return [], dataset
+        if not self._cache_matches(cache_file, 'prediction'):
             return [], dataset
 
         cached_task_states = []
@@ -111,6 +218,7 @@ class CacheManager:
             The saved model result object
         """
         cache_file = self.get_prediction_cache_path(subset)
+        self._ensure_cache_meta(cache_file, 'prediction')
         # Convert task state to serializable model result
         model_result = ModelResult.from_task_state(task_state, save_metadata)
         # Serialize to dictionary
@@ -137,6 +245,8 @@ class CacheManager:
         cache_file = self.get_review_cache_path(subset)
         if not os.path.exists(cache_file):
             # No review cache exists, return empty scores and all task states
+            return [], task_states
+        if not self._cache_matches(cache_file, 'review'):
             return [], task_states
 
         cached_sample_scores: List[SampleScore] = []
@@ -197,6 +307,7 @@ class CacheManager:
             The saved review result object
         """
         cache_file = self.get_review_cache_path(subset)
+        self._ensure_cache_meta(cache_file, 'review')
         # Convert score and state to serializable review result
         review_result = ReviewResult.from_score_state(sample_score, task_state, save_metadata)
         # Serialize to dictionary

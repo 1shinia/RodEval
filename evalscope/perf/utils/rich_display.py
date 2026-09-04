@@ -404,6 +404,11 @@ class LLMSummaryRenderer(BaseSummaryRenderer):
         has_output = any(s.avg_output_tokens for s, _, _, _ in entries)
         has_turns = any(s.avg_turns is not None and s.avg_turns > 0 for s, _, _, _ in entries)
         has_cache = any(s.avg_cached_percent is not None and s.avg_cached_percent >= 0 for s, _, _, _ in entries)
+        has_estimated_prefix = any(
+            s.estimated_reusable_prefix_percent is not None
+            and s.estimated_reusable_prefix_percent >= 0
+            for s, _, _, _ in entries
+        )
         has_first_ttft = any(s.avg_first_turn_ttft is not None for s, _, _, _ in entries)
         has_subseq_ttft = any(s.avg_subsequent_turn_ttft is not None for s, _, _, _ in entries)
         has_decode = has_tpot
@@ -473,6 +478,9 @@ class LLMSummaryRenderer(BaseSummaryRenderer):
             if has_cache:
                 v = summary.avg_cached_percent
                 _add_scalar('Cache Hit (%)', v if v is not None and v >= 0 else None, '.1f', '%')
+            if has_estimated_prefix:
+                v = summary.estimated_reusable_prefix_percent
+                _add_scalar('Reusable Prefix Est. (%)', v if v is not None and v >= 0 else None, '.1f', '%')
             if has_first_ttft:
                 _add_scalar('1st-Turn TTFT (ms)', summary.avg_first_turn_ttft, '.1f')
             if has_subseq_ttft:

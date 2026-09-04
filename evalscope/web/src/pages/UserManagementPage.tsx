@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from '@/components/common/Toast'
 import Button from '@/components/ui/Button'
-import { Trash2, Key, Plus, X } from 'lucide-react'
+import { Trash2, Key, Plus, X, Link2, Copy, Check } from 'lucide-react'
 
 interface UserInfo {
   id: number
@@ -21,6 +21,9 @@ export default function UserManagementPage() {
   const [newRole, setNewRole] = useState('user')
   const [resetId, setResetId] = useState<number | null>(null)
   const [resetPassword, setResetPassword] = useState('')
+  const [resetLink, setResetLink] = useState<string | null>(null)
+  const [resetLinkUser, setResetLinkUser] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const authHeaders = { Authorization: `Bearer ${token}` }
 
@@ -80,6 +83,36 @@ export default function UserManagementPage() {
       if (res.ok) { toast.success('密码已重置'); setResetId(null); setResetPassword('') }
       else toast.error(data.error || '重置失败')
     } catch { toast.error('重置失败') }
+  }
+
+  const handleGenerateResetLink = async (id: number, username: string) => {
+    try {
+      const res = await fetch(`/api/v1/auth/users/${id}/reset-token`, { method: 'POST', headers: authHeaders })
+      const data = await res.json()
+      if (res.ok) {
+        setResetLink(`${window.location.origin}/reset-password?token=${data.token}`)
+        setResetLinkUser(username)
+        setCopied(false)
+      } else toast.error(data.error || '生成失败')
+    } catch { toast.error('生成失败') }
+  }
+
+  const handleCopyResetLink = async () => {
+    if (!resetLink) return
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(resetLink)
+      } else {
+        const el = document.createElement('textarea')
+        el.value = resetLink
+        document.body.appendChild(el)
+        el.select()
+        document.execCommand('copy')
+        document.body.removeChild(el)
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { toast.error('复制失败，请手动复制') }
   }
 
   return (
@@ -161,6 +194,10 @@ export default function UserManagementPage() {
                             className="p-1.5 rounded cursor-pointer opacity-50 hover:opacity-100 hover:bg-[var(--accent-dim)] transition-all" title="重置密码">
                             <Key size={14} />
                           </button>
+                          <button onClick={() => handleGenerateResetLink(u.id, u.username)}
+                            className="p-1.5 rounded cursor-pointer opacity-50 hover:opacity-100 hover:bg-[var(--accent-dim)] transition-all" title="生成重置链接">
+                            <Link2 size={14} />
+                          </button>
                           <button onClick={() => handleDelete(u.id, u.username)}
                             className="p-1.5 rounded cursor-pointer opacity-50 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title="删除">
                             <Trash2 size={14} />
@@ -173,6 +210,25 @@ export default function UserManagementPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {resetLink && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setResetLink(null)}>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-6 max-w-md w-full shadow-xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-semibold text-[var(--text)] mb-1">重置链接（{resetLinkUser}）</h2>
+            <p className="text-xs text-[var(--text-muted)] mb-3">复制下面的链接发给用户，24 小时内有效，使用一次后失效。</p>
+            <div className="flex items-center gap-2">
+              <input readOnly value={resetLink} onFocus={e => e.target.select()}
+                className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs text-[var(--text)]" />
+              <Button variant="primary" size="sm" onClick={handleCopyResetLink}>
+                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? '已复制' : '复制'}
+              </Button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setResetLink(null)}>关闭</Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

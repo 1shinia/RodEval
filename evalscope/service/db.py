@@ -83,7 +83,7 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 18  # Bump when adding migrations below
+SCHEMA_VERSION = 19  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -382,6 +382,19 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
                   )
             ) THEN RAISE(ABORT, 'task registry conflict for task state') END;
         END;
+    '''
+    ),
+    (
+        19, 'add password reset tokens table', '''
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            token       TEXT PRIMARY KEY,
+            user_id     INTEGER NOT NULL,
+            expires_at  TEXT NOT NULL,
+            used        INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user
+            ON password_reset_tokens(user_id);
     '''
     ),
 ]
@@ -1009,6 +1022,7 @@ def _get_conn() -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 _TASK_ID_TABLES = ('eval_reports', 'perf_tasks', 'task_state')
+_TASK_OWNERSHIP_TABLES = _TASK_ID_TABLES + ('task_registry',)
 
 
 def _task_kind_for_type(task_type: str) -> str:
@@ -1234,14 +1248,18 @@ def checkpoint_db() -> dict:
 def _compute_total_num(report_list) -> int:
     """Sample count for a report list, shared by live eval and backfill.
 
-    Multi-metric reports (e.g. vendor verifiers) carry one entry per metric
-    whose ``num`` is the count of rows that triggered that validator (0 = not
-    triggered).  Summing them over-counts and treating any 0 row as "full
-    dataset" would wrongly yield the -1 sentinel.  Return the max positive
-    count, or -1 (全量, limits was null) only when nothing is > 0.
+    Each entry in ``report_list`` is a dataset/benchmark report.  Per-metric
+    de-duplication already happens inside :attr:`Report.num` (which takes the
+    max across metrics that score the same sample set), so the task-level
+    count must SUM positive report counts across benchmarks.  Taking the max
+    here under-counts multi-benchmark evaluations (e.g. 100 GSM8K + 200 MMLU
+    would incorrectly be shown as 200 instead of 300).
+
+    ``-1`` remains the legacy sentinel when no report exposes a positive
+    sample count.
     """
     positive = [r.num for r in report_list if (r.num or 0) > 0]
-    return max(positive) if positive else -1
+    return sum(positive) if positive else -1
 
 
 def _replace_eval_report_datasets(

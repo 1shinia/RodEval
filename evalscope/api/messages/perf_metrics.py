@@ -91,7 +91,10 @@ class PerfSummary:
     Attributes:
         n_samples:  Total number of recorded inference requests.
         latency:    Latency stats dict (seconds).
-        throughput: Throughput dict with avg_output_tps (tok/s) and avg_req_ps (req/s).
+        throughput: Per-request throughput summary. ``avg_output_tps`` is the
+            mean of ``output_tokens / latency`` across requests. ``avg_req_ps``
+            is ``None`` because true concurrent workload req/s requires absolute
+            request timestamps, which this collector does not receive.
         usage:      Token usage dict; each sub-key (input_tokens / output_tokens /
                     total_tokens) has the same shape as ``latency``.
         ttft:       TTFT stats dict (same shape as ``latency``), or ``None`` when
@@ -128,12 +131,12 @@ class PerfSummary:
 
     @property
     def avg_output_tps(self):
-        """Average output throughput in tokens/second."""
+        """Mean per-request E2E output-token rate in tokens/second."""
         return self.throughput.get('avg_output_tps', '-')
 
     @property
     def avg_req_ps(self):
-        """Average request throughput in requests/second."""
+        """Concurrent workload req/s, unavailable without absolute timestamps."""
         return self.throughput.get('avg_req_ps', '-')
 
     @property

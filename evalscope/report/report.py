@@ -56,6 +56,8 @@ class Subset(BaseModel):
     name: str = 'default_subset'
     score: float = 0.0
     num: int = 0
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    """Aggregation metadata such as scoring coverage / missing sample counts."""
     is_aggregate: bool = False
     """True for derived/summary subsets (e.g. BFCL OVERALL, MULTI_TURN) that
     aggregate other real subsets. Excluded from num/score totals so they
@@ -121,6 +123,8 @@ class ReportKey:
     category_prefix = 'Cat.'
     subset_name = 'Subset'
     num = 'Num'
+    expected_num = 'Expected Num'
+    coverage = 'Coverage'
     score = 'Score'
     overall_score = 'OVERALL'
 
@@ -209,8 +213,16 @@ class Report(BaseModel):
             pd.DataFrame: The report as a pandas DataFrame.
         """
         table = defaultdict(list)
+        has_coverage = any(
+            subset.metadata and 'coverage' in subset.metadata
+            for metric in self.metrics
+            for category in metric.categories
+            for subset in category.subsets
+            if not subset.is_aggregate or include_aggregate
+        )
         for metric in self.metrics:
             metric_count = 0
+            metric_expected_num = 0
             for category in metric.categories:
                 for subset in category.subsets:
                     if subset.is_aggregate and not include_aggregate:
@@ -222,6 +234,14 @@ class Report(BaseModel):
                     table[ReportKey.category_name].append(category.name)
                     table[ReportKey.subset_name].append(subset.name)
                     table[ReportKey.num].append(subset.num)
+                    if has_coverage:
+                        expected_num = (subset.metadata or {}).get('expected_num', subset.num)
+                        coverage = (subset.metadata or {}).get(
+                            'coverage', subset.num / expected_num if expected_num else 0.0
+                        )
+                        table[ReportKey.expected_num].append(expected_num)
+                        table[ReportKey.coverage].append(coverage)
+                        metric_expected_num += expected_num
                     table[ReportKey.score].append(subset.score)
             # add overall metric when there are multiple subsets
             if metric_count > 1 and add_overall_metric and (
@@ -233,6 +253,11 @@ class Report(BaseModel):
                 table[ReportKey.category_name].append(('-', ))
                 table[ReportKey.subset_name].append(ReportKey.overall_score)
                 table[ReportKey.num].append(metric.num)
+                if has_coverage:
+                    table[ReportKey.expected_num].append(metric_expected_num)
+                    table[ReportKey.coverage].append(
+                        metric.num / metric_expected_num if metric_expected_num else 0.0
+                    )
                 table[ReportKey.score].append(metric.score)
             # NOTE: only flatten metrics if needed, use the first metric by default
             if not flatten_metrics:

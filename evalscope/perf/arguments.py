@@ -195,7 +195,7 @@ class Arguments(BaseArgument):
     db_commit_interval: int = 1000
     """Number of rows buffered before committing to the DB."""
 
-    db_store_payloads: bool = True
+    db_store_payloads: bool = False
     """Store full request/response payloads in benchmark_data.db.
 
     Disable for very high-throughput benchmarks when request-level payloads
@@ -207,6 +207,33 @@ class Arguments(BaseArgument):
 
     in_flight_task_multiplier: int = 2
     """Max scheduled tasks = parallel * this multiplier."""
+
+    open_loop_max_in_flight: int = 10000
+    """Client-side safety high-water mark for scheduled open-loop requests.
+
+    This is not server concurrency control. Hitting the limit is reported as
+    load-generator saturation because dispatch must briefly wait for a client
+    task to finish before allocating more tasks.
+    """
+
+    open_loop_result_queue_maxsize: int = 10000
+    """Bound completed-result buffering in open-loop mode to avoid client OOM."""
+
+    arrival_distribution: str = 'normalized_poisson'
+    """Open-loop arrival model: ``poisson`` or ``normalized_poisson``.
+
+    ``poisson`` preserves independent exponential inter-arrival samples. The
+    legacy ``normalized_poisson`` mode rescales a sampled run to exactly N/rate.
+    ``normalized_poisson`` is the default to keep realized QPS locked to the
+    configured rate (SLA baselines were calibrated under this behavior).
+    """
+
+    measure_client_gpu_memory: bool = False
+    """Opt in to sampling the benchmark client's PyTorch CUDA allocator peak.
+
+    This metric does not represent GPU memory used by a remote/in-separate-process
+    inference server. Server GPU memory should be collected via server telemetry.
+    """
 
     # Logging and debugging
     log_every_n_query: int = 100
@@ -451,10 +478,28 @@ class Arguments(BaseArgument):
     def _validate_queue_size_multiplier(cls, v):
         return max(v, 1) if v <= 0 else v
 
+    @field_validator('log_every_n_query', mode='after')
+    @classmethod
+    def _validate_log_every_n_query(cls, v):
+        return max(v, 1) if v <= 0 else v
+
     @field_validator('in_flight_task_multiplier', mode='after')
     @classmethod
     def _validate_in_flight_task_multiplier(cls, v):
         return max(v, 1) if v <= 0 else v
+
+    @field_validator('open_loop_max_in_flight', 'open_loop_result_queue_maxsize', mode='after')
+    @classmethod
+    def _validate_open_loop_limits(cls, v):
+        return max(int(v), 1)
+
+    @field_validator('arrival_distribution', mode='after')
+    @classmethod
+    def _validate_arrival_distribution(cls, v):
+        allowed = {'poisson', 'normalized_poisson'}
+        if v not in allowed:
+            raise ValueError(f'arrival_distribution must be one of {sorted(allowed)}')
+        return v
 
     # --- Model validator (cross-field logic) ---
 
@@ -651,6 +696,11 @@ def add_argument(parser: argparse.ArgumentParser):
     parser.add_argument('--db-commit-interval', type=int, default=1000, help='Rows buffered before SQLite commit')
     parser.add_argument('--queue-size-multiplier', type=int, default=5, help='Queue maxsize = parallel * multiplier')
     parser.add_argument('--in-flight-task-multiplier', type=int, default=2, help='Max scheduled tasks = parallel * multiplier')  # noqa: E501
+    parser.add_argument('--open-loop-max-in-flight', type=int, default=10000, help='Client safety cap for scheduled open-loop requests')
+    parser.add_argument('--open-loop-result-queue-maxsize', type=int, default=10000, help='Bound completed-result buffering in open-loop mode')
+    parser.add_argument('--arrival-distribution', choices=['poisson', 'normalized_poisson'], default='normalized_poisson', help='Open-loop arrival model; normalized_poisson preserves the legacy exact-N/rate behavior (default), poisson uses independent exponential inter-arrival samples')
+    parser.add_argument('--db-store-payloads', action=argparse.BooleanOptionalAction, default=False, help='Store full request/response payloads in benchmark DB (disabled by default for measurement fidelity)')
+    parser.add_argument('--measure-client-gpu-memory', action='store_true', default=False, help='Measure benchmark-client CUDA allocator peak (not server GPU memory)')
 
     # Logging and debugging
     parser.add_argument('--log-every-n-query', type=int, default=100, help='Logging every n query')

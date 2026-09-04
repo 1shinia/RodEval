@@ -47,38 +47,31 @@ async def get_requests(args: Arguments, api_plugin: 'ApiPluginBase') -> AsyncGen
             yield request, i < warmup_count
 
     async def _generate_from_dataset():
-        """Generate requests by cycling through a dataset."""
-        message_generator = DatasetRegistry.get_class(args.dataset)(args)
-        dataset_messages = []
+        """Generate requests without materialising the requested run in memory.
 
-        # Load dataset messages into memory (limited by total_count).
-        with tqdm(
-            message_generator.build_messages(),
-            desc='Generating[requests]',
-            total=total_count,
-            initial=1,
-            logger=logger
-        ) as pbar:
-            for messages in pbar:
-                dataset_messages.append(messages)
-                if len(dataset_messages) >= total_count:
-                    break
-
-        if not dataset_messages:
-            raise ValueError('Dataset is empty!')
-
-        # Yield requests cyclically until total count is reached.
+        When the requested count exceeds the dataset length we re-open the
+        dataset iterator for another pass instead of retaining every message.
+        """
         count = 0
-        dataset_index = 0
-        num_messages = len(dataset_messages)
-
-        while count < total_count:
-            messages = dataset_messages[dataset_index]
-            request = api_plugin.build_request(messages)
-            if request is not None:
-                yield request, count < warmup_count
-                count += 1
-            dataset_index = (dataset_index + 1) % num_messages
+        dataset_cls = DatasetRegistry.get_class(args.dataset)
+        with tqdm(desc='Generating[requests]', total=total_count, logger=logger) as pbar:
+            while count < total_count:
+                # Recreate the adapter each pass so one-shot dataset iterators
+                # remain cyclable without retaining the whole dataset in RAM.
+                message_generator = dataset_cls(args)
+                produced_this_pass = 0
+                for messages in message_generator.build_messages():
+                    request = api_plugin.build_request(messages)
+                    if request is None:
+                        continue
+                    yield request, count < warmup_count
+                    count += 1
+                    produced_this_pass += 1
+                    pbar.update(1)
+                    if count >= total_count:
+                        break
+                if produced_this_pass == 0:
+                    raise ValueError('Dataset is empty or produced no valid requests!')
 
     # Dispatch based on arguments.
     if args.prompt:
@@ -117,7 +110,7 @@ async def run_benchmark(
     await connect_test(args, api_plugin)
 
     if args.open_loop:
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=args.open_loop_result_queue_maxsize)
     else:
         queue = asyncio.Queue(maxsize=max(1, args.parallel * args.queue_size_multiplier))
 

@@ -65,6 +65,9 @@ class LocalJsonlDatasetPlugin(DatasetPluginBase):
 
     def _extract_prompt(self, item: dict) -> Union[str, List[Dict], None]:
         """从 JSON 对象中提取 prompt，自动检测字段名。"""
+        if self._field == '__raw__':
+            # Fallback 字段：每行都序列化整行 JSON，不依赖字段名。
+            return json.dumps(item, ensure_ascii=False)
         if self._field is not None:
             # 已检测到字段，直接使用
             return item.get(self._field)

@@ -155,33 +155,42 @@ def create_app(outputs: str = None):
     except Exception as e:
         logger.debug(f'Startup log cleanup failed (non-fatal): {e}')
 
-    # --- Clean up orphaned sandbox containers from previous runs ----------
-    try:
-        import subprocess
-        orphaned = subprocess.run(
-            ['docker', 'ps', '-a', '-q', '--filter', 'name=sandbox-'],
-            capture_output=True, text=True, timeout=10
+    # --- Legacy Docker cleanup (disabled by default) -----------------------
+    # Historical startup cleanup matched containers only by a broad name or
+    # image pattern.  On a shared Docker host that can delete containers owned
+    # by unrelated services.  Keep the old behaviour behind an explicit
+    # compatibility opt-in until all sandbox creators attach EvalScope-owned
+    # labels that can be filtered safely.
+    if os.environ.get('EVALSCOPE_ENABLE_LEGACY_DOCKER_CLEANUP', '').strip().lower() in ('1', 'true', 'yes'):
+        logger.warning(
+            'EVALSCOPE_ENABLE_LEGACY_DOCKER_CLEANUP is enabled; startup Docker cleanup uses '
+            'broad name/image matching and should only be used on a dedicated Docker host.'
         )
-        if orphaned.stdout.strip():
-            ids = orphaned.stdout.strip().split()
-            subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
-            logger.info('Startup cleanup: removed %d orphaned sandbox container(s)', len(ids))
-    except Exception as e:
-        logger.debug(f'Startup sandbox cleanup failed (non-fatal): {e}')
+        try:
+            import subprocess
+            orphaned = subprocess.run(
+                ['docker', 'ps', '-a', '-q', '--filter', 'name=sandbox-'],
+                capture_output=True, text=True, timeout=10
+            )
+            if orphaned.stdout.strip():
+                ids = orphaned.stdout.strip().split()
+                subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
+                logger.info('Startup cleanup: removed %d orphaned sandbox container(s)', len(ids))
+        except Exception as e:
+            logger.debug(f'Startup sandbox cleanup failed (non-fatal): {e}')
 
-    # --- Clean up orphaned SWE-bench containers from previous runs ---------
-    try:
-        import subprocess
-        orphaned = subprocess.run(
-            ['docker', 'ps', '-a', '-q', '--filter', 'ancestor=swebench/sweb.eval.*'],
-            capture_output=True, text=True, timeout=10
-        )
-        if orphaned.stdout.strip():
-            ids = orphaned.stdout.strip().split()
-            subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
-            logger.info('Startup cleanup: removed %d orphaned SWE-bench container(s)', len(ids))
-    except Exception as e:
-        logger.debug(f'Startup SWE-bench cleanup failed (non-fatal): {e}')
+        try:
+            import subprocess
+            orphaned = subprocess.run(
+                ['docker', 'ps', '-a', '-q', '--filter', 'ancestor=swebench/sweb.eval.*'],
+                capture_output=True, text=True, timeout=10
+            )
+            if orphaned.stdout.strip():
+                ids = orphaned.stdout.strip().split()
+                subprocess.run(['docker', 'rm', '-f'] + ids, capture_output=True, timeout=30)
+                logger.info('Startup cleanup: removed %d orphaned SWE-bench container(s)', len(ids))
+        except Exception as e:
+            logger.debug(f'Startup SWE-bench cleanup failed (non-fatal): {e}')
 
     # --- API Key authentication (optional) --------------------------------
     # Set EVALSCOPE_API_KEY env var to enable.  When set, all /api/* requests
@@ -363,6 +372,11 @@ def _setup_access_logging(app: Flask, outputs_root: str) -> None:
     access_log.addHandler(handler)
     access_log.setLevel(logging.INFO)
 
+    # Parse the trusted-proxy set once at setup time; it never changes per request.
+    trusted_proxies = set(
+        p.strip() for p in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',') if p.strip()
+    )
+
     @app.before_request
     def _capture_start():
         request._start_time = time.time()
@@ -373,12 +387,8 @@ def _setup_access_logging(app: Flask, outputs_root: str) -> None:
             return response
 
         elapsed = (time.time() - getattr(request, '_start_time', time.time())) * 1000
-        # Only trust X-Forwarded-For from known reverse proxy addresses.
-        # When running behind nginx/Caddy on localhost or a trusted LAN proxy,
-        # add its IP to TRUSTED_PROXIES (comma-separated env var).
-        trusted_proxies = set(
-            p.strip() for p in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',') if p.strip()
-        )
+        # Only trust X-Forwarded-For from known reverse proxy addresses (the set
+        # is parsed once at setup time — see above).
         remote = request.remote_addr or ''
         if remote in trusted_proxies:
             client_ip = (

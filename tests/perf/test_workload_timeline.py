@@ -20,13 +20,22 @@ def _ok(*, start: float, completed: float, prompt: int, completion: int, cached:
 
 class TestWorkloadTimelineFeed(unittest.TestCase):
 
-    def test_skips_warmup_failed_and_zero_timestamps(self):
+    def test_skips_warmup_and_invalid_zero_timestamps(self):
         tl = WorkloadTimeline()
         tl.feed(_ok(start=1.0, completed=2.0, prompt=10, completion=5, is_warmup=True))
-        tl.feed(_ok(start=1.0, completed=2.0, prompt=10, completion=5, success=False))
         tl.feed(_ok(start=0.0, completed=0.0, prompt=10, completion=5))  # zero timestamps
         self.assertEqual(tl.n_points, 0)
         self.assertEqual(tl.wall_time, 0.0)
+
+    def test_timed_failure_extends_wall_time_but_not_token_counts(self):
+        tl = WorkloadTimeline()
+        tl.feed(_ok(start=10.0, completed=11.0, prompt=10, completion=5))
+        tl.feed(_ok(start=10.5, completed=15.0, prompt=999, completion=999, success=False))
+        self.assertEqual(tl.n_points, 1)
+        self.assertAlmostEqual(tl.wall_time, 5.0)
+        rates = tl.overall_rates()
+        self.assertAlmostEqual(rates[0], 10 / 5)
+        self.assertAlmostEqual(rates[3], 5 / 5)
 
     def test_cumulative_counts_and_wall_time(self):
         tl = WorkloadTimeline()
@@ -50,21 +59,17 @@ class TestWorkloadTimelineFeed(unittest.TestCase):
         # completion / wall = 45 / 4 = 11.25
         self.assertAlmostEqual(last_overall[3], 11.25)
 
-    def test_wall_start_locked_on_first_feed(self):
-        """A later request with a smaller start_time must not retroactively
-        shift wall_start; otherwise already-appended ``t`` offsets would
-        silently become wrong (they are never rewritten).
-        """
+    def test_wall_start_uses_earliest_start_even_if_completion_is_out_of_order(self):
         tl = WorkloadTimeline()
         tl.feed(_ok(start=100.0, completed=101.0, prompt=10, completion=5))
         # Second request started *earlier* but completed later (worker race).
         tl.feed(_ok(start=99.0, completed=102.0, prompt=10, completion=5))
-        # wall_start stayed at 100; second point's t = 102 - 100 = 2.0.
-        # Old "min" logic would have made wall_start=99 and silently broken
-        # the first point's already-stored t (left at 1.0 instead of 2.0).
-        self.assertEqual(tl._wall_start, 100.0)
-        self.assertAlmostEqual(tl._points[0].t, 1.0)
-        self.assertAlmostEqual(tl._points[1].t, 2.0)
+        # Timeline is rebuilt from absolute timestamps, so the true wall start
+        # is 99 and the completion offsets are 2s and 3s.
+        self.assertAlmostEqual(tl.wall_time, 3.0)
+        points = tl.to_raw_points_dict()['points']
+        self.assertAlmostEqual(points[0]['t'], 2.0)
+        self.assertAlmostEqual(points[1]['t'], 3.0)
 
     def test_new_prompt_clamped_when_cached_exceeds_prompt(self):
         tl = WorkloadTimeline()
@@ -92,10 +97,11 @@ class TestSteadyStateAndLastWindow(unittest.TestCase):
         tl.feed(_ok(start=0.5, completed=3.0, prompt=10, completion=10))   # t=3
         tl.feed(_ok(start=1.0, completed=6.0, prompt=10, completion=10))   # t=6
         tl.feed(_ok(start=1.5, completed=10.0, prompt=10, completion=10))  # t=10
-        # wall = 10s. Tail window = last 5s -> from t=5 anchor (latest with t<=5 is t=3).
-        # delta_t = 10 - 3 = 7; delta_completion = 40 - 20 = 20
+        # wall = 10s. Tail window is the exact interval [5, 10].  The
+        # cumulative count at t=5 is 20, therefore 20 completion tokens were
+        # produced over exactly 5 seconds.
         rates = tl.last_window_rates(5.0)
-        self.assertAlmostEqual(rates[3], 20 / 7, places=4)
+        self.assertAlmostEqual(rates[3], 20 / 5, places=4)
 
     def test_steady_state_drops_warmup(self):
         tl = WorkloadTimeline()
@@ -113,6 +119,17 @@ class TestSteadyStateAndLastWindow(unittest.TestCase):
         # Single point can't carve a steady-state window.
         tl = WorkloadTimeline()
         tl.feed(_ok(start=0.0, completed=1.0, prompt=10, completion=10))
+        self.assertEqual(tl.steady_state_rates(0.2), tl.overall_rates())
+
+    def test_steady_state_falls_back_when_warmup_window_has_no_completion(self):
+        # Serial requests where the first completion lands after the warmup
+        # cutoff: dropping the first 20% of wall time removes no output and
+        # would inflate the rate, so steady-state must equal overall.
+        tl = WorkloadTimeline()
+        tl.feed(_ok(start=0.0, completed=4.87, prompt=10, completion=10))
+        tl.feed(_ok(start=0.5, completed=9.74, prompt=10, completion=10))
+        tl.feed(_ok(start=1.0, completed=14.61, prompt=10, completion=10))
+        tl.feed(_ok(start=1.5, completed=19.5, prompt=10, completion=10))
         self.assertEqual(tl.steady_state_rates(0.2), tl.overall_rates())
 
 

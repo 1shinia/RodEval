@@ -34,9 +34,21 @@ class BenchmarkData:
     # --- Derived timing (populated by finalize) ---
     query_latency: float = 0.0
     first_chunk_latency: float = 0.0
-    time_per_output_token: float = 0.0
+    """Time to the first protocol/data chunk. Diagnostic only; not TTFT."""
+    first_token_latency: Optional[float] = None
+    """Time to the first non-empty generated token/delta. This is the TTFT source."""
+    last_generated_time: Optional[float] = None
+    """Absolute perf-counter timestamp of the last generated-content chunk.
+
+    Kept separate from ``completed_time`` so TPOT is not inflated by trailing
+    usage-only SSE events, ``[DONE]`` markers, or protocol teardown.
+    """
+    time_per_output_token: Optional[float] = None
+    """TPOT in seconds. Undefined for responses with fewer than two output tokens."""
     inter_chunk_latency: List[float] = field(default_factory=list)
-    max_gpu_memory_cost = 0  # class-level default; updated by update_gpu_usage
+    """Intervals between generated SSE chunks. This is ICL, not true token-level ITL."""
+    max_gpu_memory_cost: float = 0.0
+    """Optional *client-process* CUDA allocator peak, not remote server GPU memory."""
 
     # --- Response content ---
     generated_text: str = ''
@@ -52,10 +64,14 @@ class BenchmarkData:
     """Real cached token count from server response usage.prompt_tokens_details.cached_tokens."""
     cached_tokens: Optional[int] = None
     """Absolute number of KV-cached tokens for this turn.
-    Preferred source for cache hit rate aggregation.
-    Priority: real_cached_tokens (server-reported) > estimated (prev_prompt + prev_completion).
-    Turn 1 is always 0 (no prior context), contributing 0 to the numerator but
-    still counted in the denominator so the global ratio is unbiased."""
+    Populated only from server-reported cache telemetry.  Estimated reusable
+    prefix tokens are kept separately in ``estimated_cacheable_tokens``."""
+    estimated_cacheable_tokens: Optional[int] = None
+    """Estimated reusable prefix length when the server does not report real cache hits.
+
+    This is *not* a measured KV-cache hit and is therefore never folded into
+    ``cached_tokens`` / the observed cache-hit-rate metric.
+    """
 
     # --- Conversation-level progress signal (multi-turn only) ---
     is_last_turn: bool = False
@@ -77,9 +93,12 @@ class BenchmarkData:
     """True when this request is a warmup request, excluded from final metrics."""
 
     # --- Speculative decoding specific ---
-    decoded_tokens_per_iter: float = 0.0
-    """Average decoded tokens per iteration: (completion_tokens - 1) / (n_chunks - 1).
-    Approximates speculative decoding acceptance length L."""
+    decoded_tokens_per_iter: Optional[float] = None
+    """Average decoded tokens per decoder iteration from backend telemetry.
+
+    Never inferred from SSE chunk counts because transport chunks are not
+    decoder-iteration boundaries.
+    """
 
     def finalize(self, api_plugin) -> None:
         """Parse token counts and compute all derived timing metrics.
@@ -92,30 +111,53 @@ class BenchmarkData:
                 self.response_messages, request=self.request
             )
 
-        # tpot = (latency - ttft) / (output_len - 1)
+        # A successful response with zero generated tokens has no TTFT.
+        # Non-stream adapters initially set first_token_latency to E2E latency
+        # because token timing is unobservable until parsing completes; clear
+        # that synthetic value once token usage proves no token was generated.
+        if self.completion_tokens is not None and self.completion_tokens <= 0:
+            self.first_token_latency = None
+
+        # TPOT = decode_span / (output_len - 1). A one-token response
+        # has no inter-token decoding interval, so TPOT is intentionally None.
         if self.completion_tokens and self.completion_tokens > 1:
-            self.time_per_output_token = ((self.query_latency - self.first_chunk_latency) /
-                                          (self.completion_tokens - 1))
+            # Non-stream responses set both first-token and first-chunk latency
+            # to the total query latency (see default_api.py), so TTFT/TPOT are
+            # not observable — report None (not-applicable) rather than 0.0.
+            if (self.first_token_latency == self.query_latency
+                    and self.first_chunk_latency == self.query_latency):
+                self.time_per_output_token = None
+            else:
+                ttft = self.first_token_latency if self.first_token_latency is not None else self.first_chunk_latency
+                decode_end_latency = self.query_latency
+                if (
+                    self.last_generated_time is not None
+                    and self.start_time > 0
+                    and self.last_generated_time >= self.start_time
+                ):
+                    decode_end_latency = self.last_generated_time - self.start_time
+                self.time_per_output_token = max(
+                    0.0, (decode_end_latency - ttft) / (self.completion_tokens - 1)
+                )
+        else:
+            self.time_per_output_token = None
 
         # Derive inter-chunk latencies from chunk timestamps when not already set
         if not self.inter_chunk_latency and self.chunk_times:
             self.inter_chunk_latency = [t2 - t1 for t1, t2 in zip(self.chunk_times[:-1], self.chunk_times[1:])]
 
-        # Compute average decoded tokens per iteration for speculative decoding estimation
-        # Formula: L = (tokens - 1) / (chunks - 1)
-        # n_chunks is inferred from inter_chunk_latency: N chunks produce N-1 inter-chunk intervals,
-        # so n_chunks = len(inter_chunk_latency) + 1.  Falls back to chunk_times when available.
-        if self.chunk_times:
-            n_chunks = len(self.chunk_times)
-        elif self.inter_chunk_latency:
-            n_chunks = len(self.inter_chunk_latency) + 1
-        else:
-            n_chunks = 0
-        if self.completion_tokens and self.completion_tokens > 1 and n_chunks > 1:
-            self.decoded_tokens_per_iter = (self.completion_tokens - 1) / (n_chunks - 1)
+        # Do not infer speculative-decoding iterations from SSE chunk count.
+        # SSE chunking is a transport/server-buffering property and is not a
+        # decoder-iteration boundary. ``decoded_tokens_per_iter`` remains an
+        # optional field for backends that can populate real server telemetry.
 
     def update_gpu_usage(self) -> None:
-        """Update max GPU memory usage across all visible CUDA devices."""
+        """Update client-process CUDA allocator peak across visible devices.
+
+        This does **not** represent memory used by a remote or separate-process
+        inference server. The strategy layer keeps it opt-in to avoid perturbing
+        high-throughput benchmark measurements.
+        """
         if check_import('torch', raise_warning=False):
             import torch
             total_memory = sum(torch.cuda.max_memory_allocated(i) / 2**30 for i in range(torch.cuda.device_count()))
@@ -155,10 +197,14 @@ class MetricsAccumulator:
     # --- Cumulative sums (all use total_ prefix) ---
     total_latency: float = 0.0
     total_first_chunk_latency: float = 0.0
+    total_first_token_latency: float = 0.0
+    n_ttft_samples: int = 0
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
     total_time_per_output_token: float = 0.0
-    all_inter_token_latencies: List[float] = field(default_factory=list)
+    n_tpot_samples: int = 0
+    total_inter_chunk_latency: float = 0.0
+    n_inter_chunk_samples: int = 0
 
     # --- Multi-turn cumulative sums ---
     total_input_turns: int = 0
@@ -170,6 +216,9 @@ class MetricsAccumulator:
     total_cached_tokens: int = 0
     total_prompt_tokens_for_cache: int = 0  # denominator: prompt_tokens of turns with cached_tokens set
     n_cache_turns: int = 0  # number of turns contributing to the cache ratio
+    total_estimated_cacheable_tokens: int = 0
+    total_prompt_tokens_for_estimated_cache: int = 0
+    n_estimated_cache_turns: int = 0
 
     # First-turn vs subsequent-turn TTFT split (multi-turn only).
     # First-turn TTFT reflects cold prefill of the initial user prompt; subsequent
@@ -199,7 +248,7 @@ class MetricsAccumulator:
         """Elapsed time from the earliest request start to the latest completion."""
         if self._wall_start is not None and self._wall_end is not None:
             return max(self._wall_end - self._wall_start, 0.0)
-        return 1.0  # guard against division-by-zero before any data arrives
+        return 0.0
 
     # -----------------------------------------------------------------------
     # Update
@@ -218,10 +267,17 @@ class MetricsAccumulator:
 
             self.total_latency += data.query_latency
             self.total_first_chunk_latency += data.first_chunk_latency
-            self.total_prompt_tokens += data.prompt_tokens
-            self.total_completion_tokens += data.completion_tokens
-            self.total_time_per_output_token += data.time_per_output_token
-            self.all_inter_token_latencies += data.inter_chunk_latency
+            if data.first_token_latency is not None:
+                self.total_first_token_latency += data.first_token_latency
+                self.n_ttft_samples += 1
+            self.total_prompt_tokens += data.prompt_tokens or 0
+            self.total_completion_tokens += data.completion_tokens or 0
+            if data.time_per_output_token is not None:
+                self.total_time_per_output_token += data.time_per_output_token
+                self.n_tpot_samples += 1
+            if data.inter_chunk_latency:
+                self.total_inter_chunk_latency += sum(data.inter_chunk_latency)
+                self.n_inter_chunk_samples += len(data.inter_chunk_latency)
 
             # Multi-turn specific
             if data.input_num_turns > 0:
@@ -229,12 +285,13 @@ class MetricsAccumulator:
                 # Bucket TTFT by turn position so cold prefill vs warm prefix-cache
                 # turns can be reported separately. Single-turn runs (input_num_turns
                 # == 0) are skipped to keep cold/warm distinction meaningful.
-                if data.is_first_turn:
-                    self.total_first_turn_ttft += data.first_chunk_latency
-                    self.n_first_turn += 1
-                else:
-                    self.total_subsequent_turn_ttft += data.first_chunk_latency
-                    self.n_subsequent_turn += 1
+                if data.first_token_latency is not None:
+                    if data.is_first_turn:
+                        self.total_first_turn_ttft += data.first_token_latency
+                        self.n_first_turn += 1
+                    else:
+                        self.total_subsequent_turn_ttft += data.first_token_latency
+                        self.n_subsequent_turn += 1
             # Token-level cache accumulator: include *every* turn that has
             # cached_tokens set (turn 1 contributes 0 to numerator but its
             # prompt_tokens still count in the denominator).
@@ -243,11 +300,15 @@ class MetricsAccumulator:
                 self.total_prompt_tokens_for_cache += data.prompt_tokens
                 self.n_cache_turns += 1
 
-            # Speculative decoding specific
-            # Only count samples where L > 1 (genuine speculative decoding acceleration).
-            # L <= 1 means chunk count >= token count, which indicates empty/heartbeat
-            # chunks in the stream rather than real speculative decoding.
-            if data.decoded_tokens_per_iter > 1:
+            if data.estimated_cacheable_tokens is not None and data.prompt_tokens:
+                self.total_estimated_cacheable_tokens += data.estimated_cacheable_tokens
+                self.total_prompt_tokens_for_estimated_cache += data.prompt_tokens
+                self.n_estimated_cache_turns += 1
+
+            # Speculative-decoding metrics are accepted only when a backend
+            # explicitly populated decoder telemetry.  Transport/SSE chunking
+            # is deliberately not used as a proxy.
+            if data.decoded_tokens_per_iter is not None and data.decoded_tokens_per_iter > 0:
                 self.total_decoded_tokens_per_iter += data.decoded_tokens_per_iter
                 self.n_decoded_samples += 1
 
@@ -255,6 +316,11 @@ class MetricsAccumulator:
 
     def _update_wall_time(self, data: BenchmarkData) -> None:
         """Expand the wall-clock window to cover *data*'s lifecycle."""
+        # A default-constructed failed BenchmarkData has start=completed=0.
+        # Treat such records as missing timing rather than expanding the wall
+        # window to the perf-counter epoch and collapsing throughput to ~0.
+        if data.completed_time <= data.start_time:
+            return
         if self._wall_start is None:
             self._wall_start = data.start_time
         else:
@@ -280,15 +346,27 @@ class MetricsAccumulator:
         try:
             avg_latency = _safe_div(self.total_latency, n)
             avg_first_chunk_latency = _safe_div(self.total_first_chunk_latency, n)
+            avg_first_token_latency = _safe_div(self.total_first_token_latency, self.n_ttft_samples, default=0.0)
+            # Embedding/rerank APIs never produce output tokens, so no TTFT
+            # sample is ever recorded; fall back to first-chunk (== full E2E
+            # latency for one-shot APIs) so the summary stays readable instead
+            # of collapsing to 0.0.  This also preserves the legacy report
+            # value for the pathological all-zero-token LLM run (model
+            # returning empty bodies); semantically-sound runs still use the
+            # real first-token latency.
+            if self.n_ttft_samples == 0 and n > 0:
+                avg_first_token_latency = avg_first_chunk_latency
             avg_prompt_tokens = _safe_div(self.total_prompt_tokens, n)
             avg_completion_tokens = _safe_div(self.total_completion_tokens, n)
-            avg_time_per_output_token = _safe_div(self.total_time_per_output_token, n)
-            avg_inter_token_latency = (
-                sum(self.all_inter_token_latencies)
-                / len(self.all_inter_token_latencies) if self.all_inter_token_latencies else 0.0
+            avg_time_per_output_token = (
+                _safe_div(self.total_time_per_output_token, self.n_tpot_samples, default=0.0)
+                if self.n_tpot_samples else 0.0
             )
+            avg_inter_chunk_latency = _safe_div(self.total_inter_chunk_latency, self.n_inter_chunk_samples, default=0.0)
             qps = _safe_div(n, t)
-            avg_input_token_throughput = _safe_div(self.total_prompt_tokens, self.total_first_chunk_latency)
+            # Workload-level input throughput must use elapsed wall time.  Using
+            # sum(request_latency) undercounts concurrent embedding/rerank runs.
+            avg_input_token_throughput = _safe_div(self.total_prompt_tokens, t)
             avg_output_token_throughput = _safe_div(self.total_completion_tokens, t)
             avg_total_token_throughput = _safe_div(self.total_prompt_tokens + self.total_completion_tokens, t)
             avg_turns_per_request = (_safe_div(self.total_input_turns, n) if self.total_input_turns > 0 else -1)
@@ -299,6 +377,13 @@ class MetricsAccumulator:
             avg_cached_percent = (
                 _safe_div(self.total_cached_tokens
                           * 100.0, self.total_prompt_tokens_for_cache, default=-1) if self.n_cache_turns > 0 else -1
+            )
+            estimated_cacheable_percent = (
+                _safe_div(
+                    self.total_estimated_cacheable_tokens * 100.0,
+                    self.total_prompt_tokens_for_estimated_cache,
+                    default=-1,
+                ) if self.n_estimated_cache_turns > 0 else -1
             )
             avg_decoded_tokens_per_iter = (
                 _safe_div(self.total_decoded_tokens_per_iter, self.n_decoded_samples)
@@ -320,10 +405,10 @@ class MetricsAccumulator:
                 'This is likely caused by all requests returning empty responses. '
                 'Please check the model service and ensure it is returning valid responses.'
             )
-            avg_latency = avg_first_chunk_latency = avg_prompt_tokens = avg_completion_tokens = -1
-            avg_time_per_output_token = avg_inter_token_latency = qps = -1
+            avg_latency = avg_first_chunk_latency = avg_first_token_latency = avg_prompt_tokens = avg_completion_tokens = -1
+            avg_time_per_output_token = avg_inter_chunk_latency = qps = -1
             avg_input_token_throughput = avg_output_token_throughput = avg_total_token_throughput = -1
-            avg_turns_per_request = avg_cached_percent = avg_decoded_tokens_per_iter = -1
+            avg_turns_per_request = avg_cached_percent = estimated_cacheable_percent = avg_decoded_tokens_per_iter = -1
             avg_first_turn_ttft = avg_subsequent_turn_ttft = -1
 
         return BenchmarkMetrics(
@@ -335,16 +420,18 @@ class MetricsAccumulator:
             total_time=t,
             avg_latency=avg_latency,
             avg_first_chunk_latency=avg_first_chunk_latency,
+            avg_first_token_latency=avg_first_token_latency,
             avg_prompt_tokens=avg_prompt_tokens,
             avg_completion_tokens=avg_completion_tokens,
             avg_time_per_output_token=avg_time_per_output_token,
-            avg_inter_token_latency=avg_inter_token_latency,
+            avg_inter_chunk_latency=avg_inter_chunk_latency,
             qps=qps,
             avg_input_token_throughput=avg_input_token_throughput,
             avg_output_token_throughput=avg_output_token_throughput,
             avg_total_token_throughput=avg_total_token_throughput,
             avg_turns_per_request=avg_turns_per_request,
             avg_cached_percent=avg_cached_percent,
+            estimated_cacheable_percent=estimated_cacheable_percent,
             avg_first_turn_ttft=avg_first_turn_ttft,
             avg_subsequent_turn_ttft=avg_subsequent_turn_ttft,
             avg_decoded_tokens_per_iter=avg_decoded_tokens_per_iter,
@@ -377,8 +464,9 @@ class BenchmarkMetrics:
     # --- Latency averages ---
     avg_latency: float = -1
     avg_first_chunk_latency: float = -1
+    avg_first_token_latency: float = -1
     avg_time_per_output_token: float = -1
-    avg_inter_token_latency: float = -1
+    avg_inter_chunk_latency: float = -1
 
     # --- Throughput ---
     qps: float = -1
@@ -391,6 +479,7 @@ class BenchmarkMetrics:
     # --- Multi-turn ---
     avg_turns_per_request: float = -1
     avg_cached_percent: float = -1
+    estimated_cacheable_percent: float = -1
     avg_first_turn_ttft: float = -1
     """Avg TTFT (seconds) of first-turn requests (cold prefill).  -1 = not applicable."""
     avg_subsequent_turn_ttft: float = -1
@@ -398,8 +487,7 @@ class BenchmarkMetrics:
 
     # --- Speculative decoding ---
     avg_decoded_tokens_per_iter: float = -1
-    """Average decoded tokens per iteration L = (tokens-1)/(chunks-1).
-    Acceptance rate p can be derived as p = 1 - 1/L."""
+    """Average decoded tokens per decoder iteration from backend telemetry."""
 
     # -----------------------------------------------------------------------
     # Serialization
@@ -440,9 +528,10 @@ class BenchmarkMetrics:
         return {
             Metrics.OUTPUT_TOKEN_THROUGHPUT: round(self.avg_output_token_throughput, r),
             Metrics.TOTAL_TOKEN_THROUGHPUT: round(self.avg_total_token_throughput, r),
-            Metrics.AVERAGE_TIME_TO_FIRST_TOKEN: round(self.avg_first_chunk_latency * 1000, 2),
+            Metrics.AVERAGE_TIME_TO_FIRST_TOKEN: round(self.avg_first_token_latency * 1000, 2),
+            Metrics.AVERAGE_TIME_TO_FIRST_CHUNK: round(self.avg_first_chunk_latency * 1000, 2),
             Metrics.AVERAGE_TIME_PER_OUTPUT_TOKEN: round(self.avg_time_per_output_token * 1000, 2),
-            Metrics.AVERAGE_INTER_TOKEN_LATENCY: round(self.avg_inter_token_latency * 1000, 2),
+            Metrics.AVERAGE_INTER_CHUNK_LATENCY: round(self.avg_inter_chunk_latency * 1000, 2),
             Metrics.AVERAGE_OUTPUT_TOKENS_PER_REQUEST: round(self.avg_completion_tokens, r),
         }
 
@@ -461,6 +550,8 @@ class BenchmarkMetrics:
         # -1 means "not applicable" (no multi-turn data); 0 means active but no cache hits.
         if self.avg_cached_percent >= 0:
             result[Metrics.AVERAGE_CACHED_PERCENT] = round(self.avg_cached_percent, r)
+        if self.estimated_cacheable_percent >= 0:
+            result[Metrics.ESTIMATED_REUSABLE_PREFIX_PERCENT] = round(self.estimated_cacheable_percent, r)
         # First-turn / subsequent-turn TTFT split (multi-turn only).  Stored in
         # seconds; report in ms for consistency with avg_ttft.
         if self.avg_first_turn_ttft >= 0:
@@ -472,19 +563,18 @@ class BenchmarkMetrics:
     def _build_speculative_decoding_fields(self, r: int) -> dict:
         """Conditionally included speculative decoding metrics.
 
-        Only emitted when chunk-level data is available (i.e. streaming responses
-        with more than one chunk were observed).
+        Only emitted when a backend populated real decoder-iteration telemetry.
 
         - ``avg_decoded_tokens_per_iter`` (L): average accepted tokens per
-          speculative-decoding iteration, computed as (tokens-1)/(chunks-1).
-        - ``approx_acceptance_rate`` (p): per-position draft-token acceptance
-          probability, derived as p = 1 - 1/L.
+          speculative-decoding iteration, supplied by backend telemetry.
+
+        Acceptance rate is intentionally *not* inferred from L: converting
+        tokens/iteration into a draft-token acceptance probability requires
+        backend-specific information such as draft length and iteration
+        semantics.  A future backend may expose acceptance rate directly.
         """
         result = {}
         if self.avg_decoded_tokens_per_iter > 0:
             L = self.avg_decoded_tokens_per_iter
             result[Metrics.AVERAGE_DECODED_TOKENS_PER_ITER] = round(L, r)
-            # p = 1 - 1/L  (valid only when L > 1; clamp to [0, 1])
-            p = max(0.0, min(1.0, 1.0 - 1.0 / L)) if L > 0 else 0.0
-            result[Metrics.APPROX_SPECULATIVE_ACCEPTANCE_RATE] = round(p, r)
         return result

@@ -5,13 +5,25 @@ import os
 from pathlib import Path
 
 from flask import Blueprint, jsonify, send_file
+from evalscope.service.utils.log import OUTPUT_DIR as _OUTPUT_DIR, validate_task_id
 from evalscope.service.time_utils import epoch_to_utc_iso
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 bp_audio = Blueprint('audio', __name__, url_prefix='/api/v1/audio')
 
-OUTPUT_DIR = Path(os.getenv('EVALSCOPE_OUTPUT_DIR', './outputs'))
+OUTPUT_DIR = Path(_OUTPUT_DIR)
+
+
+def _require_task_access(task_id: str):
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('eval_reports', 'task_state')):
+        return jsonify({'error': 'Report not found'}), 404
+    return None
 
 
 @bp_audio.route('/reports', methods=['GET'])
@@ -98,6 +110,9 @@ def list_audio_reports():
 @bp_audio.route('/report/<task_id>', methods=['GET'])
 def get_audio_report(task_id: str):
     """Get full audio evaluation report."""
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
     task_dir = (OUTPUT_DIR / task_id).resolve()
     results_file = task_dir / 'results.json'
 
@@ -131,10 +146,13 @@ def get_audio_report(task_id: str):
 @bp_audio.route('/file/<task_id>/<path:filename>', methods=['GET'])
 def serve_file(task_id: str, filename: str):
     """Serve file from audio output directory with path traversal protection."""
+    denied = _require_task_access(task_id)
+    if denied is not None:
+        return denied
     task_dir = os.path.realpath(os.path.join(OUTPUT_DIR, task_id))
     safe_path = os.path.realpath(os.path.join(task_dir, filename))
 
-    if not safe_path.startswith(task_dir + os.sep) and safe_path != task_dir:
+    if os.path.commonpath([task_dir, safe_path]) != task_dir:
         return jsonify({'error': 'Invalid path'}), 403
 
     if not os.path.exists(safe_path):

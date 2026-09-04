@@ -102,6 +102,12 @@ def serve_media_file():
     if file_path != allowed_dir and not file_path.startswith(allowed_dir + os.sep):
         return jsonify({'error': 'Access denied: path must be within the outputs directory'}), 403
 
+    rel_path = os.path.relpath(file_path, allowed_dir)
+    task_id = rel_path.split(os.sep, 1)[0]
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('eval_reports', 'perf_tasks', 'task_state')):
+        return jsonify({'error': 'File not found'}), 404
+
     ext = os.path.splitext(file_path)[1].lower()
     if ext not in _MEDIA_EXTENSIONS:
         return jsonify({'error': f'File type {ext!r} is not allowed'}), 403
@@ -112,6 +118,18 @@ def serve_media_file():
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type is None:
         mime_type = 'application/octet-stream'
+
+    # SVG can embed <script>; serve it as an attachment with nosniff so it can
+    # never render inline in the site origin (stored/reflected XSS guard).
+    if ext == '.svg':
+        resp = send_file(
+            file_path,
+            mimetype='image/svg+xml',
+            as_attachment=True,
+            download_name=os.path.basename(file_path),
+        )
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        return resp
 
     return send_file(file_path, mimetype=mime_type)
 
@@ -299,6 +317,12 @@ def _build_report_meta(report_name: str, root: str) -> dict:
     }
 
 
+def _report_access_allowed(report_name: str) -> bool:
+    from .auth import check_task_artifact_access
+    prefix, _, _ = process_report_name(report_name)
+    return check_task_artifact_access(prefix, ('eval_reports', 'task_state'))
+
+
 # ------------------------------------------------------------------
 # Endpoints
 # ------------------------------------------------------------------
@@ -360,24 +384,9 @@ def list_reports():
                 backend=backend,
                 user_id=current_uid,
             )
-            # Sanity: filter out reports whose directories no longer exist
-            items = [it for it in items if _report_dir_exists(it['name'], root)]
-            # Always re-count total after filesystem pruning
-            all_total = _db.query_eval_reports(
-                search=search,
-                models=models_filter,
-                datasets=datasets_filter,
-                score_min=score_min,
-                score_max=score_max,
-                sort_by=sort_by,
-                sort_order=sort_order,
-                page=1,
-                page_size=10000,
-                backend=backend,
-                user_id=current_uid,
-            )[0]
-            all_filtered = [r for r in all_total if _report_dir_exists(r['name'], root)]
-            total = len(all_filtered)
+            # cleanup_eval_reports above already deleted rows whose task dirs are
+            # gone, so query_eval_reports returns an accurate SQL COUNT(*) — no
+            # second full-table scan or per-row isdir needed here.
             return jsonify({
                 'reports': items,
                 'total': total,
@@ -392,7 +401,7 @@ def list_reports():
             logger.debug(f'SQLite query failed, falling back to filesystem: {db_err}')
 
         # --- Fallback: filesystem scan (original logic) ---
-        raw_reports = scan_for_report_folders(root)
+        raw_reports = [name for name in scan_for_report_folders(root) if _report_access_allowed(name)]
         items = []
         for rn in raw_reports:
             meta = _build_report_meta(rn, root)
@@ -459,7 +468,7 @@ def scan_reports():
     """
     try:
         root = _root_path()
-        reports = scan_for_report_folders(root)
+        reports = [name for name in scan_for_report_folders(root) if _report_access_allowed(name)]
         return jsonify({'reports': reports}), 200
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
@@ -483,11 +492,7 @@ def load_report():
         root = _root_path()
         validate_report_name(report_name, root)
 
-        # Verify ownership: task_id must belong to current user
-        from .auth import check_task_ownership
-        prefix, _, _ = process_report_name(report_name)
-        allowed, _owner = check_task_ownership('eval_reports', prefix)
-        if not allowed:
+        if not _report_access_allowed(report_name):
             return jsonify({'error': 'Report not found'}), 404
 
         report_list, datasets, task_cfg = load_single_report(root, report_name)
@@ -545,6 +550,8 @@ def get_dataframe():
     try:
         root = _root_path()
         validate_report_name(report_name, root)
+        if not _report_access_allowed(report_name):
+            return jsonify({'error': 'Report not found'}), 404
         report_list, datasets, _ = load_single_report(root, report_name)
         acc_df, _ = get_acc_report_df(report_list)
 
@@ -591,6 +598,8 @@ def get_predictions():
     try:
         root = _root_path()
         report_dir = validate_report_name(report_name, root)
+        if not _report_access_allowed(report_name):
+            return jsonify({'error': 'Report not found'}), 404
         prefix, model_name, _ = process_report_name(report_name)
         work_dir = report_dir
         df = get_model_prediction(work_dir, model_name, dataset_name, subset_name)
@@ -623,6 +632,8 @@ def get_analysis():
     try:
         root = _root_path()
         validate_report_name(report_name, root)
+        if not _report_access_allowed(report_name):
+            return jsonify({'error': 'Report not found'}), 404
         report_list, _, _ = load_single_report(root, report_name)
         analysis = get_report_analysis(report_list, dataset_name)
         return jsonify({'analysis': analysis}), 200
@@ -700,6 +711,8 @@ def get_html_report():
     try:
         root = os.path.abspath(_root_path())
         prefix, model_name, datasets = process_report_name(report_name)
+        if not _report_access_allowed(report_name):
+            return jsonify({'error': 'Report not found'}), 404
         report_html = os.path.realpath(os.path.join(root, prefix, OutputsStructure.REPORTS_DIR, 'report.html'))
         # Security: ensure resolved path is within root
         if not report_html.startswith(root + os.sep):
@@ -754,6 +767,8 @@ def get_chart():
                     return jsonify({'error': 'report_names or report_name is required for radar'}), 400
             for name in names:
                 validate_report_name(name, root)
+                if not _report_access_allowed(name):
+                    return jsonify({'error': 'Report not found'}), 404
             report_list = load_multi_report(root, names)
             acc_df, _ = get_acc_report_df(report_list)
             fig = plot_multi_report_radar(acc_df)
@@ -765,6 +780,8 @@ def get_chart():
                 return jsonify({'error': 'report_names is required for grouped_bar'}), 400
             for name in names:
                 validate_report_name(name, root)
+                if not _report_access_allowed(name):
+                    return jsonify({'error': 'Report not found'}), 404
             report_list = load_multi_report(root, names)
             acc_df, _ = get_acc_report_df(report_list)
             color_seq = ['#816DF8', '#0F9C7E', '#fbbf24', '#a78bfa', '#63b3ed']
@@ -795,9 +812,10 @@ def get_chart():
             if not report_name or not dataset_name or not subset_name:
                 return jsonify({'error': 'report_name, dataset_name and subset_name are required for histogram'}), 400
             report_dir = validate_report_name(report_name, root)
-            prefix, model_name, _ = process_report_name(report_name)
-            work_dir = report_dir
-            pred_df = get_model_prediction(work_dir, model_name, dataset_name, subset_name)
+            if not _report_access_allowed(report_name):
+                return jsonify({'error': 'Report not found'}), 404
+            _, model_name, _ = process_report_name(report_name)
+            pred_df = get_model_prediction(report_dir, model_name, dataset_name, subset_name)
             if pred_df is not None and not pred_df.empty and 'NScore' in pred_df.columns:
                 fig = px.histogram(
                     pred_df,
@@ -818,6 +836,8 @@ def get_chart():
             if not report_name:
                 return jsonify({'error': 'report_name is required'}), 400
             validate_report_name(report_name, root)
+            if not _report_access_allowed(report_name):
+                return jsonify({'error': 'Report not found'}), 404
             report_list, datasets, _ = load_single_report(root, report_name)
             acc_df, _ = get_acc_report_df(report_list)
 

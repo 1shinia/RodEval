@@ -62,10 +62,24 @@ def test_create_result_table_upgrades_legacy_shape(tmp_path):
             max_gpu_memory_cost REAL, time_per_output_token REAL
         )'''
     )
+    con.execute(
+        '''INSERT INTO result(request, start_time, inter_token_latencies, success, response_messages,
+                              completed_time, latency, first_chunk_latency, prompt_tokens, completion_tokens,
+                              max_gpu_memory_cost, time_per_output_token)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        ('{}', 1.0, '[0.02, 0.03]', 1, '[]', 1.5, 0.5, 0.1, 10, 2, 0.0, 0.4),
+    )
     create_result_table(con.cursor())
     columns = {r[1] for r in con.execute('PRAGMA table_info(result)')}
-    assert {'request_id', 'status_code', 'error', 'trace_id', 'turn_index', 'cached_tokens'} <= columns
+    assert {
+        'request_id', 'status_code', 'error', 'trace_id', 'turn_index', 'cached_tokens',
+        'first_token_latency', 'inter_chunk_latencies',
+    } <= columns
     assert con.execute('SELECT MAX(version) FROM benchmark_schema').fetchone()[0] == RESULT_SCHEMA_VERSION
+    migrated = con.execute(
+        'SELECT first_token_latency, inter_chunk_latencies FROM result'
+    ).fetchone()
+    assert migrated == (0.1, '[0.02, 0.03]')
     con.close()
 
 

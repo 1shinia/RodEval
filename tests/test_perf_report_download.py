@@ -26,9 +26,18 @@ def perf_report_client(tmp_path, monkeypatch):
     report_dir.mkdir(parents=True)
     (report_dir / 'perf_report.html').write_text(REPORT_BODY)
 
+    monkeypatch.setenv('EVALSCOPE_ADMIN_PASSWORD', 'testpass')
     from evalscope.service.app import create_app
     app = create_app(outputs=root)
-    return app.test_client()
+    client = app.test_client()
+
+    # Auth model: task artifacts require authentication (GET/HEAD may use the
+    # login cookie; here we use the explicit Bearer token).
+    resp = client.post('/api/v1/auth/login', json={'username': 'admin', 'password': 'testpass'})
+    assert resp.status_code == 200, resp.data
+    token = resp.get_json()['token']
+    client.environ_base['HTTP_AUTHORIZATION'] = f'Bearer {token}'
+    return client
 
 
 def test_inline_serving_unchanged(perf_report_client):
@@ -62,4 +71,5 @@ def test_missing_task_returns_404(perf_report_client):
 
 def test_path_traversal_task_id_rejected(perf_report_client):
     resp = perf_report_client.get('/api/v1/perf/report?task_id=../../etc/passwd')
-    assert resp.status_code == 400
+    # Ownership policy re-validates task_id and answers 404 (no info leak).
+    assert resp.status_code == 404

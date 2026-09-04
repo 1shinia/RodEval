@@ -34,7 +34,21 @@ class Target(Sequence[str]):
 
     @property
     def text(self) -> str:
+        """Legacy single-string representation.
+
+        ``Target`` is also used by multiple-choice benchmarks where a target
+        such as ``['A', 'C']`` intentionally means ``'AC'``.  Therefore this
+        property keeps the historical concatenation behaviour.  Scorers that
+        need *alternative* references (for example TriviaQA aliases) should use
+        :attr:`values` / :attr:`TaskState.targets` instead of trying to recover
+        boundaries from this string.
+        """
         return ''.join(self.target)
+
+    @property
+    def values(self) -> List[str]:
+        """Return the individual target values without losing boundaries."""
+        return list(self.target)
 
 
 @dataclass
@@ -283,6 +297,17 @@ class TaskState:
     def target(self) -> str:
         """The scoring target for this `Sample`."""
         return self._target.text
+
+    @property
+    def targets(self) -> List[str]:
+        """Individual target values with their original boundaries preserved.
+
+        This is deliberately separate from :attr:`target`: some benchmarks use
+        a list as a set of alternative reference answers, while multiple-choice
+        benchmarks use a list to encode a multi-letter answer.  Benchmark
+        adapters can now choose the correct semantics explicitly.
+        """
+        return self._target.values
 
     @target.setter
     def target(self, text: str) -> None:

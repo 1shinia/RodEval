@@ -106,7 +106,8 @@ class LLMJudgeMixin:
             return rule_based_score
 
         # For LLM_RECALL, if rule-based score is already perfect, skip LLM judge
-        if float(rule_based_score.main_value) > 0.99:
+        rule_main_value = rule_based_score.main_value if rule_based_score is not None else None
+        if rule_main_value is not None and float(rule_main_value) > 0.99:
             return rule_based_score
 
         # Compute LLM judge score
@@ -146,7 +147,17 @@ class LLMJudgeMixin:
         question = task_state.input_text
 
         # Request judge and obtain score
-        prompt = self.llm_judge.build_prompt(pred=original_prediction, gold=reference, question=question)
+        # Preserve target boundaries when a sample provides more than one
+        # reference.  ``TaskState.target`` remains a legacy concatenated string
+        # for multiple-choice compatibility, but a judge benefits from seeing
+        # the alternatives explicitly.
+        references = task_state.targets
+        if len(references) > 1:
+            judge_reference = 'Valid reference targets:\n' + '\n'.join(f'- {ref}' for ref in references)
+        else:
+            judge_reference = reference
+
+        prompt = self.llm_judge.build_prompt(pred=original_prediction, gold=judge_reference, question=question)
         judge_response = self.llm_judge.judge(prompt)
         judge_score = self.llm_judge.get_score(judge_response)
 
@@ -171,6 +182,12 @@ class LLMJudgeMixin:
         Returns:
             Score: The merged score
         """
+        # If rule-based scoring itself failed there is no valid metric slot to
+        # overwrite.  Return the judge score directly rather than creating the
+        # synthetic ``default`` key via Score.main_value's fallback setter.
+        if not rule_based_score.value:
+            return llm_score
+
         # Update the main value with LLM judge result
         rule_based_score.main_value = llm_score.main_value
         rule_based_score.explanation = llm_score.explanation
