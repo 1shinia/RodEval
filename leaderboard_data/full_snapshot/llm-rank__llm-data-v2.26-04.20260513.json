@@ -1,0 +1,5375 @@
+{
+    "说明": "如果中英文环境不同，用models.ChatGPT.desc的写法，如果中英文相同，可以直接用字符串",
+    "OverallTable": [
+        {
+            "key": 0,
+            "model": "GPT-5.4-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 67.3,
+            "Language": 80.2,
+            "Knowledge": 93.7,
+            "Reasoning": 64.4,
+            "Math": 72.1,
+            "Code": 63.4,
+            "Agent": 52.8
+        },
+        {
+            "key": 1,
+            "model": "DeepSeek-V4-Pro",
+            "org": "DeepSeek",
+            "num": "1.6T",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 65.1,
+            "Language": 70.1,
+            "Knowledge": 92.1,
+            "Reasoning": 60.0,
+            "Math": 74.8,
+            "Code": 59.4,
+            "Agent": 55.3
+        },
+        {
+            "key": 2,
+            "model": "Claude Opus 4.7 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/4/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 64.0,
+            "Language": 70.0,
+            "Knowledge": 92.2,
+            "Reasoning": 63.5,
+            "Math": 72.4,
+            "Code": 63.7,
+            "Agent": 43.3
+        },
+        {
+            "key": 3,
+            "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 63.5,
+            "Language": 77.3,
+            "Knowledge": 91.9,
+            "Reasoning": 65.2,
+            "Math": 77.3,
+            "Code": 57.0,
+            "Agent": 44.2
+        },
+        {
+            "key": 4,
+            "model": "Kimi-K2.6",
+            "org": "Moonshot",
+            "num": "1T",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 63.4,
+            "Language": 75.0,
+            "Knowledge": 91.5,
+            "Reasoning": 62.2,
+            "Math": 76.4,
+            "Code": 62.4,
+            "Agent": 39.3
+        },
+        {
+            "key": 5,
+            "model": "Gemini-3.1-Pro-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/2/19",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 63.2,
+            "Language": 74.8,
+            "Knowledge": 95.2,
+            "Reasoning": 59.7,
+            "Math": 76.5,
+            "Code": 60.2,
+            "Agent": 41.0
+        },
+        {
+            "key": 6,
+            "model": "Qwen3.6-Max-Preview",
+            "org": "Alibaba",
+            "num": "N/A",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 60.8,
+            "Language": 79.5,
+            "Knowledge": 89.6,
+            "Reasoning": 59.2,
+            "Math": 73.4,
+            "Code": 61.6,
+            "Agent": 30.5
+        },
+        {
+            "key": 7,
+            "model": "DeepSeek-V4-Flash",
+            "org": "DeepSeek",
+            "num": "284B",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 60.4,
+            "Language": 66.2,
+            "Knowledge": 88.6,
+            "Reasoning": 57.2,
+            "Math": 69.2,
+            "Code": 56.4,
+            "Agent": 46.7
+        },
+        {
+            "key": 8,
+            "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 60.4,
+            "Language": 74.4,
+            "Knowledge": 88.9,
+            "Reasoning": 59.5,
+            "Math": 72.4,
+            "Code": 54.6,
+            "Agent": 42.4
+        },
+        {
+            "key": 9,
+            "model": "GLM-5.1",
+            "org": "Zhipu AI",
+            "num": "744B",
+            "time": "2026/4/8",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 59.0,
+            "Language": 71.9,
+            "Knowledge": 89.9,
+            "Reasoning": 54.3,
+            "Math": 67.9,
+            "Code": 55.7,
+            "Agent": 39.9
+        },
+        {
+            "key": 10,
+            "model": "Claude Sonnet 4.6 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/2/17",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 57.5,
+            "Language": 70.5,
+            "Knowledge": 90.6,
+            "Reasoning": 60.6,
+            "Math": 72.4,
+            "Code": 58.1,
+            "Agent": 24.7
+        },
+        {
+            "key": 11,
+            "model": "Qwen3.5-397B-A17B",
+            "org": "Alibaba",
+            "num": "397B",
+            "time": "2026/2/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 57.5,
+            "Language": 71.0,
+            "Knowledge": 91.2,
+            "Reasoning": 54.5,
+            "Math": 70.9,
+            "Code": 57.4,
+            "Agent": 28.7
+        },
+        {
+            "key": 12,
+            "model": "Hy3-preview (high)",
+            "org": "Tencent",
+            "num": "295B",
+            "time": "2026/4/23",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 56.5,
+            "Language": 74.4,
+            "Knowledge": 88.2,
+            "Reasoning": 58.5,
+            "Math": 74.5,
+            "Code": 51.9,
+            "Agent": 28.7
+        },
+        {
+            "key": 13,
+            "model": "Ring-2.5-1T",
+            "org": "Ant Group",
+            "num": "1T",
+            "time": "2026/2/13",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 54.5,
+            "Language": 69.8,
+            "Knowledge": 89.4,
+            "Reasoning": 54.2,
+            "Math": 66.5,
+            "Code": 53.6,
+            "Agent": 25.0
+        },
+        {
+            "key": 14,
+            "model": "GPT-5.4-mini-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 54.4,
+            "Language": 73.0,
+            "Knowledge": 91.5,
+            "Reasoning": 55.9,
+            "Math": 66.1,
+            "Code": 52.9,
+            "Agent": 22.0
+        },
+        {
+            "key": 15,
+            "model": "MiniMax-M2.7",
+            "org": "MiniMax",
+            "num": "230B",
+            "time": "2026/3/18",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 53.7,
+            "Language": 68.1,
+            "Knowledge": 82.4,
+            "Reasoning": 52.4,
+            "Math": 64.7,
+            "Code": 56.2,
+            "Agent": 23.7
+        },
+        {
+            "key": 16,
+            "model": "Grok-4.20-0309",
+            "org": "xAI",
+            "num": "N/A",
+            "time": "2026/3/9",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 53.5,
+            "Language": 73.9,
+            "Knowledge": 92.9,
+            "Reasoning": 55.3,
+            "Math": 72.5,
+            "Code": 53.3,
+            "Agent": 13.3
+        },
+        {
+            "key": 17,
+            "model": "Step-3.5-Flash",
+            "org": "Step",
+            "num": "196B",
+            "time": "2026/2/2",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.9,
+            "Language": 64.4,
+            "Knowledge": 86.8,
+            "Reasoning": 55.6,
+            "Math": 68.7,
+            "Code": 54.9,
+            "Agent": 18.0
+        },
+        {
+            "key": 18,
+            "model": "gemma-4-31B-it",
+            "org": "Google",
+            "num": "31B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.4,
+            "Language": 64.6,
+            "Knowledge": 87.7,
+            "Reasoning": 54.6,
+            "Math": 66.5,
+            "Code": 56.8,
+            "Agent": 14.0
+        },
+        {
+            "key": 19,
+            "model": "Qwen3.6-27B",
+            "org": "Alibaba",
+            "num": "27B",
+            "time": "2026/4/22",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.3,
+            "Language": 69.0,
+            "Knowledge": 84.0,
+            "Reasoning": 52.7,
+            "Math": 65.6,
+            "Code": 50.8,
+            "Agent": 23.3
+        },
+        {
+            "key": 20,
+            "model": "Gemini-3.1-Flash-Lite-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/3/4",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 49.9,
+            "Language": 58.7,
+            "Knowledge": 91.7,
+            "Reasoning": 52.0,
+            "Math": 66.4,
+            "Code": 52.8,
+            "Agent": 11.0
+        },
+        {
+            "key": 21,
+            "model": "JT-MINI",
+            "org": "China Mobile",
+            "num": "N/A",
+            "time": "2026/3/31",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 39.9,
+            "Language": 60.8,
+            "Knowledge": 80.4,
+            "Reasoning": 34.1,
+            "Math": 41.5,
+            "Code": 38.5,
+            "Agent": 13.3
+        },
+        {
+            "key": 22,
+            "model": "gemma-4-E4B-it",
+            "org": "Google",
+            "num": "8B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 35.4,
+            "Language": 55.8,
+            "Knowledge": 76.4,
+            "Reasoning": 30.6,
+            "Math": 36.8,
+            "Code": 38.9,
+            "Agent": 1.3
+        }
+    ],
+    "LanguageTable": [
+        {
+            "key": 0,
+            "model": "GPT-5.4-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 80.2,
+            "Chat": 84.6,
+            "Creation": 82.5,
+            "IF": 79.2,
+            "NLP": 74.6
+        },
+        {
+            "key": 1,
+            "model": "DeepSeek-V4-Pro",
+            "org": "DeepSeek",
+            "num": "1.6T",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 70.1,
+            "Chat": 83.3,
+            "Creation": 70.0,
+            "IF": 63.8,
+            "NLP": 63.3
+        },
+        {
+            "key": 2,
+            "model": "Claude Opus 4.7 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/4/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 70.0,
+            "Chat": 82.5,
+            "Creation": 67.1,
+            "IF": 65.0,
+            "NLP": 65.4
+        },
+        {
+            "key": 3,
+            "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 77.3,
+            "Chat": 91.7,
+            "Creation": 77.1,
+            "IF": 70.8,
+            "NLP": 69.6
+        },
+        {
+            "key": 4,
+            "model": "Kimi-K2.6",
+            "org": "Moonshot",
+            "num": "1T",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 75.0,
+            "Chat": 86.7,
+            "Creation": 73.8,
+            "IF": 72.0,
+            "NLP": 67.5
+        },
+        {
+            "key": 5,
+            "model": "Gemini-3.1-Pro-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/2/19",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 74.8,
+            "Chat": 78.3,
+            "Creation": 73.8,
+            "IF": 79.8,
+            "NLP": 67.5
+        },
+        {
+            "key": 6,
+            "model": "Qwen3.6-Max-Preview",
+            "org": "Alibaba",
+            "num": "N/A",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 79.5,
+            "Chat": 87.1,
+            "Creation": 77.9,
+            "IF": 80.0,
+            "NLP": 72.9
+        },
+        {
+            "key": 7,
+            "model": "DeepSeek-V4-Flash",
+            "org": "DeepSeek",
+            "num": "284B",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 66.2,
+            "Chat": 77.1,
+            "Creation": 65.0,
+            "IF": 60.2,
+            "NLP": 62.5
+        },
+        {
+            "key": 8,
+            "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 74.4,
+            "Chat": 80.8,
+            "Creation": 77.1,
+            "IF": 72.5,
+            "NLP": 67.1
+        },
+        {
+            "key": 9,
+            "model": "GLM-5.1",
+            "org": "Zhipu AI",
+            "num": "744B",
+            "time": "2026/4/8",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 71.9,
+            "Chat": 80.8,
+            "Creation": 69.2,
+            "IF": 74.0,
+            "NLP": 63.8
+        },
+        {
+            "key": 10,
+            "model": "Claude Sonnet 4.6 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/2/17",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 70.5,
+            "Chat": 82.1,
+            "Creation": 70.8,
+            "IF": 62.8,
+            "NLP": 66.2
+        },
+        {
+            "key": 11,
+            "model": "Qwen3.5-397B-A17B",
+            "org": "Alibaba",
+            "num": "397B",
+            "time": "2026/2/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 71.0,
+            "Chat": 79.6,
+            "Creation": 66.2,
+            "IF": 75.8,
+            "NLP": 62.5
+        },
+        {
+            "key": 12,
+            "model": "Hy3-preview (high)",
+            "org": "Tencent",
+            "num": "295B",
+            "time": "2026/4/23",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 74.4,
+            "Chat": 82.9,
+            "Creation": 75.4,
+            "IF": 76.0,
+            "NLP": 63.3
+        },
+        {
+            "key": 13,
+            "model": "Ring-2.5-1T",
+            "org": "Ant Group",
+            "num": "1T",
+            "time": "2026/2/13",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 69.8,
+            "Chat": 86.2,
+            "Creation": 68.8,
+            "IF": 59.0,
+            "NLP": 65.4
+        },
+        {
+            "key": 14,
+            "model": "GPT-5.4-mini-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 73.0,
+            "Chat": 75.8,
+            "Creation": 72.1,
+            "IF": 74.5,
+            "NLP": 69.6
+        },
+        {
+            "key": 15,
+            "model": "MiniMax-M2.7",
+            "org": "MiniMax",
+            "num": "230B",
+            "time": "2026/3/18",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 68.1,
+            "Chat": 81.2,
+            "Creation": 66.7,
+            "IF": 61.0,
+            "NLP": 63.3
+        },
+        {
+            "key": 16,
+            "model": "Grok-4.20-0309",
+            "org": "xAI",
+            "num": "N/A",
+            "time": "2026/3/9",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 73.9,
+            "Chat": 83.3,
+            "Creation": 66.7,
+            "IF": 71.5,
+            "NLP": 74.2
+        },
+        {
+            "key": 17,
+            "model": "Step-3.5-Flash",
+            "org": "Step",
+            "num": "196B",
+            "time": "2026/2/2",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 64.4,
+            "Chat": 77.5,
+            "Creation": 63.8,
+            "IF": 57.2,
+            "NLP": 59.2
+        },
+        {
+            "key": 18,
+            "model": "gemma-4-31B-it",
+            "org": "Google",
+            "num": "31B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 64.6,
+            "Chat": 68.8,
+            "Creation": 62.1,
+            "IF": 68.2,
+            "NLP": 59.2
+        },
+        {
+            "key": 19,
+            "model": "Qwen3.6-27B",
+            "org": "Alibaba",
+            "num": "27B",
+            "time": "2026/4/22",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 69.0,
+            "Chat": 77.9,
+            "Creation": 65.8,
+            "IF": 69.0,
+            "NLP": 63.3
+        },
+        {
+            "key": 20,
+            "model": "Gemini-3.1-Flash-Lite-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/3/4",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 58.7,
+            "Chat": 62.5,
+            "Creation": 50.4,
+            "IF": 64.2,
+            "NLP": 57.5
+        },
+        {
+            "key": 21,
+            "model": "JT-MINI",
+            "org": "China Mobile",
+            "num": "N/A",
+            "time": "2026/3/31",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 60.8,
+            "Chat": 77.5,
+            "Creation": 60.0,
+            "IF": 43.8,
+            "NLP": 62.1
+        },
+        {
+            "key": 22,
+            "model": "gemma-4-E4B-it",
+            "org": "Google",
+            "num": "8B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 55.8,
+            "Chat": 66.2,
+            "Creation": 55.8,
+            "IF": 48.0,
+            "NLP": 52.9
+        }
+    ],
+    "KnowledgeTable": [
+        {
+            "key": 0,
+            "model": "GPT-5.4-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 93.7,
+            "Knowledge_Humanity": 91.7,
+            "Knowledge_Social_Science": 94.2,
+            "Knowledge_Engineering": 96.2,
+            "Knowledge_Science": 93.8,
+            "Knowledge_CommonSense": 92.5
+        },
+        {
+            "key": 1,
+            "model": "DeepSeek-V4-Pro",
+            "org": "DeepSeek",
+            "num": "1.6T",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 92.1,
+            "Knowledge_Humanity": 92.9,
+            "Knowledge_Social_Science": 87.9,
+            "Knowledge_Engineering": 91.2,
+            "Knowledge_Science": 96.7,
+            "Knowledge_CommonSense": 91.7
+        },
+        {
+            "key": 2,
+            "model": "Claude Opus 4.7 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/4/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 92.2,
+            "Knowledge_Humanity": 92.1,
+            "Knowledge_Social_Science": 92.1,
+            "Knowledge_Engineering": 95.0,
+            "Knowledge_Science": 91.2,
+            "Knowledge_CommonSense": 90.4
+        },
+        {
+            "key": 3,
+            "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 91.9,
+            "Knowledge_Humanity": 95.0,
+            "Knowledge_Social_Science": 85.8,
+            "Knowledge_Engineering": 92.9,
+            "Knowledge_Science": 94.6,
+            "Knowledge_CommonSense": 91.2
+        },
+        {
+            "key": 4,
+            "model": "Kimi-K2.6",
+            "org": "Moonshot",
+            "num": "1T",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 91.5,
+            "Knowledge_Humanity": 93.8,
+            "Knowledge_Social_Science": 90.8,
+            "Knowledge_Engineering": 89.2,
+            "Knowledge_Science": 91.7,
+            "Knowledge_CommonSense": 92.1
+        },
+        {
+            "key": 5,
+            "model": "Gemini-3.1-Pro-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/2/19",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 95.2,
+            "Knowledge_Humanity": 92.5,
+            "Knowledge_Social_Science": 97.5,
+            "Knowledge_Engineering": 95.4,
+            "Knowledge_Science": 97.5,
+            "Knowledge_CommonSense": 92.9
+        },
+        {
+            "key": 6,
+            "model": "Qwen3.6-Max-Preview",
+            "org": "Alibaba",
+            "num": "N/A",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 89.6,
+            "Knowledge_Humanity": 87.5,
+            "Knowledge_Social_Science": 85.8,
+            "Knowledge_Engineering": 92.5,
+            "Knowledge_Science": 92.1,
+            "Knowledge_CommonSense": 90.0
+        },
+        {
+            "key": 7,
+            "model": "DeepSeek-V4-Flash",
+            "org": "DeepSeek",
+            "num": "284B",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 88.6,
+            "Knowledge_Humanity": 92.5,
+            "Knowledge_Social_Science": 87.5,
+            "Knowledge_Engineering": 91.2,
+            "Knowledge_Science": 87.5,
+            "Knowledge_CommonSense": 84.2
+        },
+        {
+            "key": 8,
+            "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 88.9,
+            "Knowledge_Humanity": 90.8,
+            "Knowledge_Social_Science": 85.0,
+            "Knowledge_Engineering": 90.0,
+            "Knowledge_Science": 91.7,
+            "Knowledge_CommonSense": 87.1
+        },
+        {
+            "key": 9,
+            "model": "GLM-5.1",
+            "org": "Zhipu AI",
+            "num": "744B",
+            "time": "2026/4/8",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 89.9,
+            "Knowledge_Humanity": 90.0,
+            "Knowledge_Social_Science": 91.7,
+            "Knowledge_Engineering": 90.8,
+            "Knowledge_Science": 89.2,
+            "Knowledge_CommonSense": 87.9
+        },
+        {
+            "key": 10,
+            "model": "Claude Sonnet 4.6 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/2/17",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 90.6,
+            "Knowledge_Humanity": 87.9,
+            "Knowledge_Social_Science": 92.5,
+            "Knowledge_Engineering": 94.2,
+            "Knowledge_Science": 91.2,
+            "Knowledge_CommonSense": 87.1
+        },
+        {
+            "key": 11,
+            "model": "Qwen3.5-397B-A17B",
+            "org": "Alibaba",
+            "num": "397B",
+            "time": "2026/2/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 91.2,
+            "Knowledge_Humanity": 90.0,
+            "Knowledge_Social_Science": 94.6,
+            "Knowledge_Engineering": 93.3,
+            "Knowledge_Science": 90.0,
+            "Knowledge_CommonSense": 87.9
+        },
+        {
+            "key": 12,
+            "model": "Hy3-preview (high)",
+            "org": "Tencent",
+            "num": "295B",
+            "time": "2026/4/23",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 88.2,
+            "Knowledge_Humanity": 89.2,
+            "Knowledge_Social_Science": 87.5,
+            "Knowledge_Engineering": 90.0,
+            "Knowledge_Science": 89.2,
+            "Knowledge_CommonSense": 85.4
+        },
+        {
+            "key": 13,
+            "model": "Ring-2.5-1T",
+            "org": "Ant Group",
+            "num": "1T",
+            "time": "2026/2/13",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 89.4,
+            "Knowledge_Humanity": 90.0,
+            "Knowledge_Social_Science": 92.9,
+            "Knowledge_Engineering": 90.8,
+            "Knowledge_Science": 87.1,
+            "Knowledge_CommonSense": 86.2
+        },
+        {
+            "key": 14,
+            "model": "GPT-5.4-mini-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 91.5,
+            "Knowledge_Humanity": 89.6,
+            "Knowledge_Social_Science": 90.8,
+            "Knowledge_Engineering": 96.2,
+            "Knowledge_Science": 90.8,
+            "Knowledge_CommonSense": 90.0
+        },
+        {
+            "key": 15,
+            "model": "MiniMax-M2.7",
+            "org": "MiniMax",
+            "num": "230B",
+            "time": "2026/3/18",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 82.4,
+            "Knowledge_Humanity": 81.2,
+            "Knowledge_Social_Science": 86.7,
+            "Knowledge_Engineering": 84.2,
+            "Knowledge_Science": 83.8,
+            "Knowledge_CommonSense": 76.2
+        },
+        {
+            "key": 16,
+            "model": "Grok-4.20-0309",
+            "org": "xAI",
+            "num": "N/A",
+            "time": "2026/3/9",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 92.9,
+            "Knowledge_Humanity": 93.8,
+            "Knowledge_Social_Science": 92.1,
+            "Knowledge_Engineering": 96.2,
+            "Knowledge_Science": 91.2,
+            "Knowledge_CommonSense": 91.2
+        },
+        {
+            "key": 17,
+            "model": "Step-3.5-Flash",
+            "org": "Step",
+            "num": "196B",
+            "time": "2026/2/2",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 86.8,
+            "Knowledge_Humanity": 84.6,
+            "Knowledge_Social_Science": 91.7,
+            "Knowledge_Engineering": 89.6,
+            "Knowledge_Science": 85.0,
+            "Knowledge_CommonSense": 83.3
+        },
+        {
+            "key": 18,
+            "model": "gemma-4-31B-it",
+            "org": "Google",
+            "num": "31B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 87.7,
+            "Knowledge_Humanity": 90.0,
+            "Knowledge_Social_Science": 91.7,
+            "Knowledge_Engineering": 90.0,
+            "Knowledge_Science": 85.0,
+            "Knowledge_CommonSense": 81.7
+        },
+        {
+            "key": 19,
+            "model": "Qwen3.6-27B",
+            "org": "Alibaba",
+            "num": "27B",
+            "time": "2026/4/22",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 84.0,
+            "Knowledge_Humanity": 82.1,
+            "Knowledge_Social_Science": 86.2,
+            "Knowledge_Engineering": 84.2,
+            "Knowledge_Science": 85.8,
+            "Knowledge_CommonSense": 81.7
+        },
+        {
+            "key": 20,
+            "model": "Gemini-3.1-Flash-Lite-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/3/4",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 91.7,
+            "Knowledge_Humanity": 90.0,
+            "Knowledge_Social_Science": 93.3,
+            "Knowledge_Engineering": 91.7,
+            "Knowledge_Science": 90.8,
+            "Knowledge_CommonSense": 92.5
+        },
+        {
+            "key": 21,
+            "model": "JT-MINI",
+            "org": "China Mobile",
+            "num": "N/A",
+            "time": "2026/3/31",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 80.4,
+            "Knowledge_Humanity": 76.2,
+            "Knowledge_Social_Science": 87.5,
+            "Knowledge_Engineering": 88.3,
+            "Knowledge_Science": 79.6,
+            "Knowledge_CommonSense": 70.4
+        },
+        {
+            "key": 22,
+            "model": "gemma-4-E4B-it",
+            "org": "Google",
+            "num": "8B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 76.4,
+            "Knowledge_Humanity": 74.2,
+            "Knowledge_Social_Science": 82.5,
+            "Knowledge_Engineering": 78.3,
+            "Knowledge_Science": 79.6,
+            "Knowledge_CommonSense": 67.5
+        }
+    ],
+    "ReasonTable": [
+        {
+            "key": 0,
+            "model": "GPT-5.4-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 64.4,
+            "Common_Reasoning": 76.8,
+            "Academic_Reasoning": 52.0
+        },
+        {
+            "key": 1,
+            "model": "DeepSeek-V4-Pro",
+            "org": "DeepSeek",
+            "num": "1.6T",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 60.0,
+            "Common_Reasoning": 76.0,
+            "Academic_Reasoning": 43.9
+        },
+        {
+            "key": 2,
+            "model": "Claude Opus 4.7 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/4/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 63.5,
+            "Common_Reasoning": 76.0,
+            "Academic_Reasoning": 50.9
+        },
+        {
+            "key": 3,
+            "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 65.2,
+            "Common_Reasoning": 82.1,
+            "Academic_Reasoning": 48.3
+        },
+        {
+            "key": 4,
+            "model": "Kimi-K2.6",
+            "org": "Moonshot",
+            "num": "1T",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 62.2,
+            "Common_Reasoning": 75.5,
+            "Academic_Reasoning": 48.8
+        },
+        {
+            "key": 5,
+            "model": "Gemini-3.1-Pro-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/2/19",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 59.7,
+            "Common_Reasoning": 75.8,
+            "Academic_Reasoning": 43.6
+        },
+        {
+            "key": 6,
+            "model": "Qwen3.6-Max-Preview",
+            "org": "Alibaba",
+            "num": "N/A",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 59.2,
+            "Common_Reasoning": 75.0,
+            "Academic_Reasoning": 43.3
+        },
+        {
+            "key": 7,
+            "model": "DeepSeek-V4-Flash",
+            "org": "DeepSeek",
+            "num": "284B",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 57.2,
+            "Common_Reasoning": 75.5,
+            "Academic_Reasoning": 39.0
+        },
+        {
+            "key": 8,
+            "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 59.5,
+            "Common_Reasoning": 78.1,
+            "Academic_Reasoning": 41.0
+        },
+        {
+            "key": 9,
+            "model": "GLM-5.1",
+            "org": "Zhipu AI",
+            "num": "744B",
+            "time": "2026/4/8",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 54.3,
+            "Common_Reasoning": 69.9,
+            "Academic_Reasoning": 38.7
+        },
+        {
+            "key": 10,
+            "model": "Claude Sonnet 4.6 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/2/17",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 60.6,
+            "Common_Reasoning": 75.5,
+            "Academic_Reasoning": 45.6
+        },
+        {
+            "key": 11,
+            "model": "Qwen3.5-397B-A17B",
+            "org": "Alibaba",
+            "num": "397B",
+            "time": "2026/2/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 54.5,
+            "Common_Reasoning": 72.5,
+            "Academic_Reasoning": 36.6
+        },
+        {
+            "key": 12,
+            "model": "Hy3-preview (high)",
+            "org": "Tencent",
+            "num": "295B",
+            "time": "2026/4/23",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 58.5,
+            "Common_Reasoning": 73.5,
+            "Academic_Reasoning": 43.6
+        },
+        {
+            "key": 13,
+            "model": "Ring-2.5-1T",
+            "org": "Ant Group",
+            "num": "1T",
+            "time": "2026/2/13",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 54.2,
+            "Common_Reasoning": 70.4,
+            "Academic_Reasoning": 38.1
+        },
+        {
+            "key": 14,
+            "model": "GPT-5.4-mini-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 55.9,
+            "Common_Reasoning": 70.2,
+            "Academic_Reasoning": 41.6
+        },
+        {
+            "key": 15,
+            "model": "MiniMax-M2.7",
+            "org": "MiniMax",
+            "num": "230B",
+            "time": "2026/3/18",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.4,
+            "Common_Reasoning": 69.6,
+            "Academic_Reasoning": 35.2
+        },
+        {
+            "key": 16,
+            "model": "Grok-4.20-0309",
+            "org": "xAI",
+            "num": "N/A",
+            "time": "2026/3/9",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 55.3,
+            "Common_Reasoning": 74.5,
+            "Academic_Reasoning": 36.0
+        },
+        {
+            "key": 17,
+            "model": "Step-3.5-Flash",
+            "org": "Step",
+            "num": "196B",
+            "time": "2026/2/2",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 55.6,
+            "Common_Reasoning": 72.5,
+            "Academic_Reasoning": 38.7
+        },
+        {
+            "key": 18,
+            "model": "gemma-4-31B-it",
+            "org": "Google",
+            "num": "31B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 54.6,
+            "Common_Reasoning": 71.2,
+            "Academic_Reasoning": 38.1
+        },
+        {
+            "key": 19,
+            "model": "Qwen3.6-27B",
+            "org": "Alibaba",
+            "num": "27B",
+            "time": "2026/4/22",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.7,
+            "Common_Reasoning": 69.4,
+            "Academic_Reasoning": 36.0
+        },
+        {
+            "key": 20,
+            "model": "Gemini-3.1-Flash-Lite-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/3/4",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.0,
+            "Common_Reasoning": 69.6,
+            "Academic_Reasoning": 34.3
+        },
+        {
+            "key": 21,
+            "model": "JT-MINI",
+            "org": "China Mobile",
+            "num": "N/A",
+            "time": "2026/3/31",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 34.1,
+            "Common_Reasoning": 57.4,
+            "Academic_Reasoning": 10.8
+        },
+        {
+            "key": 22,
+            "model": "gemma-4-E4B-it",
+            "org": "Google",
+            "num": "8B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 30.6,
+            "Common_Reasoning": 47.5,
+            "Academic_Reasoning": 13.7
+        }
+    ],
+    "MathTable": [
+        {
+            "key": 0,
+            "model": "GPT-5.4-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 72.1,
+            "Math_College": 74.3,
+            "Math_Competition": 69.9
+        },
+        {
+            "key": 1,
+            "model": "DeepSeek-V4-Pro",
+            "org": "DeepSeek",
+            "num": "1.6T",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 74.8,
+            "Math_College": 78.5,
+            "Math_Competition": 71.2
+        },
+        {
+            "key": 2,
+            "model": "Claude Opus 4.7 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/4/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 72.4,
+            "Math_College": 74.3,
+            "Math_Competition": 70.5
+        },
+        {
+            "key": 3,
+            "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 77.3,
+            "Math_College": 83.8,
+            "Math_Competition": 70.8
+        },
+        {
+            "key": 4,
+            "model": "Kimi-K2.6",
+            "org": "Moonshot",
+            "num": "1T",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 76.4,
+            "Math_College": 80.6,
+            "Math_Competition": 72.1
+        },
+        {
+            "key": 5,
+            "model": "Gemini-3.1-Pro-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/2/19",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 76.5,
+            "Math_College": 81.0,
+            "Math_Competition": 72.1
+        },
+        {
+            "key": 6,
+            "model": "Qwen3.6-Max-Preview",
+            "org": "Alibaba",
+            "num": "N/A",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 73.4,
+            "Math_College": 81.7,
+            "Math_Competition": 65.1
+        },
+        {
+            "key": 7,
+            "model": "DeepSeek-V4-Flash",
+            "org": "DeepSeek",
+            "num": "284B",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 69.2,
+            "Math_College": 71.5,
+            "Math_Competition": 67.0
+        },
+        {
+            "key": 8,
+            "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 72.4,
+            "Math_College": 77.1,
+            "Math_Competition": 67.6
+        },
+        {
+            "key": 9,
+            "model": "GLM-5.1",
+            "org": "Zhipu AI",
+            "num": "744B",
+            "time": "2026/4/8",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 67.9,
+            "Math_College": 76.8,
+            "Math_Competition": 59.0
+        },
+        {
+            "key": 10,
+            "model": "Claude Sonnet 4.6 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/2/17",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 72.4,
+            "Math_College": 77.1,
+            "Math_Competition": 67.6
+        },
+        {
+            "key": 11,
+            "model": "Qwen3.5-397B-A17B",
+            "org": "Alibaba",
+            "num": "397B",
+            "time": "2026/2/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 70.9,
+            "Math_College": 76.1,
+            "Math_Competition": 65.7
+        },
+        {
+            "key": 12,
+            "model": "Hy3-preview (high)",
+            "org": "Tencent",
+            "num": "295B",
+            "time": "2026/4/23",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 74.5,
+            "Math_College": 81.3,
+            "Math_Competition": 67.6
+        },
+        {
+            "key": 13,
+            "model": "Ring-2.5-1T",
+            "org": "Ant Group",
+            "num": "1T",
+            "time": "2026/2/13",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 66.5,
+            "Math_College": 75.0,
+            "Math_Competition": 58.0
+        },
+        {
+            "key": 14,
+            "model": "GPT-5.4-mini-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 66.1,
+            "Math_College": 72.2,
+            "Math_Competition": 59.9
+        },
+        {
+            "key": 15,
+            "model": "MiniMax-M2.7",
+            "org": "MiniMax",
+            "num": "230B",
+            "time": "2026/3/18",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 64.7,
+            "Math_College": 73.2,
+            "Math_Competition": 56.1
+        },
+        {
+            "key": 16,
+            "model": "Grok-4.20-0309",
+            "org": "xAI",
+            "num": "N/A",
+            "time": "2026/3/9",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 72.5,
+            "Math_College": 75.3,
+            "Math_Competition": 69.5
+        },
+        {
+            "key": 17,
+            "model": "Step-3.5-Flash",
+            "org": "Step",
+            "num": "196B",
+            "time": "2026/2/2",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 68.7,
+            "Math_College": 74.3,
+            "Math_Competition": 63.1
+        },
+        {
+            "key": 18,
+            "model": "gemma-4-31B-it",
+            "org": "Google",
+            "num": "31B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 66.5,
+            "Math_College": 75.0,
+            "Math_Competition": 58.0
+        },
+        {
+            "key": 19,
+            "model": "Qwen3.6-27B",
+            "org": "Alibaba",
+            "num": "27B",
+            "time": "2026/4/22",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 65.6,
+            "Math_College": 73.6,
+            "Math_Competition": 57.7
+        },
+        {
+            "key": 20,
+            "model": "Gemini-3.1-Flash-Lite-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/3/4",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 66.4,
+            "Math_College": 79.2,
+            "Math_Competition": 53.5
+        },
+        {
+            "key": 21,
+            "model": "JT-MINI",
+            "org": "China Mobile",
+            "num": "N/A",
+            "time": "2026/3/31",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 41.5,
+            "Math_College": 65.1,
+            "Math_Competition": 17.9
+        },
+        {
+            "key": 22,
+            "model": "gemma-4-E4B-it",
+            "org": "Google",
+            "num": "8B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 36.8,
+            "Math_College": 51.8,
+            "Math_Competition": 21.8
+        }
+    ],
+    "CodeTable": [
+        {
+            "key": 0,
+            "model": "GPT-5.4-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 63.4,
+            "Comprehensive_Coding_Ability": 63.4
+        },
+        {
+            "key": 1,
+            "model": "DeepSeek-V4-Pro",
+            "org": "DeepSeek",
+            "num": "1.6T",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 59.4,
+            "Comprehensive_Coding_Ability": 59.4
+        },
+        {
+            "key": 2,
+            "model": "Claude Opus 4.7 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/4/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 63.7,
+            "Comprehensive_Coding_Ability": 63.7
+        },
+        {
+            "key": 3,
+            "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 57.0,
+            "Comprehensive_Coding_Ability": 57.0
+        },
+        {
+            "key": 4,
+            "model": "Kimi-K2.6",
+            "org": "Moonshot",
+            "num": "1T",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 62.4,
+            "Comprehensive_Coding_Ability": 62.4
+        },
+        {
+            "key": 5,
+            "model": "Gemini-3.1-Pro-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/2/19",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 60.2,
+            "Comprehensive_Coding_Ability": 60.2
+        },
+        {
+            "key": 6,
+            "model": "Qwen3.6-Max-Preview",
+            "org": "Alibaba",
+            "num": "N/A",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 61.6,
+            "Comprehensive_Coding_Ability": 61.6
+        },
+        {
+            "key": 7,
+            "model": "DeepSeek-V4-Flash",
+            "org": "DeepSeek",
+            "num": "284B",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 56.4,
+            "Comprehensive_Coding_Ability": 56.4
+        },
+        {
+            "key": 8,
+            "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 54.6,
+            "Comprehensive_Coding_Ability": 54.6
+        },
+        {
+            "key": 9,
+            "model": "GLM-5.1",
+            "org": "Zhipu AI",
+            "num": "744B",
+            "time": "2026/4/8",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 55.7,
+            "Comprehensive_Coding_Ability": 55.7
+        },
+        {
+            "key": 10,
+            "model": "Claude Sonnet 4.6 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/2/17",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 58.1,
+            "Comprehensive_Coding_Ability": 58.1
+        },
+        {
+            "key": 11,
+            "model": "Qwen3.5-397B-A17B",
+            "org": "Alibaba",
+            "num": "397B",
+            "time": "2026/2/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 57.4,
+            "Comprehensive_Coding_Ability": 57.4
+        },
+        {
+            "key": 12,
+            "model": "Hy3-preview (high)",
+            "org": "Tencent",
+            "num": "295B",
+            "time": "2026/4/23",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 51.9,
+            "Comprehensive_Coding_Ability": 51.9
+        },
+        {
+            "key": 13,
+            "model": "Ring-2.5-1T",
+            "org": "Ant Group",
+            "num": "1T",
+            "time": "2026/2/13",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 53.6,
+            "Comprehensive_Coding_Ability": 53.6
+        },
+        {
+            "key": 14,
+            "model": "GPT-5.4-mini-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.9,
+            "Comprehensive_Coding_Ability": 52.9
+        },
+        {
+            "key": 15,
+            "model": "MiniMax-M2.7",
+            "org": "MiniMax",
+            "num": "230B",
+            "time": "2026/3/18",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 56.2,
+            "Comprehensive_Coding_Ability": 56.2
+        },
+        {
+            "key": 16,
+            "model": "Grok-4.20-0309",
+            "org": "xAI",
+            "num": "N/A",
+            "time": "2026/3/9",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 53.3,
+            "Comprehensive_Coding_Ability": 53.3
+        },
+        {
+            "key": 17,
+            "model": "Step-3.5-Flash",
+            "org": "Step",
+            "num": "196B",
+            "time": "2026/2/2",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 54.9,
+            "Comprehensive_Coding_Ability": 54.9
+        },
+        {
+            "key": 18,
+            "model": "gemma-4-31B-it",
+            "org": "Google",
+            "num": "31B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 56.8,
+            "Comprehensive_Coding_Ability": 56.8
+        },
+        {
+            "key": 19,
+            "model": "Qwen3.6-27B",
+            "org": "Alibaba",
+            "num": "27B",
+            "time": "2026/4/22",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 50.8,
+            "Comprehensive_Coding_Ability": 50.8
+        },
+        {
+            "key": 20,
+            "model": "Gemini-3.1-Flash-Lite-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/3/4",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.8,
+            "Comprehensive_Coding_Ability": 52.8
+        },
+        {
+            "key": 21,
+            "model": "JT-MINI",
+            "org": "China Mobile",
+            "num": "N/A",
+            "time": "2026/3/31",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 38.5,
+            "Comprehensive_Coding_Ability": 38.5
+        },
+        {
+            "key": 22,
+            "model": "gemma-4-E4B-it",
+            "org": "Google",
+            "num": "8B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 38.9,
+            "Comprehensive_Coding_Ability": 38.9
+        }
+    ],
+    "AgentTable": [
+        {
+            "key": 0,
+            "model": "GPT-5.4-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 52.8,
+            "Comprehensive_Tool_Using": 52.8
+        },
+        {
+            "key": 1,
+            "model": "DeepSeek-V4-Pro",
+            "org": "DeepSeek",
+            "num": "1.6T",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 55.3,
+            "Comprehensive_Tool_Using": 55.3
+        },
+        {
+            "key": 2,
+            "model": "Claude Opus 4.7 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/4/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 43.3,
+            "Comprehensive_Tool_Using": 43.3
+        },
+        {
+            "key": 3,
+            "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 44.2,
+            "Comprehensive_Tool_Using": 44.2
+        },
+        {
+            "key": 4,
+            "model": "Kimi-K2.6",
+            "org": "Moonshot",
+            "num": "1T",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 39.3,
+            "Comprehensive_Tool_Using": 39.3
+        },
+        {
+            "key": 5,
+            "model": "Gemini-3.1-Pro-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/2/19",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 41.0,
+            "Comprehensive_Tool_Using": 41.0
+        },
+        {
+            "key": 6,
+            "model": "Qwen3.6-Max-Preview",
+            "org": "Alibaba",
+            "num": "N/A",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 30.5,
+            "Comprehensive_Tool_Using": 30.5
+        },
+        {
+            "key": 7,
+            "model": "DeepSeek-V4-Flash",
+            "org": "DeepSeek",
+            "num": "284B",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 46.7,
+            "Comprehensive_Tool_Using": 46.7
+        },
+        {
+            "key": 8,
+            "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+            "org": "ByteDance",
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 42.4,
+            "Comprehensive_Tool_Using": 42.4
+        },
+        {
+            "key": 9,
+            "model": "GLM-5.1",
+            "org": "Zhipu AI",
+            "num": "744B",
+            "time": "2026/4/8",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 39.9,
+            "Comprehensive_Tool_Using": 39.9
+        },
+        {
+            "key": 10,
+            "model": "Claude Sonnet 4.6 (high)",
+            "org": "Anthropic",
+            "num": "N/A",
+            "time": "2026/2/17",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 24.7,
+            "Comprehensive_Tool_Using": 24.7
+        },
+        {
+            "key": 11,
+            "model": "Qwen3.5-397B-A17B",
+            "org": "Alibaba",
+            "num": "397B",
+            "time": "2026/2/16",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 28.7,
+            "Comprehensive_Tool_Using": 28.7
+        },
+        {
+            "key": 12,
+            "model": "Hy3-preview (high)",
+            "org": "Tencent",
+            "num": "295B",
+            "time": "2026/4/23",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 28.7,
+            "Comprehensive_Tool_Using": 28.7
+        },
+        {
+            "key": 13,
+            "model": "Ring-2.5-1T",
+            "org": "Ant Group",
+            "num": "1T",
+            "time": "2026/2/13",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 25.0,
+            "Comprehensive_Tool_Using": 25.0
+        },
+        {
+            "key": 14,
+            "model": "GPT-5.4-mini-2026-03-05 (high)",
+            "org": "OpenAI",
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 22.0,
+            "Comprehensive_Tool_Using": 22.0
+        },
+        {
+            "key": 15,
+            "model": "MiniMax-M2.7",
+            "org": "MiniMax",
+            "num": "230B",
+            "time": "2026/3/18",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 23.7,
+            "Comprehensive_Tool_Using": 23.7
+        },
+        {
+            "key": 16,
+            "model": "Grok-4.20-0309",
+            "org": "xAI",
+            "num": "N/A",
+            "time": "2026/3/9",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 13.3,
+            "Comprehensive_Tool_Using": 13.3
+        },
+        {
+            "key": 17,
+            "model": "Step-3.5-Flash",
+            "org": "Step",
+            "num": "196B",
+            "time": "2026/2/2",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 18.0,
+            "Comprehensive_Tool_Using": 18.0
+        },
+        {
+            "key": 18,
+            "model": "gemma-4-31B-it",
+            "org": "Google",
+            "num": "31B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 14.0,
+            "Comprehensive_Tool_Using": 14.0
+        },
+        {
+            "key": 19,
+            "model": "Qwen3.6-27B",
+            "org": "Alibaba",
+            "num": "27B",
+            "time": "2026/4/22",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 23.3,
+            "Comprehensive_Tool_Using": 23.3
+        },
+        {
+            "key": 20,
+            "model": "Gemini-3.1-Flash-Lite-Preview",
+            "org": "Google",
+            "num": "N/A",
+            "time": "2026/3/4",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 11.0,
+            "Comprehensive_Tool_Using": 11.0
+        },
+        {
+            "key": 21,
+            "model": "JT-MINI",
+            "org": "China Mobile",
+            "num": "N/A",
+            "time": "2026/3/31",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 13.3,
+            "Comprehensive_Tool_Using": 13.3
+        },
+        {
+            "key": 22,
+            "model": "gemma-4-E4B-it",
+            "org": "Google",
+            "num": "8B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "chat_or_base": "Chat",
+            "Average": 1.3,
+            "Comprehensive_Tool_Using": 1.3
+        }
+    ],
+    "models": {
+        "GPT-5.4-2026-03-05 (high)": {
+            "desc": {
+                "zh-CN": "OpenAI官方最新推出的备受外界期待的、性能更强的新一代人工智能模型GPT-5系列，版本号为gpt-5.4。",
+                "en-US": "The latest, highly anticipated and powerful next-generation LLM named GPT-5 that officially launched by OpenAI, version gpt-5.4."
+            },
+            "org": "OpenAI",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "OpenAI",
+                "https://openai.com/zh-Hans-CN/index/introducing-gpt-5-4/"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 1,
+            "chat_or_base": "Chat"
+        },
+        "DeepSeek-V4-Pro": {
+            "desc": {
+                "zh-CN": "DeepSeek-V4-Pro 是 DeepSeek 推出的高性能旗舰大模型，在推理、编程、长文本处理与综合任务能力上进一步增强。",
+                "en-US": "DeepSeek-V4-Pro is DeepSeek’s flagship high-performance model, further enhancing reasoning, coding, long-text processing, and overall task capability."
+            },
+            "org": "DeepSeek",
+            "weight": [
+                "deepseek-ai/DeepSeek-V4-Pro",
+                "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro"
+            ],
+            "website-github": [
+                "DeepSeek",
+                "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "1.6T",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 2,
+            "chat_or_base": "Chat"
+        },
+        "Claude Opus 4.7 (high)": {
+            "desc": {
+                "zh-CN": "Claude Opus 4.7 是 Anthropic 推出的高端旗舰模型，重点提升了深度推理、复杂写作、代码生成与高可靠性任务处理能力。",
+                "en-US": "Claude Opus 4.7 is Anthropic’s flagship high-end model, with a focus on stronger deep reasoning, complex writing, code generation, and reliable task handling."
+            },
+            "org": "Anthropic",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "Anthropic",
+                "https://www.anthropic.com/news/claude-opus-4-7"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/4/16",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 3,
+            "chat_or_base": "Chat"
+        },
+        "Doubao-Seed-2-0-Pro-260215 (high)": {
+            "desc": {
+                "zh-CN": "Doubao-Seed-2-0-Pro-260215 是字节跳动最新推出的高性能通用闭源模型。",
+                "en-US": "Doubao-Seed-2-0-Pro-260215 is ByteDance’s latest high-performance proprietary general-purpose model."
+            },
+            "org": "ByteDance",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "ByteDance",
+                "https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-seed-2-0-pro"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 4,
+            "chat_or_base": "Chat"
+        },
+        "Kimi-K2.6": {
+            "desc": {
+                "zh-CN": "Moonshot 最新发布的的1T参数大模型，提升了长程编码能力与Agent自主化执行能力，具备代码、长程任务执行和Agent集群能力。",
+                "en-US": "Kimi-K2.6 is Moonshot’s latest 1T-parameter large model, featuring improved long-horizon coding and autonomous agent execution capabilities, with strengths in coding, long-horizon task execution, and agent collaboration."
+            },
+            "org": "Moonshot",
+            "weight": [
+                "moonshotai/Kimi-K2.6",
+                "https://huggingface.co/moonshotai/Kimi-K2.6"
+            ],
+            "website-github": [
+                "Moonshot",
+                "https://www.kimi.com/blog/kimi-k2-6"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "1T",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 5,
+            "chat_or_base": "Chat"
+        },
+        "Gemini-3.1-Pro-Preview": {
+            "desc": {
+                "zh-CN": "Gemini-3.1-Pro-Preview 是 Google 推出的 Gemini 3.1 Pro 预览版本，面向高难度推理、多模态理解与复杂生产级任务。",
+                "en-US": "Gemini-3.1-Pro-Preview is Google’s preview release of Gemini 3.1 Pro, designed for challenging reasoning, multimodal understanding, and complex production-grade tasks."
+            },
+            "org": "Google",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "Google",
+                "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-pro/"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/2/19",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 6,
+            "chat_or_base": "Chat"
+        },
+        "Qwen3.6-Max-Preview": {
+            "desc": {
+                "zh-CN": "Qwen3.6-Max-Preview 是 Qwen 推出的闭源旗舰模型，聚焦更强推理能力、复杂任务处理与高质量对话表现。",
+                "en-US": "Qwen3.6-Max-Preview is Qwen’s flagship proprietary model, focusing on stronger reasoning, complex task handling, and high-quality conversational performance. "
+            },
+            "org": "Alibaba",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "Qwen",
+                "https://bailian.console.aliyun.com/cn-beijing?spm=5176.29597918.J_tAwMEW-mKC1CPxlfy227s.1.5d7c133cCYWHeF&tab=model#/model-market/detail/qwen3.6-max-preview?serviceSite=asia-pacific-china"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/4/20",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 7,
+            "chat_or_base": "Chat"
+        },
+        "DeepSeek-V4-Flash": {
+            "desc": {
+                "zh-CN": "DeepSeek-V4-Flash 是 DeepSeek 推出的高效率轻量化模型，面向低延迟交互、高并发调用与日常智能应用场景。",
+                "en-US": "DeepSeek-V4-Flash is DeepSeek’s efficiency-oriented lightweight model for low-latency interaction, high-concurrency usage, and everyday intelligent applications."
+            },
+            "org": "DeepSeek",
+            "weight": [
+                "deepseek-ai/DeepSeek-V4-Flash",
+                "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash"
+            ],
+            "website-github": [
+                "DeepSeek",
+                "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "284B",
+            "time": "2026/4/24",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 8,
+            "chat_or_base": "Chat"
+        },
+        "Doubao-Seed-2-0-Lite-260215 (high)": {
+            "desc": {
+                "zh-CN": "Doubao-Seed-2-0-Lite-260215 是字节跳动最新推出的轻量化通用闭源模型。",
+                "en-US": "Doubao-Seed-2-0-Lite-260215 is ByteDance’s latest lightweight proprietary general-purpose model."
+            },
+            "org": "ByteDance",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "ByteDance",
+                "https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-seed-2-0-lite"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/2/15",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 9,
+            "chat_or_base": "Chat"
+        },
+        "GLM-5.1": {
+            "desc": {
+                "zh-CN": "GLM-5.1 是智谱推出的新一代通用大模型，该模型能够在长达8小时的任务中独立工作，完成复杂的工程项目，在代码能力和长程任务执行上相比前代模型有所提升。",
+                "en-US": "GLM-5.1 is Zhipu AI’s next-generation general-purpose large model. It can work autonomously on tasks lasting up to eight hours and complete complex engineering projects, with improved coding ability and long-horizon task execution compared with its predecessor."
+            },
+            "org": "Zhipu AI",
+            "weight": [
+                "zai-org/GLM-5.1",
+                "https://huggingface.co/zai-org/GLM-5.1"
+            ],
+            "website-github": [
+                "Zhipu AI",
+                "https://docs.z.ai/guides/llm/glm-5.1"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "744B",
+            "time": "2026/4/8",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 10,
+            "chat_or_base": "Chat"
+        },
+        "Claude Sonnet 4.6 (high)": {
+            "desc": {
+                "zh-CN": "Claude Sonnet 4.6 是 Anthropic 推出的均衡型主力模型，在性能、速度与成本之间提供面向通用业务场景的高性价比选择。",
+                "en-US": "Claude Sonnet 4.6 is Anthropic’s balanced mainstream model, offering a cost-effective trade-off among capability, speed, and cost for general business use cases."
+            },
+            "org": "Anthropic",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "Anthropic",
+                "https://www.anthropic.com/news/claude-sonnet-4-6"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/2/17",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 11,
+            "chat_or_base": "Chat"
+        },
+        "Qwen3.5-397B-A17B": {
+            "desc": {
+                "zh-CN": "Qwen3.5 是阿里近期推出的重要基础模型，在多模态融合、混合高效架构、规模化强化学习、多语言覆盖及训练基建上实现全面升级，性能与实用性大幅提升。",
+                "en-US": "Qwen3.5 is a significant foundation model recently launched by Alibaba, featuring comprehensive upgrades in multimodal fusion, efficient hybrid architecture, scalable reinforcement learning, multilingual coverage and training infrastructure, with greatly improved performance and practicality."
+            },
+            "org": "Alibaba",
+            "weight": [
+                "Qwen/Qwen3.5-397B-A17B",
+                "https://huggingface.co/Qwen/Qwen3.5-397B-A17B"
+            ],
+            "website-github": [
+                "Qwen",
+                "https://qwen.ai/blog?id=qwen3.5"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "397B",
+            "time": "2026/2/16",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 12,
+            "chat_or_base": "Chat"
+        },
+        "Hy3-preview (high)": {
+            "desc": {
+                "zh-CN": "Hy3 preview是腾讯混元团队重组后发布并开源的新模型，在复杂推理、指令遵循、上下文学习、代码、智能体等能力及推理性能上有所提升。",
+                "en-US": "Hy3-preview is a newly released and open-sourced model launched after the reorganization of Tencent Hunyuan’s team, with improvements in complex reasoning, instruction following, in-context learning, coding, agent capabilities, and inference efficiency."
+            },
+            "org": "Tencent",
+            "weight": [
+                "tencent/Hy3-preview",
+                "https://huggingface.co/tencent/Hy3-preview"
+            ],
+            "website-github": [
+                "Tencent",
+                "https://hunyuan.tencent.com/research/hy3"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "295B",
+            "time": "2026/4/23",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 13,
+            "chat_or_base": "Chat"
+        },
+        "Ring-2.5-1T": {
+            "desc": {
+                "zh-CN": "Ring-2.5-1T 是 Ring-1T 的升级版，由 inclusionAI打造，是全球首个基于混合线性注意力架构的万亿参数思考模型。",
+                "en-US": "Ring-2.5-1T is an upgraded version of Ring-1T, developed by inclusionAI, and is the world’s first trillion-parameter reasoning model based on a hybrid linear attention architecture."
+            },
+            "org": "Ant Group",
+            "weight": [
+                "inclusionAI/Ring-2.5-1T",
+                "https://huggingface.co/inclusionAI/Ring-2.5-1T"
+            ],
+            "website-github": [
+                "Ant Group",
+                "https://huggingface.co/inclusionAI/Ring-2.5-1T"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "1T",
+            "time": "2026/2/13",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 14,
+            "chat_or_base": "Chat"
+        },
+        "GPT-5.4-mini-2026-03-05 (high)": {
+            "desc": {
+                "zh-CN": "OpenAI官方最新推出的备受外界期待的、性能更强的新一代人工智能模型GPT-5系列，版本号为gpt-5.4。",
+                "en-US": "The latest, highly anticipated and powerful next-generation LLM named GPT-5 that officially launched by OpenAI, version gpt-5.4."
+            },
+            "org": "OpenAI",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "OpenAI",
+                "https://openai.com/zh-Hans-CN/index/introducing-gpt-5-4/"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/3/5",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 15,
+            "chat_or_base": "Chat"
+        },
+        "MiniMax-M2.7": {
+            "desc": {
+                "zh-CN": "MiniMax 推出的新一代通用大模型，通过构建Agent Harness体系，深度参与自身训练与优化流程，在部分研发场景中可承担30%—50%的工作量，并在内部评测集上实现约30%的效果提升。",
+                "en-US": "MiniMax-M2.7 is MiniMax’s new-generation general-purpose large model. By building an Agent Harness system, it deeply participates in its own training and optimization process, can take on 30%–50% of the workload in some R&D scenarios, and achieves about a 30% improvement on internal evaluation benchmarks."
+            },
+            "org": "MiniMax",
+            "weight": [
+                "MiniMaxAI/MiniMax-M2.7",
+                "https://huggingface.co/MiniMaxAI/MiniMax-M2.7"
+            ],
+            "website-github": [
+                "MiniMax",
+                "https://www.minimaxi.com/news/minimax-m27-zh"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "230B",
+            "time": "2026/3/18",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 16,
+            "chat_or_base": "Chat"
+        },
+        "Grok-4.20-0309": {
+            "desc": {
+                "zh-CN": "Grok-4.20-0309 是 xAI 推出的新一代推理模型，强调实时信息能力、复杂问题分析以及更强的工具化任务表现。",
+                "en-US": "Grok-4.20-0309 is xAI’s next-generation reasoning model, emphasizing real-time information capability, complex problem analysis, and stronger tool-oriented task performance."
+            },
+            "org": "xAI",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "xAI",
+                "https://docs.x.ai/developers/models/grok-4.20"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/3/9",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 17,
+            "chat_or_base": "Chat"
+        },
+        "Step-3.5-Flash": {
+            "desc": {
+                "zh-CN": "Step 3.5 Flash是阶跃星辰于最新发布的开源模型，在Agent场景和数学任务上表现良好，能够处理复杂、长链条任务。",
+                "en-US": "Step 3.5 Flash is StepFun’s newly released open-source model, performing well in agent scenarios and mathematical tasks, and capable of handling complex, long-chain tasks."
+            },
+            "org": "Step",
+            "weight": [
+                "stepfun-ai/Step-3.5-Flash",
+                "https://huggingface.co/stepfun-ai/Step-3.5-Flash"
+            ],
+            "website-github": [
+                "Step",
+                "https://static.stepfun.com/blog/step-3.5-flash/"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "196B",
+            "time": "2026/2/2",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 18,
+            "chat_or_base": "Chat"
+        },
+        "gemma-4-31B-it": {
+            "desc": {
+                "zh-CN": "gemma-4-31B-it 是 Google 推出的 31B 参数开源模型，面向高质量对话、推理与开发者自部署场景。",
+                "en-US": "gemma-4-31B-it is Google’s 31B-parameter open-source model for high-quality conversation, reasoning, and self-deployment by developers."
+            },
+            "org": "Google",
+            "weight": [
+                "google/gemma-4-31B-it",
+                "https://huggingface.co/google/gemma-4-31B-it"
+            ],
+            "website-github": [
+                "Google",
+                "https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "31B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 19,
+            "chat_or_base": "Chat"
+        },
+        "Qwen3.6-27B": {
+            "desc": {
+                "zh-CN": "Qwen3.6 是 Qwen 系列的新一代开源模型，3.5系列的升级版。",
+                "en-US": "Qwen3.6 is the next-generation open-source model in the Qwen family and an upgraded version of the Qwen3.5 series. "
+            },
+            "org": "Alibaba",
+            "weight": [
+                "Qwen/Qwen3.6-35B-A3B",
+                "https://huggingface.co/Qwen/Qwen3.6-35B-A3B"
+            ],
+            "website-github": [
+                "Qwen",
+                "https://qwen.ai/blog?id=qwen3.6-35b-a3b"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "27B",
+            "time": "2026/4/22",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 20,
+            "chat_or_base": "Chat"
+        },
+        "Gemini-3.1-Flash-Lite-Preview": {
+            "desc": {
+                "zh-CN": "Gemini-3.1-Flash-Lite-Preview 是 Google 推出的轻量级预览模型，强调低成本、低时延以及高吞吐场景下的实用能力。",
+                "en-US": "Gemini-3.1-Flash-Lite-Preview is Google’s lightweight preview model focused on practical capability under low cost, low latency, and high-throughput settings."
+            },
+            "org": "Google",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "Google",
+                "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-flash-lite/"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/3/4",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 21,
+            "chat_or_base": "Chat"
+        },
+        "JT-MINI": {
+            "desc": {
+                "zh-CN": "中国移动最新推出的闭源模型。",
+                "en-US": "China Mobile’s latest closed-source model."
+            },
+            "org": "China Mobile",
+            "weight": [
+                "",
+                ""
+            ],
+            "website-github": [
+                "China Mobile",
+                "https://jiutian.10086.cn/portal/#/home"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "N/A",
+            "time": "2026/3/31",
+            "update_time": "2026/5/13",
+            "release": "API",
+            "rank": 22,
+            "chat_or_base": "Chat"
+        },
+        "gemma-4-E4B-it": {
+            "desc": {
+                "zh-CN": "gemma-4-E4B-it 是 Google 推出的轻量级端侧开源模型。",
+                "en-US": "gemma-4-E4B-it is a lightweight open-source on-device model released by Google."
+            },
+            "org": "Google",
+            "weight": [
+                "google/gemma-4-E4B-it",
+                "https://huggingface.co/google/gemma-4-E4B-it"
+            ],
+            "website-github": [
+                "Google",
+                "https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/"
+            ],
+            "article": [
+                "",
+                ""
+            ],
+            "num": "8B",
+            "time": "2026/4/3",
+            "update_time": "2026/5/13",
+            "release": "OpenSource",
+            "rank": 23,
+            "chat_or_base": "Chat"
+        }
+    },
+    "globalData": {
+        "说明": "如果中英文环境不同，用models.ChatGPT.desc的写法，如果中英文相同，可以直接用字符串",
+        "OverallTable": [
+            {
+                "key": 0,
+                "model": "GPT-5.4-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 67.3,
+                "Language": 80.2,
+                "Knowledge": 93.7,
+                "Reasoning": 64.4,
+                "Math": 72.1,
+                "Code": 63.4,
+                "Agent": 52.8
+            },
+            {
+                "key": 1,
+                "model": "DeepSeek-V4-Pro",
+                "org": "DeepSeek",
+                "num": "1.6T",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 65.1,
+                "Language": 70.1,
+                "Knowledge": 92.1,
+                "Reasoning": 60.0,
+                "Math": 74.8,
+                "Code": 59.4,
+                "Agent": 55.3
+            },
+            {
+                "key": 2,
+                "model": "Claude Opus 4.7 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/4/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 64.0,
+                "Language": 70.0,
+                "Knowledge": 92.2,
+                "Reasoning": 63.5,
+                "Math": 72.4,
+                "Code": 63.7,
+                "Agent": 43.3
+            },
+            {
+                "key": 3,
+                "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 63.5,
+                "Language": 77.3,
+                "Knowledge": 91.9,
+                "Reasoning": 65.2,
+                "Math": 77.3,
+                "Code": 57.0,
+                "Agent": 44.2
+            },
+            {
+                "key": 4,
+                "model": "Kimi-K2.6",
+                "org": "Moonshot",
+                "num": "1T",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 63.4,
+                "Language": 75.0,
+                "Knowledge": 91.5,
+                "Reasoning": 62.2,
+                "Math": 76.4,
+                "Code": 62.4,
+                "Agent": 39.3
+            },
+            {
+                "key": 5,
+                "model": "Gemini-3.1-Pro-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/2/19",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 63.2,
+                "Language": 74.8,
+                "Knowledge": 95.2,
+                "Reasoning": 59.7,
+                "Math": 76.5,
+                "Code": 60.2,
+                "Agent": 41.0
+            },
+            {
+                "key": 6,
+                "model": "Qwen3.6-Max-Preview",
+                "org": "Alibaba",
+                "num": "N/A",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 60.8,
+                "Language": 79.5,
+                "Knowledge": 89.6,
+                "Reasoning": 59.2,
+                "Math": 73.4,
+                "Code": 61.6,
+                "Agent": 30.5
+            },
+            {
+                "key": 7,
+                "model": "DeepSeek-V4-Flash",
+                "org": "DeepSeek",
+                "num": "284B",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 60.4,
+                "Language": 66.2,
+                "Knowledge": 88.6,
+                "Reasoning": 57.2,
+                "Math": 69.2,
+                "Code": 56.4,
+                "Agent": 46.7
+            },
+            {
+                "key": 8,
+                "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 60.4,
+                "Language": 74.4,
+                "Knowledge": 88.9,
+                "Reasoning": 59.5,
+                "Math": 72.4,
+                "Code": 54.6,
+                "Agent": 42.4
+            },
+            {
+                "key": 9,
+                "model": "GLM-5.1",
+                "org": "Zhipu AI",
+                "num": "744B",
+                "time": "2026/4/8",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 59.0,
+                "Language": 71.9,
+                "Knowledge": 89.9,
+                "Reasoning": 54.3,
+                "Math": 67.9,
+                "Code": 55.7,
+                "Agent": 39.9
+            },
+            {
+                "key": 10,
+                "model": "Claude Sonnet 4.6 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/2/17",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 57.5,
+                "Language": 70.5,
+                "Knowledge": 90.6,
+                "Reasoning": 60.6,
+                "Math": 72.4,
+                "Code": 58.1,
+                "Agent": 24.7
+            },
+            {
+                "key": 11,
+                "model": "Qwen3.5-397B-A17B",
+                "org": "Alibaba",
+                "num": "397B",
+                "time": "2026/2/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 57.5,
+                "Language": 71.0,
+                "Knowledge": 91.2,
+                "Reasoning": 54.5,
+                "Math": 70.9,
+                "Code": 57.4,
+                "Agent": 28.7
+            },
+            {
+                "key": 12,
+                "model": "Hy3-preview (high)",
+                "org": "Tencent",
+                "num": "295B",
+                "time": "2026/4/23",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 56.5,
+                "Language": 74.4,
+                "Knowledge": 88.2,
+                "Reasoning": 58.5,
+                "Math": 74.5,
+                "Code": 51.9,
+                "Agent": 28.7
+            },
+            {
+                "key": 13,
+                "model": "Ring-2.5-1T",
+                "org": "Ant Group",
+                "num": "1T",
+                "time": "2026/2/13",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 54.5,
+                "Language": 69.8,
+                "Knowledge": 89.4,
+                "Reasoning": 54.2,
+                "Math": 66.5,
+                "Code": 53.6,
+                "Agent": 25.0
+            },
+            {
+                "key": 14,
+                "model": "GPT-5.4-mini-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 54.4,
+                "Language": 73.0,
+                "Knowledge": 91.5,
+                "Reasoning": 55.9,
+                "Math": 66.1,
+                "Code": 52.9,
+                "Agent": 22.0
+            },
+            {
+                "key": 15,
+                "model": "MiniMax-M2.7",
+                "org": "MiniMax",
+                "num": "230B",
+                "time": "2026/3/18",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 53.7,
+                "Language": 68.1,
+                "Knowledge": 82.4,
+                "Reasoning": 52.4,
+                "Math": 64.7,
+                "Code": 56.2,
+                "Agent": 23.7
+            },
+            {
+                "key": 16,
+                "model": "Grok-4.20-0309",
+                "org": "xAI",
+                "num": "N/A",
+                "time": "2026/3/9",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 53.5,
+                "Language": 73.9,
+                "Knowledge": 92.9,
+                "Reasoning": 55.3,
+                "Math": 72.5,
+                "Code": 53.3,
+                "Agent": 13.3
+            },
+            {
+                "key": 17,
+                "model": "Step-3.5-Flash",
+                "org": "Step",
+                "num": "196B",
+                "time": "2026/2/2",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.9,
+                "Language": 64.4,
+                "Knowledge": 86.8,
+                "Reasoning": 55.6,
+                "Math": 68.7,
+                "Code": 54.9,
+                "Agent": 18.0
+            },
+            {
+                "key": 18,
+                "model": "gemma-4-31B-it",
+                "org": "Google",
+                "num": "31B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.4,
+                "Language": 64.6,
+                "Knowledge": 87.7,
+                "Reasoning": 54.6,
+                "Math": 66.5,
+                "Code": 56.8,
+                "Agent": 14.0
+            },
+            {
+                "key": 19,
+                "model": "Qwen3.6-27B",
+                "org": "Alibaba",
+                "num": "27B",
+                "time": "2026/4/22",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.3,
+                "Language": 69.0,
+                "Knowledge": 84.0,
+                "Reasoning": 52.7,
+                "Math": 65.6,
+                "Code": 50.8,
+                "Agent": 23.3
+            },
+            {
+                "key": 20,
+                "model": "Gemini-3.1-Flash-Lite-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/3/4",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 49.9,
+                "Language": 58.7,
+                "Knowledge": 91.7,
+                "Reasoning": 52.0,
+                "Math": 66.4,
+                "Code": 52.8,
+                "Agent": 11.0
+            },
+            {
+                "key": 21,
+                "model": "JT-MINI",
+                "org": "China Mobile",
+                "num": "N/A",
+                "time": "2026/3/31",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 39.9,
+                "Language": 60.8,
+                "Knowledge": 80.4,
+                "Reasoning": 34.1,
+                "Math": 41.5,
+                "Code": 38.5,
+                "Agent": 13.3
+            },
+            {
+                "key": 22,
+                "model": "gemma-4-E4B-it",
+                "org": "Google",
+                "num": "8B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 35.4,
+                "Language": 55.8,
+                "Knowledge": 76.4,
+                "Reasoning": 30.6,
+                "Math": 36.8,
+                "Code": 38.9,
+                "Agent": 1.3
+            }
+        ],
+        "LanguageTable": [
+            {
+                "key": 0,
+                "model": "GPT-5.4-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 80.2,
+                "Chat": 84.6,
+                "Creation": 82.5,
+                "IF": 79.2,
+                "NLP": 74.6
+            },
+            {
+                "key": 1,
+                "model": "DeepSeek-V4-Pro",
+                "org": "DeepSeek",
+                "num": "1.6T",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 70.1,
+                "Chat": 83.3,
+                "Creation": 70.0,
+                "IF": 63.8,
+                "NLP": 63.3
+            },
+            {
+                "key": 2,
+                "model": "Claude Opus 4.7 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/4/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 70.0,
+                "Chat": 82.5,
+                "Creation": 67.1,
+                "IF": 65.0,
+                "NLP": 65.4
+            },
+            {
+                "key": 3,
+                "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 77.3,
+                "Chat": 91.7,
+                "Creation": 77.1,
+                "IF": 70.8,
+                "NLP": 69.6
+            },
+            {
+                "key": 4,
+                "model": "Kimi-K2.6",
+                "org": "Moonshot",
+                "num": "1T",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 75.0,
+                "Chat": 86.7,
+                "Creation": 73.8,
+                "IF": 72.0,
+                "NLP": 67.5
+            },
+            {
+                "key": 5,
+                "model": "Gemini-3.1-Pro-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/2/19",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 74.8,
+                "Chat": 78.3,
+                "Creation": 73.8,
+                "IF": 79.8,
+                "NLP": 67.5
+            },
+            {
+                "key": 6,
+                "model": "Qwen3.6-Max-Preview",
+                "org": "Alibaba",
+                "num": "N/A",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 79.5,
+                "Chat": 87.1,
+                "Creation": 77.9,
+                "IF": 80.0,
+                "NLP": 72.9
+            },
+            {
+                "key": 7,
+                "model": "DeepSeek-V4-Flash",
+                "org": "DeepSeek",
+                "num": "284B",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 66.2,
+                "Chat": 77.1,
+                "Creation": 65.0,
+                "IF": 60.2,
+                "NLP": 62.5
+            },
+            {
+                "key": 8,
+                "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 74.4,
+                "Chat": 80.8,
+                "Creation": 77.1,
+                "IF": 72.5,
+                "NLP": 67.1
+            },
+            {
+                "key": 9,
+                "model": "GLM-5.1",
+                "org": "Zhipu AI",
+                "num": "744B",
+                "time": "2026/4/8",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 71.9,
+                "Chat": 80.8,
+                "Creation": 69.2,
+                "IF": 74.0,
+                "NLP": 63.8
+            },
+            {
+                "key": 10,
+                "model": "Claude Sonnet 4.6 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/2/17",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 70.5,
+                "Chat": 82.1,
+                "Creation": 70.8,
+                "IF": 62.8,
+                "NLP": 66.2
+            },
+            {
+                "key": 11,
+                "model": "Qwen3.5-397B-A17B",
+                "org": "Alibaba",
+                "num": "397B",
+                "time": "2026/2/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 71.0,
+                "Chat": 79.6,
+                "Creation": 66.2,
+                "IF": 75.8,
+                "NLP": 62.5
+            },
+            {
+                "key": 12,
+                "model": "Hy3-preview (high)",
+                "org": "Tencent",
+                "num": "295B",
+                "time": "2026/4/23",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 74.4,
+                "Chat": 82.9,
+                "Creation": 75.4,
+                "IF": 76.0,
+                "NLP": 63.3
+            },
+            {
+                "key": 13,
+                "model": "Ring-2.5-1T",
+                "org": "Ant Group",
+                "num": "1T",
+                "time": "2026/2/13",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 69.8,
+                "Chat": 86.2,
+                "Creation": 68.8,
+                "IF": 59.0,
+                "NLP": 65.4
+            },
+            {
+                "key": 14,
+                "model": "GPT-5.4-mini-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 73.0,
+                "Chat": 75.8,
+                "Creation": 72.1,
+                "IF": 74.5,
+                "NLP": 69.6
+            },
+            {
+                "key": 15,
+                "model": "MiniMax-M2.7",
+                "org": "MiniMax",
+                "num": "230B",
+                "time": "2026/3/18",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 68.1,
+                "Chat": 81.2,
+                "Creation": 66.7,
+                "IF": 61.0,
+                "NLP": 63.3
+            },
+            {
+                "key": 16,
+                "model": "Grok-4.20-0309",
+                "org": "xAI",
+                "num": "N/A",
+                "time": "2026/3/9",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 73.9,
+                "Chat": 83.3,
+                "Creation": 66.7,
+                "IF": 71.5,
+                "NLP": 74.2
+            },
+            {
+                "key": 17,
+                "model": "Step-3.5-Flash",
+                "org": "Step",
+                "num": "196B",
+                "time": "2026/2/2",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 64.4,
+                "Chat": 77.5,
+                "Creation": 63.8,
+                "IF": 57.2,
+                "NLP": 59.2
+            },
+            {
+                "key": 18,
+                "model": "gemma-4-31B-it",
+                "org": "Google",
+                "num": "31B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 64.6,
+                "Chat": 68.8,
+                "Creation": 62.1,
+                "IF": 68.2,
+                "NLP": 59.2
+            },
+            {
+                "key": 19,
+                "model": "Qwen3.6-27B",
+                "org": "Alibaba",
+                "num": "27B",
+                "time": "2026/4/22",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 69.0,
+                "Chat": 77.9,
+                "Creation": 65.8,
+                "IF": 69.0,
+                "NLP": 63.3
+            },
+            {
+                "key": 20,
+                "model": "Gemini-3.1-Flash-Lite-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/3/4",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 58.7,
+                "Chat": 62.5,
+                "Creation": 50.4,
+                "IF": 64.2,
+                "NLP": 57.5
+            },
+            {
+                "key": 21,
+                "model": "JT-MINI",
+                "org": "China Mobile",
+                "num": "N/A",
+                "time": "2026/3/31",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 60.8,
+                "Chat": 77.5,
+                "Creation": 60.0,
+                "IF": 43.8,
+                "NLP": 62.1
+            },
+            {
+                "key": 22,
+                "model": "gemma-4-E4B-it",
+                "org": "Google",
+                "num": "8B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 55.8,
+                "Chat": 66.2,
+                "Creation": 55.8,
+                "IF": 48.0,
+                "NLP": 52.9
+            }
+        ],
+        "KnowledgeTable": [
+            {
+                "key": 0,
+                "model": "GPT-5.4-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 93.7,
+                "Knowledge_Humanity": 91.7,
+                "Knowledge_Social_Science": 94.2,
+                "Knowledge_Engineering": 96.2,
+                "Knowledge_Science": 93.8,
+                "Knowledge_CommonSense": 92.5
+            },
+            {
+                "key": 1,
+                "model": "DeepSeek-V4-Pro",
+                "org": "DeepSeek",
+                "num": "1.6T",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 92.1,
+                "Knowledge_Humanity": 92.9,
+                "Knowledge_Social_Science": 87.9,
+                "Knowledge_Engineering": 91.2,
+                "Knowledge_Science": 96.7,
+                "Knowledge_CommonSense": 91.7
+            },
+            {
+                "key": 2,
+                "model": "Claude Opus 4.7 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/4/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 92.2,
+                "Knowledge_Humanity": 92.1,
+                "Knowledge_Social_Science": 92.1,
+                "Knowledge_Engineering": 95.0,
+                "Knowledge_Science": 91.2,
+                "Knowledge_CommonSense": 90.4
+            },
+            {
+                "key": 3,
+                "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 91.9,
+                "Knowledge_Humanity": 95.0,
+                "Knowledge_Social_Science": 85.8,
+                "Knowledge_Engineering": 92.9,
+                "Knowledge_Science": 94.6,
+                "Knowledge_CommonSense": 91.2
+            },
+            {
+                "key": 4,
+                "model": "Kimi-K2.6",
+                "org": "Moonshot",
+                "num": "1T",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 91.5,
+                "Knowledge_Humanity": 93.8,
+                "Knowledge_Social_Science": 90.8,
+                "Knowledge_Engineering": 89.2,
+                "Knowledge_Science": 91.7,
+                "Knowledge_CommonSense": 92.1
+            },
+            {
+                "key": 5,
+                "model": "Gemini-3.1-Pro-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/2/19",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 95.2,
+                "Knowledge_Humanity": 92.5,
+                "Knowledge_Social_Science": 97.5,
+                "Knowledge_Engineering": 95.4,
+                "Knowledge_Science": 97.5,
+                "Knowledge_CommonSense": 92.9
+            },
+            {
+                "key": 6,
+                "model": "Qwen3.6-Max-Preview",
+                "org": "Alibaba",
+                "num": "N/A",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 89.6,
+                "Knowledge_Humanity": 87.5,
+                "Knowledge_Social_Science": 85.8,
+                "Knowledge_Engineering": 92.5,
+                "Knowledge_Science": 92.1,
+                "Knowledge_CommonSense": 90.0
+            },
+            {
+                "key": 7,
+                "model": "DeepSeek-V4-Flash",
+                "org": "DeepSeek",
+                "num": "284B",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 88.6,
+                "Knowledge_Humanity": 92.5,
+                "Knowledge_Social_Science": 87.5,
+                "Knowledge_Engineering": 91.2,
+                "Knowledge_Science": 87.5,
+                "Knowledge_CommonSense": 84.2
+            },
+            {
+                "key": 8,
+                "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 88.9,
+                "Knowledge_Humanity": 90.8,
+                "Knowledge_Social_Science": 85.0,
+                "Knowledge_Engineering": 90.0,
+                "Knowledge_Science": 91.7,
+                "Knowledge_CommonSense": 87.1
+            },
+            {
+                "key": 9,
+                "model": "GLM-5.1",
+                "org": "Zhipu AI",
+                "num": "744B",
+                "time": "2026/4/8",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 89.9,
+                "Knowledge_Humanity": 90.0,
+                "Knowledge_Social_Science": 91.7,
+                "Knowledge_Engineering": 90.8,
+                "Knowledge_Science": 89.2,
+                "Knowledge_CommonSense": 87.9
+            },
+            {
+                "key": 10,
+                "model": "Claude Sonnet 4.6 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/2/17",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 90.6,
+                "Knowledge_Humanity": 87.9,
+                "Knowledge_Social_Science": 92.5,
+                "Knowledge_Engineering": 94.2,
+                "Knowledge_Science": 91.2,
+                "Knowledge_CommonSense": 87.1
+            },
+            {
+                "key": 11,
+                "model": "Qwen3.5-397B-A17B",
+                "org": "Alibaba",
+                "num": "397B",
+                "time": "2026/2/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 91.2,
+                "Knowledge_Humanity": 90.0,
+                "Knowledge_Social_Science": 94.6,
+                "Knowledge_Engineering": 93.3,
+                "Knowledge_Science": 90.0,
+                "Knowledge_CommonSense": 87.9
+            },
+            {
+                "key": 12,
+                "model": "Hy3-preview (high)",
+                "org": "Tencent",
+                "num": "295B",
+                "time": "2026/4/23",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 88.2,
+                "Knowledge_Humanity": 89.2,
+                "Knowledge_Social_Science": 87.5,
+                "Knowledge_Engineering": 90.0,
+                "Knowledge_Science": 89.2,
+                "Knowledge_CommonSense": 85.4
+            },
+            {
+                "key": 13,
+                "model": "Ring-2.5-1T",
+                "org": "Ant Group",
+                "num": "1T",
+                "time": "2026/2/13",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 89.4,
+                "Knowledge_Humanity": 90.0,
+                "Knowledge_Social_Science": 92.9,
+                "Knowledge_Engineering": 90.8,
+                "Knowledge_Science": 87.1,
+                "Knowledge_CommonSense": 86.2
+            },
+            {
+                "key": 14,
+                "model": "GPT-5.4-mini-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 91.5,
+                "Knowledge_Humanity": 89.6,
+                "Knowledge_Social_Science": 90.8,
+                "Knowledge_Engineering": 96.2,
+                "Knowledge_Science": 90.8,
+                "Knowledge_CommonSense": 90.0
+            },
+            {
+                "key": 15,
+                "model": "MiniMax-M2.7",
+                "org": "MiniMax",
+                "num": "230B",
+                "time": "2026/3/18",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 82.4,
+                "Knowledge_Humanity": 81.2,
+                "Knowledge_Social_Science": 86.7,
+                "Knowledge_Engineering": 84.2,
+                "Knowledge_Science": 83.8,
+                "Knowledge_CommonSense": 76.2
+            },
+            {
+                "key": 16,
+                "model": "Grok-4.20-0309",
+                "org": "xAI",
+                "num": "N/A",
+                "time": "2026/3/9",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 92.9,
+                "Knowledge_Humanity": 93.8,
+                "Knowledge_Social_Science": 92.1,
+                "Knowledge_Engineering": 96.2,
+                "Knowledge_Science": 91.2,
+                "Knowledge_CommonSense": 91.2
+            },
+            {
+                "key": 17,
+                "model": "Step-3.5-Flash",
+                "org": "Step",
+                "num": "196B",
+                "time": "2026/2/2",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 86.8,
+                "Knowledge_Humanity": 84.6,
+                "Knowledge_Social_Science": 91.7,
+                "Knowledge_Engineering": 89.6,
+                "Knowledge_Science": 85.0,
+                "Knowledge_CommonSense": 83.3
+            },
+            {
+                "key": 18,
+                "model": "gemma-4-31B-it",
+                "org": "Google",
+                "num": "31B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 87.7,
+                "Knowledge_Humanity": 90.0,
+                "Knowledge_Social_Science": 91.7,
+                "Knowledge_Engineering": 90.0,
+                "Knowledge_Science": 85.0,
+                "Knowledge_CommonSense": 81.7
+            },
+            {
+                "key": 19,
+                "model": "Qwen3.6-27B",
+                "org": "Alibaba",
+                "num": "27B",
+                "time": "2026/4/22",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 84.0,
+                "Knowledge_Humanity": 82.1,
+                "Knowledge_Social_Science": 86.2,
+                "Knowledge_Engineering": 84.2,
+                "Knowledge_Science": 85.8,
+                "Knowledge_CommonSense": 81.7
+            },
+            {
+                "key": 20,
+                "model": "Gemini-3.1-Flash-Lite-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/3/4",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 91.7,
+                "Knowledge_Humanity": 90.0,
+                "Knowledge_Social_Science": 93.3,
+                "Knowledge_Engineering": 91.7,
+                "Knowledge_Science": 90.8,
+                "Knowledge_CommonSense": 92.5
+            },
+            {
+                "key": 21,
+                "model": "JT-MINI",
+                "org": "China Mobile",
+                "num": "N/A",
+                "time": "2026/3/31",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 80.4,
+                "Knowledge_Humanity": 76.2,
+                "Knowledge_Social_Science": 87.5,
+                "Knowledge_Engineering": 88.3,
+                "Knowledge_Science": 79.6,
+                "Knowledge_CommonSense": 70.4
+            },
+            {
+                "key": 22,
+                "model": "gemma-4-E4B-it",
+                "org": "Google",
+                "num": "8B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 76.4,
+                "Knowledge_Humanity": 74.2,
+                "Knowledge_Social_Science": 82.5,
+                "Knowledge_Engineering": 78.3,
+                "Knowledge_Science": 79.6,
+                "Knowledge_CommonSense": 67.5
+            }
+        ],
+        "ReasonTable": [
+            {
+                "key": 0,
+                "model": "GPT-5.4-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 64.4,
+                "Common_Reasoning": 76.8,
+                "Academic_Reasoning": 52.0
+            },
+            {
+                "key": 1,
+                "model": "DeepSeek-V4-Pro",
+                "org": "DeepSeek",
+                "num": "1.6T",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 60.0,
+                "Common_Reasoning": 76.0,
+                "Academic_Reasoning": 43.9
+            },
+            {
+                "key": 2,
+                "model": "Claude Opus 4.7 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/4/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 63.5,
+                "Common_Reasoning": 76.0,
+                "Academic_Reasoning": 50.9
+            },
+            {
+                "key": 3,
+                "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 65.2,
+                "Common_Reasoning": 82.1,
+                "Academic_Reasoning": 48.3
+            },
+            {
+                "key": 4,
+                "model": "Kimi-K2.6",
+                "org": "Moonshot",
+                "num": "1T",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 62.2,
+                "Common_Reasoning": 75.5,
+                "Academic_Reasoning": 48.8
+            },
+            {
+                "key": 5,
+                "model": "Gemini-3.1-Pro-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/2/19",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 59.7,
+                "Common_Reasoning": 75.8,
+                "Academic_Reasoning": 43.6
+            },
+            {
+                "key": 6,
+                "model": "Qwen3.6-Max-Preview",
+                "org": "Alibaba",
+                "num": "N/A",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 59.2,
+                "Common_Reasoning": 75.0,
+                "Academic_Reasoning": 43.3
+            },
+            {
+                "key": 7,
+                "model": "DeepSeek-V4-Flash",
+                "org": "DeepSeek",
+                "num": "284B",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 57.2,
+                "Common_Reasoning": 75.5,
+                "Academic_Reasoning": 39.0
+            },
+            {
+                "key": 8,
+                "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 59.5,
+                "Common_Reasoning": 78.1,
+                "Academic_Reasoning": 41.0
+            },
+            {
+                "key": 9,
+                "model": "GLM-5.1",
+                "org": "Zhipu AI",
+                "num": "744B",
+                "time": "2026/4/8",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 54.3,
+                "Common_Reasoning": 69.9,
+                "Academic_Reasoning": 38.7
+            },
+            {
+                "key": 10,
+                "model": "Claude Sonnet 4.6 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/2/17",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 60.6,
+                "Common_Reasoning": 75.5,
+                "Academic_Reasoning": 45.6
+            },
+            {
+                "key": 11,
+                "model": "Qwen3.5-397B-A17B",
+                "org": "Alibaba",
+                "num": "397B",
+                "time": "2026/2/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 54.5,
+                "Common_Reasoning": 72.5,
+                "Academic_Reasoning": 36.6
+            },
+            {
+                "key": 12,
+                "model": "Hy3-preview (high)",
+                "org": "Tencent",
+                "num": "295B",
+                "time": "2026/4/23",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 58.5,
+                "Common_Reasoning": 73.5,
+                "Academic_Reasoning": 43.6
+            },
+            {
+                "key": 13,
+                "model": "Ring-2.5-1T",
+                "org": "Ant Group",
+                "num": "1T",
+                "time": "2026/2/13",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 54.2,
+                "Common_Reasoning": 70.4,
+                "Academic_Reasoning": 38.1
+            },
+            {
+                "key": 14,
+                "model": "GPT-5.4-mini-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 55.9,
+                "Common_Reasoning": 70.2,
+                "Academic_Reasoning": 41.6
+            },
+            {
+                "key": 15,
+                "model": "MiniMax-M2.7",
+                "org": "MiniMax",
+                "num": "230B",
+                "time": "2026/3/18",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.4,
+                "Common_Reasoning": 69.6,
+                "Academic_Reasoning": 35.2
+            },
+            {
+                "key": 16,
+                "model": "Grok-4.20-0309",
+                "org": "xAI",
+                "num": "N/A",
+                "time": "2026/3/9",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 55.3,
+                "Common_Reasoning": 74.5,
+                "Academic_Reasoning": 36.0
+            },
+            {
+                "key": 17,
+                "model": "Step-3.5-Flash",
+                "org": "Step",
+                "num": "196B",
+                "time": "2026/2/2",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 55.6,
+                "Common_Reasoning": 72.5,
+                "Academic_Reasoning": 38.7
+            },
+            {
+                "key": 18,
+                "model": "gemma-4-31B-it",
+                "org": "Google",
+                "num": "31B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 54.6,
+                "Common_Reasoning": 71.2,
+                "Academic_Reasoning": 38.1
+            },
+            {
+                "key": 19,
+                "model": "Qwen3.6-27B",
+                "org": "Alibaba",
+                "num": "27B",
+                "time": "2026/4/22",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.7,
+                "Common_Reasoning": 69.4,
+                "Academic_Reasoning": 36.0
+            },
+            {
+                "key": 20,
+                "model": "Gemini-3.1-Flash-Lite-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/3/4",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.0,
+                "Common_Reasoning": 69.6,
+                "Academic_Reasoning": 34.3
+            },
+            {
+                "key": 21,
+                "model": "JT-MINI",
+                "org": "China Mobile",
+                "num": "N/A",
+                "time": "2026/3/31",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 34.1,
+                "Common_Reasoning": 57.4,
+                "Academic_Reasoning": 10.8
+            },
+            {
+                "key": 22,
+                "model": "gemma-4-E4B-it",
+                "org": "Google",
+                "num": "8B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 30.6,
+                "Common_Reasoning": 47.5,
+                "Academic_Reasoning": 13.7
+            }
+        ],
+        "MathTable": [
+            {
+                "key": 0,
+                "model": "GPT-5.4-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 72.1,
+                "Math_College": 74.3,
+                "Math_Competition": 69.9
+            },
+            {
+                "key": 1,
+                "model": "DeepSeek-V4-Pro",
+                "org": "DeepSeek",
+                "num": "1.6T",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 74.8,
+                "Math_College": 78.5,
+                "Math_Competition": 71.2
+            },
+            {
+                "key": 2,
+                "model": "Claude Opus 4.7 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/4/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 72.4,
+                "Math_College": 74.3,
+                "Math_Competition": 70.5
+            },
+            {
+                "key": 3,
+                "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 77.3,
+                "Math_College": 83.8,
+                "Math_Competition": 70.8
+            },
+            {
+                "key": 4,
+                "model": "Kimi-K2.6",
+                "org": "Moonshot",
+                "num": "1T",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 76.4,
+                "Math_College": 80.6,
+                "Math_Competition": 72.1
+            },
+            {
+                "key": 5,
+                "model": "Gemini-3.1-Pro-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/2/19",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 76.5,
+                "Math_College": 81.0,
+                "Math_Competition": 72.1
+            },
+            {
+                "key": 6,
+                "model": "Qwen3.6-Max-Preview",
+                "org": "Alibaba",
+                "num": "N/A",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 73.4,
+                "Math_College": 81.7,
+                "Math_Competition": 65.1
+            },
+            {
+                "key": 7,
+                "model": "DeepSeek-V4-Flash",
+                "org": "DeepSeek",
+                "num": "284B",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 69.2,
+                "Math_College": 71.5,
+                "Math_Competition": 67.0
+            },
+            {
+                "key": 8,
+                "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 72.4,
+                "Math_College": 77.1,
+                "Math_Competition": 67.6
+            },
+            {
+                "key": 9,
+                "model": "GLM-5.1",
+                "org": "Zhipu AI",
+                "num": "744B",
+                "time": "2026/4/8",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 67.9,
+                "Math_College": 76.8,
+                "Math_Competition": 59.0
+            },
+            {
+                "key": 10,
+                "model": "Claude Sonnet 4.6 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/2/17",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 72.4,
+                "Math_College": 77.1,
+                "Math_Competition": 67.6
+            },
+            {
+                "key": 11,
+                "model": "Qwen3.5-397B-A17B",
+                "org": "Alibaba",
+                "num": "397B",
+                "time": "2026/2/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 70.9,
+                "Math_College": 76.1,
+                "Math_Competition": 65.7
+            },
+            {
+                "key": 12,
+                "model": "Hy3-preview (high)",
+                "org": "Tencent",
+                "num": "295B",
+                "time": "2026/4/23",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 74.5,
+                "Math_College": 81.3,
+                "Math_Competition": 67.6
+            },
+            {
+                "key": 13,
+                "model": "Ring-2.5-1T",
+                "org": "Ant Group",
+                "num": "1T",
+                "time": "2026/2/13",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 66.5,
+                "Math_College": 75.0,
+                "Math_Competition": 58.0
+            },
+            {
+                "key": 14,
+                "model": "GPT-5.4-mini-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 66.1,
+                "Math_College": 72.2,
+                "Math_Competition": 59.9
+            },
+            {
+                "key": 15,
+                "model": "MiniMax-M2.7",
+                "org": "MiniMax",
+                "num": "230B",
+                "time": "2026/3/18",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 64.7,
+                "Math_College": 73.2,
+                "Math_Competition": 56.1
+            },
+            {
+                "key": 16,
+                "model": "Grok-4.20-0309",
+                "org": "xAI",
+                "num": "N/A",
+                "time": "2026/3/9",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 72.5,
+                "Math_College": 75.3,
+                "Math_Competition": 69.5
+            },
+            {
+                "key": 17,
+                "model": "Step-3.5-Flash",
+                "org": "Step",
+                "num": "196B",
+                "time": "2026/2/2",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 68.7,
+                "Math_College": 74.3,
+                "Math_Competition": 63.1
+            },
+            {
+                "key": 18,
+                "model": "gemma-4-31B-it",
+                "org": "Google",
+                "num": "31B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 66.5,
+                "Math_College": 75.0,
+                "Math_Competition": 58.0
+            },
+            {
+                "key": 19,
+                "model": "Qwen3.6-27B",
+                "org": "Alibaba",
+                "num": "27B",
+                "time": "2026/4/22",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 65.6,
+                "Math_College": 73.6,
+                "Math_Competition": 57.7
+            },
+            {
+                "key": 20,
+                "model": "Gemini-3.1-Flash-Lite-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/3/4",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 66.4,
+                "Math_College": 79.2,
+                "Math_Competition": 53.5
+            },
+            {
+                "key": 21,
+                "model": "JT-MINI",
+                "org": "China Mobile",
+                "num": "N/A",
+                "time": "2026/3/31",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 41.5,
+                "Math_College": 65.1,
+                "Math_Competition": 17.9
+            },
+            {
+                "key": 22,
+                "model": "gemma-4-E4B-it",
+                "org": "Google",
+                "num": "8B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 36.8,
+                "Math_College": 51.8,
+                "Math_Competition": 21.8
+            }
+        ],
+        "CodeTable": [
+            {
+                "key": 0,
+                "model": "GPT-5.4-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 63.4,
+                "Comprehensive_Coding_Ability": 63.4
+            },
+            {
+                "key": 1,
+                "model": "DeepSeek-V4-Pro",
+                "org": "DeepSeek",
+                "num": "1.6T",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 59.4,
+                "Comprehensive_Coding_Ability": 59.4
+            },
+            {
+                "key": 2,
+                "model": "Claude Opus 4.7 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/4/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 63.7,
+                "Comprehensive_Coding_Ability": 63.7
+            },
+            {
+                "key": 3,
+                "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 57.0,
+                "Comprehensive_Coding_Ability": 57.0
+            },
+            {
+                "key": 4,
+                "model": "Kimi-K2.6",
+                "org": "Moonshot",
+                "num": "1T",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 62.4,
+                "Comprehensive_Coding_Ability": 62.4
+            },
+            {
+                "key": 5,
+                "model": "Gemini-3.1-Pro-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/2/19",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 60.2,
+                "Comprehensive_Coding_Ability": 60.2
+            },
+            {
+                "key": 6,
+                "model": "Qwen3.6-Max-Preview",
+                "org": "Alibaba",
+                "num": "N/A",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 61.6,
+                "Comprehensive_Coding_Ability": 61.6
+            },
+            {
+                "key": 7,
+                "model": "DeepSeek-V4-Flash",
+                "org": "DeepSeek",
+                "num": "284B",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 56.4,
+                "Comprehensive_Coding_Ability": 56.4
+            },
+            {
+                "key": 8,
+                "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 54.6,
+                "Comprehensive_Coding_Ability": 54.6
+            },
+            {
+                "key": 9,
+                "model": "GLM-5.1",
+                "org": "Zhipu AI",
+                "num": "744B",
+                "time": "2026/4/8",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 55.7,
+                "Comprehensive_Coding_Ability": 55.7
+            },
+            {
+                "key": 10,
+                "model": "Claude Sonnet 4.6 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/2/17",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 58.1,
+                "Comprehensive_Coding_Ability": 58.1
+            },
+            {
+                "key": 11,
+                "model": "Qwen3.5-397B-A17B",
+                "org": "Alibaba",
+                "num": "397B",
+                "time": "2026/2/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 57.4,
+                "Comprehensive_Coding_Ability": 57.4
+            },
+            {
+                "key": 12,
+                "model": "Hy3-preview (high)",
+                "org": "Tencent",
+                "num": "295B",
+                "time": "2026/4/23",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 51.9,
+                "Comprehensive_Coding_Ability": 51.9
+            },
+            {
+                "key": 13,
+                "model": "Ring-2.5-1T",
+                "org": "Ant Group",
+                "num": "1T",
+                "time": "2026/2/13",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 53.6,
+                "Comprehensive_Coding_Ability": 53.6
+            },
+            {
+                "key": 14,
+                "model": "GPT-5.4-mini-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.9,
+                "Comprehensive_Coding_Ability": 52.9
+            },
+            {
+                "key": 15,
+                "model": "MiniMax-M2.7",
+                "org": "MiniMax",
+                "num": "230B",
+                "time": "2026/3/18",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 56.2,
+                "Comprehensive_Coding_Ability": 56.2
+            },
+            {
+                "key": 16,
+                "model": "Grok-4.20-0309",
+                "org": "xAI",
+                "num": "N/A",
+                "time": "2026/3/9",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 53.3,
+                "Comprehensive_Coding_Ability": 53.3
+            },
+            {
+                "key": 17,
+                "model": "Step-3.5-Flash",
+                "org": "Step",
+                "num": "196B",
+                "time": "2026/2/2",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 54.9,
+                "Comprehensive_Coding_Ability": 54.9
+            },
+            {
+                "key": 18,
+                "model": "gemma-4-31B-it",
+                "org": "Google",
+                "num": "31B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 56.8,
+                "Comprehensive_Coding_Ability": 56.8
+            },
+            {
+                "key": 19,
+                "model": "Qwen3.6-27B",
+                "org": "Alibaba",
+                "num": "27B",
+                "time": "2026/4/22",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 50.8,
+                "Comprehensive_Coding_Ability": 50.8
+            },
+            {
+                "key": 20,
+                "model": "Gemini-3.1-Flash-Lite-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/3/4",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.8,
+                "Comprehensive_Coding_Ability": 52.8
+            },
+            {
+                "key": 21,
+                "model": "JT-MINI",
+                "org": "China Mobile",
+                "num": "N/A",
+                "time": "2026/3/31",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 38.5,
+                "Comprehensive_Coding_Ability": 38.5
+            },
+            {
+                "key": 22,
+                "model": "gemma-4-E4B-it",
+                "org": "Google",
+                "num": "8B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 38.9,
+                "Comprehensive_Coding_Ability": 38.9
+            }
+        ],
+        "AgentTable": [
+            {
+                "key": 0,
+                "model": "GPT-5.4-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 52.8,
+                "Comprehensive_Tool_Using": 52.8
+            },
+            {
+                "key": 1,
+                "model": "DeepSeek-V4-Pro",
+                "org": "DeepSeek",
+                "num": "1.6T",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 55.3,
+                "Comprehensive_Tool_Using": 55.3
+            },
+            {
+                "key": 2,
+                "model": "Claude Opus 4.7 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/4/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 43.3,
+                "Comprehensive_Tool_Using": 43.3
+            },
+            {
+                "key": 3,
+                "model": "Doubao-Seed-2-0-Pro-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 44.2,
+                "Comprehensive_Tool_Using": 44.2
+            },
+            {
+                "key": 4,
+                "model": "Kimi-K2.6",
+                "org": "Moonshot",
+                "num": "1T",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 39.3,
+                "Comprehensive_Tool_Using": 39.3
+            },
+            {
+                "key": 5,
+                "model": "Gemini-3.1-Pro-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/2/19",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 41.0,
+                "Comprehensive_Tool_Using": 41.0
+            },
+            {
+                "key": 6,
+                "model": "Qwen3.6-Max-Preview",
+                "org": "Alibaba",
+                "num": "N/A",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 30.5,
+                "Comprehensive_Tool_Using": 30.5
+            },
+            {
+                "key": 7,
+                "model": "DeepSeek-V4-Flash",
+                "org": "DeepSeek",
+                "num": "284B",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 46.7,
+                "Comprehensive_Tool_Using": 46.7
+            },
+            {
+                "key": 8,
+                "model": "Doubao-Seed-2-0-Lite-260215 (high)",
+                "org": "ByteDance",
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 42.4,
+                "Comprehensive_Tool_Using": 42.4
+            },
+            {
+                "key": 9,
+                "model": "GLM-5.1",
+                "org": "Zhipu AI",
+                "num": "744B",
+                "time": "2026/4/8",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 39.9,
+                "Comprehensive_Tool_Using": 39.9
+            },
+            {
+                "key": 10,
+                "model": "Claude Sonnet 4.6 (high)",
+                "org": "Anthropic",
+                "num": "N/A",
+                "time": "2026/2/17",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 24.7,
+                "Comprehensive_Tool_Using": 24.7
+            },
+            {
+                "key": 11,
+                "model": "Qwen3.5-397B-A17B",
+                "org": "Alibaba",
+                "num": "397B",
+                "time": "2026/2/16",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 28.7,
+                "Comprehensive_Tool_Using": 28.7
+            },
+            {
+                "key": 12,
+                "model": "Hy3-preview (high)",
+                "org": "Tencent",
+                "num": "295B",
+                "time": "2026/4/23",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 28.7,
+                "Comprehensive_Tool_Using": 28.7
+            },
+            {
+                "key": 13,
+                "model": "Ring-2.5-1T",
+                "org": "Ant Group",
+                "num": "1T",
+                "time": "2026/2/13",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 25.0,
+                "Comprehensive_Tool_Using": 25.0
+            },
+            {
+                "key": 14,
+                "model": "GPT-5.4-mini-2026-03-05 (high)",
+                "org": "OpenAI",
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 22.0,
+                "Comprehensive_Tool_Using": 22.0
+            },
+            {
+                "key": 15,
+                "model": "MiniMax-M2.7",
+                "org": "MiniMax",
+                "num": "230B",
+                "time": "2026/3/18",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 23.7,
+                "Comprehensive_Tool_Using": 23.7
+            },
+            {
+                "key": 16,
+                "model": "Grok-4.20-0309",
+                "org": "xAI",
+                "num": "N/A",
+                "time": "2026/3/9",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 13.3,
+                "Comprehensive_Tool_Using": 13.3
+            },
+            {
+                "key": 17,
+                "model": "Step-3.5-Flash",
+                "org": "Step",
+                "num": "196B",
+                "time": "2026/2/2",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 18.0,
+                "Comprehensive_Tool_Using": 18.0
+            },
+            {
+                "key": 18,
+                "model": "gemma-4-31B-it",
+                "org": "Google",
+                "num": "31B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 14.0,
+                "Comprehensive_Tool_Using": 14.0
+            },
+            {
+                "key": 19,
+                "model": "Qwen3.6-27B",
+                "org": "Alibaba",
+                "num": "27B",
+                "time": "2026/4/22",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 23.3,
+                "Comprehensive_Tool_Using": 23.3
+            },
+            {
+                "key": 20,
+                "model": "Gemini-3.1-Flash-Lite-Preview",
+                "org": "Google",
+                "num": "N/A",
+                "time": "2026/3/4",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 11.0,
+                "Comprehensive_Tool_Using": 11.0
+            },
+            {
+                "key": 21,
+                "model": "JT-MINI",
+                "org": "China Mobile",
+                "num": "N/A",
+                "time": "2026/3/31",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 13.3,
+                "Comprehensive_Tool_Using": 13.3
+            },
+            {
+                "key": 22,
+                "model": "gemma-4-E4B-it",
+                "org": "Google",
+                "num": "8B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "chat_or_base": "Chat",
+                "Average": 1.3,
+                "Comprehensive_Tool_Using": 1.3
+            }
+        ],
+        "models": {
+            "GPT-5.4-2026-03-05 (high)": {
+                "desc": {
+                    "zh-CN": "OpenAI官方最新推出的备受外界期待的、性能更强的新一代人工智能模型GPT-5系列，版本号为gpt-5.4。",
+                    "en-US": "The latest, highly anticipated and powerful next-generation LLM named GPT-5 that officially launched by OpenAI, version gpt-5.4."
+                },
+                "org": "OpenAI",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "OpenAI",
+                    "https://openai.com/zh-Hans-CN/index/introducing-gpt-5-4/"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 1,
+                "chat_or_base": "Chat"
+            },
+            "DeepSeek-V4-Pro": {
+                "desc": {
+                    "zh-CN": "DeepSeek-V4-Pro 是 DeepSeek 推出的高性能旗舰大模型，在推理、编程、长文本处理与综合任务能力上进一步增强。",
+                    "en-US": "DeepSeek-V4-Pro is DeepSeek’s flagship high-performance model, further enhancing reasoning, coding, long-text processing, and overall task capability."
+                },
+                "org": "DeepSeek",
+                "weight": [
+                    "deepseek-ai/DeepSeek-V4-Pro",
+                    "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro"
+                ],
+                "website-github": [
+                    "DeepSeek",
+                    "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "1.6T",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 2,
+                "chat_or_base": "Chat"
+            },
+            "Claude Opus 4.7 (high)": {
+                "desc": {
+                    "zh-CN": "Claude Opus 4.7 是 Anthropic 推出的高端旗舰模型，重点提升了深度推理、复杂写作、代码生成与高可靠性任务处理能力。",
+                    "en-US": "Claude Opus 4.7 is Anthropic’s flagship high-end model, with a focus on stronger deep reasoning, complex writing, code generation, and reliable task handling."
+                },
+                "org": "Anthropic",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "Anthropic",
+                    "https://www.anthropic.com/news/claude-opus-4-7"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/4/16",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 3,
+                "chat_or_base": "Chat"
+            },
+            "Doubao-Seed-2-0-Pro-260215 (high)": {
+                "desc": {
+                    "zh-CN": "Doubao-Seed-2-0-Pro-260215 是字节跳动最新推出的高性能通用闭源模型。",
+                    "en-US": "Doubao-Seed-2-0-Pro-260215 is ByteDance’s latest high-performance proprietary general-purpose model."
+                },
+                "org": "ByteDance",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "ByteDance",
+                    "https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-seed-2-0-pro"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 4,
+                "chat_or_base": "Chat"
+            },
+            "Kimi-K2.6": {
+                "desc": {
+                    "zh-CN": "Moonshot 最新发布的的1T参数大模型，提升了长程编码能力与Agent自主化执行能力，具备代码、长程任务执行和Agent集群能力。",
+                    "en-US": "Kimi-K2.6 is Moonshot’s latest 1T-parameter large model, featuring improved long-horizon coding and autonomous agent execution capabilities, with strengths in coding, long-horizon task execution, and agent collaboration."
+                },
+                "org": "Moonshot",
+                "weight": [
+                    "moonshotai/Kimi-K2.6",
+                    "https://huggingface.co/moonshotai/Kimi-K2.6"
+                ],
+                "website-github": [
+                    "Moonshot",
+                    "https://www.kimi.com/blog/kimi-k2-6"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "1T",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 5,
+                "chat_or_base": "Chat"
+            },
+            "Gemini-3.1-Pro-Preview": {
+                "desc": {
+                    "zh-CN": "Gemini-3.1-Pro-Preview 是 Google 推出的 Gemini 3.1 Pro 预览版本，面向高难度推理、多模态理解与复杂生产级任务。",
+                    "en-US": "Gemini-3.1-Pro-Preview is Google’s preview release of Gemini 3.1 Pro, designed for challenging reasoning, multimodal understanding, and complex production-grade tasks."
+                },
+                "org": "Google",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "Google",
+                    "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-pro/"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/2/19",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 6,
+                "chat_or_base": "Chat"
+            },
+            "Qwen3.6-Max-Preview": {
+                "desc": {
+                    "zh-CN": "Qwen3.6-Max-Preview 是 Qwen 推出的闭源旗舰模型，聚焦更强推理能力、复杂任务处理与高质量对话表现。",
+                    "en-US": "Qwen3.6-Max-Preview is Qwen’s flagship proprietary model, focusing on stronger reasoning, complex task handling, and high-quality conversational performance. "
+                },
+                "org": "Alibaba",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "Qwen",
+                    "https://bailian.console.aliyun.com/cn-beijing?spm=5176.29597918.J_tAwMEW-mKC1CPxlfy227s.1.5d7c133cCYWHeF&tab=model#/model-market/detail/qwen3.6-max-preview?serviceSite=asia-pacific-china"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/4/20",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 7,
+                "chat_or_base": "Chat"
+            },
+            "DeepSeek-V4-Flash": {
+                "desc": {
+                    "zh-CN": "DeepSeek-V4-Flash 是 DeepSeek 推出的高效率轻量化模型，面向低延迟交互、高并发调用与日常智能应用场景。",
+                    "en-US": "DeepSeek-V4-Flash is DeepSeek’s efficiency-oriented lightweight model for low-latency interaction, high-concurrency usage, and everyday intelligent applications."
+                },
+                "org": "DeepSeek",
+                "weight": [
+                    "deepseek-ai/DeepSeek-V4-Flash",
+                    "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash"
+                ],
+                "website-github": [
+                    "DeepSeek",
+                    "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "284B",
+                "time": "2026/4/24",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 8,
+                "chat_or_base": "Chat"
+            },
+            "Doubao-Seed-2-0-Lite-260215 (high)": {
+                "desc": {
+                    "zh-CN": "Doubao-Seed-2-0-Lite-260215 是字节跳动最新推出的轻量化通用闭源模型。",
+                    "en-US": "Doubao-Seed-2-0-Lite-260215 is ByteDance’s latest lightweight proprietary general-purpose model."
+                },
+                "org": "ByteDance",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "ByteDance",
+                    "https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-seed-2-0-lite"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/2/15",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 9,
+                "chat_or_base": "Chat"
+            },
+            "GLM-5.1": {
+                "desc": {
+                    "zh-CN": "GLM-5.1 是智谱推出的新一代通用大模型，该模型能够在长达8小时的任务中独立工作，完成复杂的工程项目，在代码能力和长程任务执行上相比前代模型有所提升。",
+                    "en-US": "GLM-5.1 is Zhipu AI’s next-generation general-purpose large model. It can work autonomously on tasks lasting up to eight hours and complete complex engineering projects, with improved coding ability and long-horizon task execution compared with its predecessor."
+                },
+                "org": "Zhipu AI",
+                "weight": [
+                    "zai-org/GLM-5.1",
+                    "https://huggingface.co/zai-org/GLM-5.1"
+                ],
+                "website-github": [
+                    "Zhipu AI",
+                    "https://docs.z.ai/guides/llm/glm-5.1"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "744B",
+                "time": "2026/4/8",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 10,
+                "chat_or_base": "Chat"
+            },
+            "Claude Sonnet 4.6 (high)": {
+                "desc": {
+                    "zh-CN": "Claude Sonnet 4.6 是 Anthropic 推出的均衡型主力模型，在性能、速度与成本之间提供面向通用业务场景的高性价比选择。",
+                    "en-US": "Claude Sonnet 4.6 is Anthropic’s balanced mainstream model, offering a cost-effective trade-off among capability, speed, and cost for general business use cases."
+                },
+                "org": "Anthropic",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "Anthropic",
+                    "https://www.anthropic.com/news/claude-sonnet-4-6"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/2/17",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 11,
+                "chat_or_base": "Chat"
+            },
+            "Qwen3.5-397B-A17B": {
+                "desc": {
+                    "zh-CN": "Qwen3.5 是阿里近期推出的重要基础模型，在多模态融合、混合高效架构、规模化强化学习、多语言覆盖及训练基建上实现全面升级，性能与实用性大幅提升。",
+                    "en-US": "Qwen3.5 is a significant foundation model recently launched by Alibaba, featuring comprehensive upgrades in multimodal fusion, efficient hybrid architecture, scalable reinforcement learning, multilingual coverage and training infrastructure, with greatly improved performance and practicality."
+                },
+                "org": "Alibaba",
+                "weight": [
+                    "Qwen/Qwen3.5-397B-A17B",
+                    "https://huggingface.co/Qwen/Qwen3.5-397B-A17B"
+                ],
+                "website-github": [
+                    "Qwen",
+                    "https://qwen.ai/blog?id=qwen3.5"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "397B",
+                "time": "2026/2/16",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 12,
+                "chat_or_base": "Chat"
+            },
+            "Hy3-preview (high)": {
+                "desc": {
+                    "zh-CN": "Hy3 preview是腾讯混元团队重组后发布并开源的新模型，在复杂推理、指令遵循、上下文学习、代码、智能体等能力及推理性能上有所提升。",
+                    "en-US": "Hy3-preview is a newly released and open-sourced model launched after the reorganization of Tencent Hunyuan’s team, with improvements in complex reasoning, instruction following, in-context learning, coding, agent capabilities, and inference efficiency."
+                },
+                "org": "Tencent",
+                "weight": [
+                    "tencent/Hy3-preview",
+                    "https://huggingface.co/tencent/Hy3-preview"
+                ],
+                "website-github": [
+                    "Tencent",
+                    "https://hunyuan.tencent.com/research/hy3"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "295B",
+                "time": "2026/4/23",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 13,
+                "chat_or_base": "Chat"
+            },
+            "Ring-2.5-1T": {
+                "desc": {
+                    "zh-CN": "Ring-2.5-1T 是 Ring-1T 的升级版，由 inclusionAI打造，是全球首个基于混合线性注意力架构的万亿参数思考模型。",
+                    "en-US": "Ring-2.5-1T is an upgraded version of Ring-1T, developed by inclusionAI, and is the world’s first trillion-parameter reasoning model based on a hybrid linear attention architecture."
+                },
+                "org": "Ant Group",
+                "weight": [
+                    "inclusionAI/Ring-2.5-1T",
+                    "https://huggingface.co/inclusionAI/Ring-2.5-1T"
+                ],
+                "website-github": [
+                    "Ant Group",
+                    "https://huggingface.co/inclusionAI/Ring-2.5-1T"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "1T",
+                "time": "2026/2/13",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 14,
+                "chat_or_base": "Chat"
+            },
+            "GPT-5.4-mini-2026-03-05 (high)": {
+                "desc": {
+                    "zh-CN": "OpenAI官方最新推出的备受外界期待的、性能更强的新一代人工智能模型GPT-5系列，版本号为gpt-5.4。",
+                    "en-US": "The latest, highly anticipated and powerful next-generation LLM named GPT-5 that officially launched by OpenAI, version gpt-5.4."
+                },
+                "org": "OpenAI",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "OpenAI",
+                    "https://openai.com/zh-Hans-CN/index/introducing-gpt-5-4/"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/3/5",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 15,
+                "chat_or_base": "Chat"
+            },
+            "MiniMax-M2.7": {
+                "desc": {
+                    "zh-CN": "MiniMax 推出的新一代通用大模型，通过构建Agent Harness体系，深度参与自身训练与优化流程，在部分研发场景中可承担30%—50%的工作量，并在内部评测集上实现约30%的效果提升。",
+                    "en-US": "MiniMax-M2.7 is MiniMax’s new-generation general-purpose large model. By building an Agent Harness system, it deeply participates in its own training and optimization process, can take on 30%–50% of the workload in some R&D scenarios, and achieves about a 30% improvement on internal evaluation benchmarks."
+                },
+                "org": "MiniMax",
+                "weight": [
+                    "MiniMaxAI/MiniMax-M2.7",
+                    "https://huggingface.co/MiniMaxAI/MiniMax-M2.7"
+                ],
+                "website-github": [
+                    "MiniMax",
+                    "https://www.minimaxi.com/news/minimax-m27-zh"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "230B",
+                "time": "2026/3/18",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 16,
+                "chat_or_base": "Chat"
+            },
+            "Grok-4.20-0309": {
+                "desc": {
+                    "zh-CN": "Grok-4.20-0309 是 xAI 推出的新一代推理模型，强调实时信息能力、复杂问题分析以及更强的工具化任务表现。",
+                    "en-US": "Grok-4.20-0309 is xAI’s next-generation reasoning model, emphasizing real-time information capability, complex problem analysis, and stronger tool-oriented task performance."
+                },
+                "org": "xAI",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "xAI",
+                    "https://docs.x.ai/developers/models/grok-4.20"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/3/9",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 17,
+                "chat_or_base": "Chat"
+            },
+            "Step-3.5-Flash": {
+                "desc": {
+                    "zh-CN": "Step 3.5 Flash是阶跃星辰于最新发布的开源模型，在Agent场景和数学任务上表现良好，能够处理复杂、长链条任务。",
+                    "en-US": "Step 3.5 Flash is StepFun’s newly released open-source model, performing well in agent scenarios and mathematical tasks, and capable of handling complex, long-chain tasks."
+                },
+                "org": "Step",
+                "weight": [
+                    "stepfun-ai/Step-3.5-Flash",
+                    "https://huggingface.co/stepfun-ai/Step-3.5-Flash"
+                ],
+                "website-github": [
+                    "Step",
+                    "https://static.stepfun.com/blog/step-3.5-flash/"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "196B",
+                "time": "2026/2/2",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 18,
+                "chat_or_base": "Chat"
+            },
+            "gemma-4-31B-it": {
+                "desc": {
+                    "zh-CN": "gemma-4-31B-it 是 Google 推出的 31B 参数开源模型，面向高质量对话、推理与开发者自部署场景。",
+                    "en-US": "gemma-4-31B-it is Google’s 31B-parameter open-source model for high-quality conversation, reasoning, and self-deployment by developers."
+                },
+                "org": "Google",
+                "weight": [
+                    "google/gemma-4-31B-it",
+                    "https://huggingface.co/google/gemma-4-31B-it"
+                ],
+                "website-github": [
+                    "Google",
+                    "https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "31B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 19,
+                "chat_or_base": "Chat"
+            },
+            "Qwen3.6-27B": {
+                "desc": {
+                    "zh-CN": "Qwen3.6 是 Qwen 系列的新一代开源模型，3.5系列的升级版。",
+                    "en-US": "Qwen3.6 is the next-generation open-source model in the Qwen family and an upgraded version of the Qwen3.5 series. "
+                },
+                "org": "Alibaba",
+                "weight": [
+                    "Qwen/Qwen3.6-35B-A3B",
+                    "https://huggingface.co/Qwen/Qwen3.6-35B-A3B"
+                ],
+                "website-github": [
+                    "Qwen",
+                    "https://qwen.ai/blog?id=qwen3.6-35b-a3b"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "27B",
+                "time": "2026/4/22",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 20,
+                "chat_or_base": "Chat"
+            },
+            "Gemini-3.1-Flash-Lite-Preview": {
+                "desc": {
+                    "zh-CN": "Gemini-3.1-Flash-Lite-Preview 是 Google 推出的轻量级预览模型，强调低成本、低时延以及高吞吐场景下的实用能力。",
+                    "en-US": "Gemini-3.1-Flash-Lite-Preview is Google’s lightweight preview model focused on practical capability under low cost, low latency, and high-throughput settings."
+                },
+                "org": "Google",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "Google",
+                    "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-flash-lite/"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/3/4",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 21,
+                "chat_or_base": "Chat"
+            },
+            "JT-MINI": {
+                "desc": {
+                    "zh-CN": "中国移动最新推出的闭源模型。",
+                    "en-US": "China Mobile’s latest closed-source model."
+                },
+                "org": "China Mobile",
+                "weight": [
+                    "",
+                    ""
+                ],
+                "website-github": [
+                    "China Mobile",
+                    "https://jiutian.10086.cn/portal/#/home"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "N/A",
+                "time": "2026/3/31",
+                "update_time": "2026/5/13",
+                "release": "API",
+                "rank": 22,
+                "chat_or_base": "Chat"
+            },
+            "gemma-4-E4B-it": {
+                "desc": {
+                    "zh-CN": "gemma-4-E4B-it 是 Google 推出的轻量级端侧开源模型。",
+                    "en-US": "gemma-4-E4B-it is a lightweight open-source on-device model released by Google."
+                },
+                "org": "Google",
+                "weight": [
+                    "google/gemma-4-E4B-it",
+                    "https://huggingface.co/google/gemma-4-E4B-it"
+                ],
+                "website-github": [
+                    "Google",
+                    "https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/"
+                ],
+                "article": [
+                    "",
+                    ""
+                ],
+                "num": "8B",
+                "time": "2026/4/3",
+                "update_time": "2026/5/13",
+                "release": "OpenSource",
+                "rank": 23,
+                "chat_or_base": "Chat"
+            }
+        },
+        "update_time": "2026/5/13"
+    }
+}

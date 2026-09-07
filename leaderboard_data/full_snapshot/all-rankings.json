@@ -1,0 +1,368 @@
+{
+  "generated_at": "2026-09-04T08:39:06+00:00",
+  "source": "https://rank.opencompass.org.cn/leaderboard/",
+  "collections": [
+    {
+      "category": "llm",
+      "months": {
+        "26-07": {
+          "month": "26-07",
+          "update_time": "2026-08-24",
+          "data_file": "assets/llm-rank/llm-data-v2.26-07.20260824.json",
+          "data_bytes": 88585,
+          "column_file": "assets/llm-rank/llm-column-v2.26-07.20260824.json",
+          "column_bytes": 12979
+        },
+        "26-04": {
+          "month": "26-04",
+          "update_time": "2026-05-13",
+          "data_file": "assets/llm-rank/llm-data-v2.26-04.20260513.json",
+          "data_bytes": 181693,
+          "column_file": "assets/llm-rank/llm-column-v2.26-04.20260513.json",
+          "column_bytes": 18552
+        },
+        "26-01": {
+          "month": "26-01",
+          "update_time": "2026-02-11",
+          "data_file": "assets/llm-rank/llm-data-v2.26-01.20260211.json",
+          "data_bytes": 204629,
+          "column_file": "assets/llm-rank/llm-column-v2.26-01.20260211.json",
+          "column_bytes": 19251
+        },
+        "25-10": {
+          "month": "25-10",
+          "update_time": "2025-11-10",
+          "data_file": "assets/llm-rank/llm-data-v2.25-10.20251110.json",
+          "data_bytes": 293915,
+          "column_file": "assets/llm-rank/llm-column-v2.25-10.20251110.json",
+          "column_bytes": 36536
+        },
+        "25-07": {
+          "month": "25-07",
+          "update_time": "2025-08-12",
+          "data_file": "assets/llm-rank/llm-data-v2.25-07.20250812.json",
+          "data_bytes": 307822,
+          "column_file": "assets/llm-rank/llm-column-v2.25-07.20250812.json",
+          "column_bytes": 37400
+        },
+        "25-04": {
+          "month": "25-04",
+          "update_time": "2025-05-13",
+          "data_file": "assets/llm-rank/llm-data-v2.25-04.20250513.json",
+          "data_bytes": 315346,
+          "column_file": "assets/llm-rank/llm-column-v2.25-04.20250513.json",
+          "column_bytes": 37461
+        },
+        "25-01": {
+          "month": "25-01",
+          "update_time": "2025-02-20",
+          "data_file": "assets/llm-rank/llm-data-v2.25-01.20250220.json",
+          "data_bytes": 469618,
+          "column_file": "assets/llm-rank/llm-column-v2.25-01.20250220.json",
+          "column_bytes": 37489
+        },
+        "24-11": {
+          "month": "24-11",
+          "update_time": "2024-12-02",
+          "data_file": "assets/llm-rank/llm-data-v2.24-11.20241202.json",
+          "data_bytes": 424857,
+          "column_file": "assets/llm-rank/llm-column-v2.24-11.20241202.json",
+          "column_bytes": 37631
+        },
+        "24-09": {
+          "month": "24-09",
+          "update_time": "2024-10-09",
+          "data_file": "assets/llm-rank/llm-data-v2.24-09.20241009.json",
+          "data_bytes": 372234,
+          "column_file": "assets/llm-rank/llm-column-v2.24-09.20241009.json",
+          "column_bytes": 41419
+        },
+        "24-07": {
+          "month": "24-07",
+          "update_time": "2024-08-05",
+          "data_file": "assets/llm-rank/llm-data-v2.24-07.20240805.json",
+          "data_bytes": 435209,
+          "column_file": "assets/llm-rank/llm-column-v2.24-07.20240805.json",
+          "column_bytes": 41419
+        },
+        "24-05": {
+          "month": "24-05",
+          "update_time": "2024-06-12",
+          "data_file": "assets/llm-rank/llm-data-v2.24-05.20240612.json",
+          "data_bytes": 259931,
+          "column_file": "assets/llm-rank/llm-column-v2.24-05.20240612.json",
+          "column_bytes": 49068
+        },
+        "24-04": {
+          "month": "24-04",
+          "update_time": "2024-05-09",
+          "data_file": "assets/llm-rank/llm-data-v2.24-04.20240509.json",
+          "data_bytes": 312515,
+          "column_file": "assets/llm-rank/llm-column-v2.24-04.20240509.json",
+          "column_bytes": 41682
+        },
+        "24-03": {
+          "month": "24-03",
+          "update_time": "2024-04-03",
+          "data_file": "assets/llm-rank/llm-data-v2.24-03.20240403.json",
+          "data_bytes": 245989,
+          "column_file": "assets/llm-rank/llm-column-v2.24-03.20240403.json",
+          "column_bytes": 41682
+        },
+        "24-02": {
+          "month": "24-02",
+          "update_time": "2024-02-20",
+          "data_file": "assets/llm-rank/llm-data-v2.24-02.20240220.json",
+          "data_bytes": 216413,
+          "column_file": "assets/llm-rank/llm-column-v2.24-02.20240220.json",
+          "column_bytes": 41682
+        }
+      }
+    },
+    {
+      "category": "multimodal",
+      "months": {
+        "REALTIME": {
+          "month": "REALTIME",
+          "update_time": "2026-09-03",
+          "data_file": "assets/mm-rank/mmlb-data.REALTIME.20260903.json",
+          "data_bytes": 78856,
+          "column_file": "assets/mm-rank/mmlb-table.REALTIME.20260903.json",
+          "column_bytes": 5119
+        },
+        "26-05": {
+          "month": "26-05",
+          "update_time": "2026-05-26",
+          "data_file": "assets/mm-rank/mmlb-data.26-05.20260526.json",
+          "data_bytes": 78086,
+          "column_file": "assets/mm-rank/mmlb-table.26-05.20260526.json",
+          "column_bytes": 5119
+        },
+        "26-04": {
+          "month": "26-04",
+          "update_time": "2026-04-30",
+          "data_file": "assets/mm-rank/mmlb-data.26-04.20260430.json",
+          "data_bytes": 77333,
+          "column_file": "assets/mm-rank/mmlb-table.26-04.20260430.json",
+          "column_bytes": 5121
+        },
+        "26-03": {
+          "month": "26-03",
+          "update_time": "2026-03-31",
+          "data_file": "assets/mm-rank/mmlb-data.26-03.20260331.json",
+          "data_bytes": 77333,
+          "column_file": "assets/mm-rank/mmlb-table.26-03.20260331.json",
+          "column_bytes": 5121
+        },
+        "26-02": {
+          "month": "26-02",
+          "update_time": "2026-02-01",
+          "data_file": "assets/mm-rank/mmlb-data.26-02.20260201.json",
+          "data_bytes": 226469,
+          "column_file": "assets/mm-rank/mmlb-table.26-02.20260201.json",
+          "column_bytes": 4996
+        },
+        "26-01": {
+          "month": "26-01",
+          "update_time": "2026-01-13",
+          "data_file": "assets/mm-rank/mmlb-data.26-01.20260113.json",
+          "data_bytes": 226469,
+          "column_file": "assets/mm-rank/mmlb-table.26-01.20260113.json",
+          "column_bytes": 4996
+        },
+        "25-12": {
+          "month": "25-12",
+          "update_time": "2025-12-31",
+          "data_file": "assets/mm-rank/mmlb-data.25-12.20251231.json",
+          "data_bytes": 226474,
+          "column_file": "assets/mm-rank/mmlb-table.25-12.20251231.json",
+          "column_bytes": 4996
+        },
+        "25-11": {
+          "month": "25-11",
+          "update_time": "2025-11-13",
+          "data_file": "assets/mm-rank/mmlb-data.25-11.20251113.json",
+          "data_bytes": 223477,
+          "column_file": "assets/mm-rank/mmlb-table.25-11.20251113.json",
+          "column_bytes": 4996
+        },
+        "25-10": {
+          "month": "25-10",
+          "update_time": "2025-10-26",
+          "data_file": "assets/mm-rank/mmlb-data.25-10.20251026.json",
+          "data_bytes": 219657,
+          "column_file": "assets/mm-rank/mmlb-table.25-10.20251026.json",
+          "column_bytes": 4996
+        },
+        "25-09": {
+          "month": "25-09",
+          "update_time": "2025-09-28",
+          "data_file": "assets/mm-rank/mmlb-data.25-09.20250928.json",
+          "data_bytes": 218893,
+          "column_file": "assets/mm-rank/mmlb-table.25-09.20250928.json",
+          "column_bytes": 4996
+        },
+        "25-08": {
+          "month": "25-08",
+          "update_time": "2025-08-14",
+          "data_file": "assets/mm-rank/mmlb-data.25-08.20250814.json",
+          "data_bytes": 217301,
+          "column_file": "assets/mm-rank/mmlb-table.25-08.20250814.json",
+          "column_bytes": 4996
+        },
+        "25-07": {
+          "month": "25-07",
+          "update_time": "2025-07-20",
+          "data_file": "assets/mm-rank/mmlb-data.25-07.20250720.json",
+          "data_bytes": 211123,
+          "column_file": "assets/mm-rank/mmlb-table.25-07.20250720.json",
+          "column_bytes": 4996
+        },
+        "25-06": {
+          "month": "25-06",
+          "update_time": "2025-06-20",
+          "data_file": "assets/mm-rank/mmlb-data.25-06.20250620.json",
+          "data_bytes": 207171,
+          "column_file": "assets/mm-rank/mmlb-table.25-06.20250620.json",
+          "column_bytes": 4996
+        },
+        "25-05": {
+          "month": "25-05",
+          "update_time": "2025-05-30",
+          "data_file": "assets/mm-rank/mmlb-data.25-05.20250530.json",
+          "data_bytes": 203150,
+          "column_file": "assets/mm-rank/mmlb-table.25-05.20250530.json",
+          "column_bytes": 4996
+        },
+        "25-04": {
+          "month": "25-04",
+          "update_time": "2025-04-24",
+          "data_file": "assets/mm-rank/mmlb-data.25-04.20250424.json",
+          "data_bytes": 197664,
+          "column_file": "assets/mm-rank/mmlb-table.25-04.20250424.json",
+          "column_bytes": 4996
+        },
+        "25-03": {
+          "month": "25-03",
+          "update_time": "2025-03-26",
+          "data_file": "assets/mm-rank/mmlb-data.25-03.20250326.json",
+          "data_bytes": 183413,
+          "column_file": "assets/mm-rank/mmlb-table.25-03.20250326.json",
+          "column_bytes": 4996
+        },
+        "25-02": {
+          "month": "25-02",
+          "update_time": "2025-02-28",
+          "data_file": "assets/mm-rank/mmlb-data.25-02.20250228.json",
+          "data_bytes": 174981,
+          "column_file": "assets/mm-rank/mmlb-table.25-02.20250228.json",
+          "column_bytes": 4996
+        },
+        "25-01": {
+          "month": "25-01",
+          "update_time": "2025-01-27",
+          "data_file": "assets/mm-rank/mmlb-data.25-01.20250127.json",
+          "data_bytes": 165060,
+          "column_file": "assets/mm-rank/mmlb-table.25-01.20250127.json",
+          "column_bytes": 4996
+        },
+        "24-12": {
+          "month": "24-12",
+          "update_time": "2024-12-31",
+          "data_file": "assets/mm-rank/mmlb-data.24-12.20241231.json",
+          "data_bytes": 152695,
+          "column_file": "assets/mm-rank/mmlb-table.24-12.20241231.json",
+          "column_bytes": 4996
+        },
+        "24-11": {
+          "month": "24-11",
+          "update_time": "2024-11-29",
+          "data_file": "assets/mm-rank/mmlb-data.24-11.20241129.json",
+          "data_bytes": 129784,
+          "column_file": "assets/mm-rank/mmlb-table.24-11.20241129.json",
+          "column_bytes": 4996
+        },
+        "24-10": {
+          "month": "24-10",
+          "update_time": "2024-10-31",
+          "data_file": "assets/mm-rank/mmlb-data.24-10.20241031.json",
+          "data_bytes": 121738,
+          "column_file": "assets/mm-rank/mmlb-table.24-10.20241031.json",
+          "column_bytes": 4996
+        },
+        "24-09": {
+          "month": "24-09",
+          "update_time": "2024-09-30",
+          "data_file": "assets/mm-rank/mmlb-data.24-09.20240930.json",
+          "data_bytes": 97201,
+          "column_file": "assets/mm-rank/mmlb-table.24-09.20240930.json",
+          "column_bytes": 4996
+        },
+        "24-08": {
+          "month": "24-08",
+          "update_time": "2024-08-29",
+          "data_file": "assets/mm-rank/mmlb-data.24-08.20240829.json",
+          "data_bytes": 78373,
+          "column_file": "assets/mm-rank/mmlb-table.24-08.20240829.json",
+          "column_bytes": 4996
+        },
+        "24-07": {
+          "month": "24-07",
+          "update_time": "2024-07-29",
+          "data_file": "assets/mm-rank/mmlb-data.24-07.20240729.json",
+          "data_bytes": 63835,
+          "column_file": "assets/mm-rank/mmlb-table.24-07.20240729.json",
+          "column_bytes": 4996
+        },
+        "24-06": {
+          "month": "24-06",
+          "update_time": "2024-06-26",
+          "data_file": "assets/mm-rank/mmlb-data.24-06.20240626.json",
+          "data_bytes": 52171,
+          "column_file": "assets/mm-rank/mmlb-table.24-06.20240626.json",
+          "column_bytes": 5945
+        },
+        "24-05": {
+          "month": "24-05",
+          "update_time": "2024-05-31",
+          "data_file": "assets/mm-rank/mmlb-data.24-05.20240531.json",
+          "data_bytes": 45849,
+          "column_file": "assets/mm-rank/mmlb-table.24-05.20240531.json",
+          "column_bytes": 5945
+        },
+        "24-04": {
+          "month": "24-04",
+          "update_time": "2024-04-27",
+          "data_file": "assets/mm-rank/mmlb-data.24-04.20240427.json",
+          "data_bytes": 43520,
+          "column_file": "assets/mm-rank/mmlb-table.24-04.20240427.json",
+          "column_bytes": 5832
+        },
+        "24-03": {
+          "month": "24-03",
+          "update_time": "2024-04-03",
+          "data_file": "assets/mm-rank/mmlb-data.24-03.20240403.json",
+          "data_bytes": 41021,
+          "column_file": "assets/mm-rank/mmlb-table.24-03.20240403.json",
+          "column_bytes": 5069
+        },
+        "24-02": {
+          "month": "24-02",
+          "update_time": "2024-02-20",
+          "data_file": "assets/mm-rank/mmlb-data.24-02.20240220.json",
+          "data_bytes": 24296,
+          "column_file": "assets/mm-rank/mmlb-table.24-02.20240220.json",
+          "column_bytes": 4532
+        },
+        "24-01": {
+          "month": "24-01",
+          "update_time": "2024-01-19",
+          "data_file": "assets/mm-rank/mmlb-data.24-01.20240119.json",
+          "data_bytes": 24296,
+          "column_file": "assets/mm-rank/mmlb-table.24-01.20240119.json",
+          "column_bytes": 4532
+        }
+      }
+    }
+  ]
+}

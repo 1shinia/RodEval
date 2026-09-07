@@ -1,0 +1,1692 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "均分",
+                    "en-US": "Average"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "均分",
+                    "en-US": "Average (CN)"
+                },
+                "width": 160,
+                "key": "Average_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "均分",
+                    "en-US": "Average (EN)"
+                },
+                "width": 160,
+                "key": "Average_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言",
+                    "en-US": "Language"
+                },
+                "width": 160,
+                "key": "Language",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言_中",
+                    "en-US": "Language (CN)"
+                },
+                "width": 160,
+                "key": "Language_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言_英",
+                    "en-US": "Language (EN)"
+                },
+                "width": 160,
+                "key": "Language_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识",
+                    "en-US": "Knowledge"
+                },
+                "width": 160,
+                "key": "Knowledge",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识_中",
+                    "en-US": "Knowledge (CN)"
+                },
+                "width": 160,
+                "key": "Knowledge_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识_英",
+                    "en-US": "Knowledge (EN)"
+                },
+                "width": 160,
+                "key": "Knowledge_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理",
+                    "en-US": "Reasoning"
+                },
+                "width": 160,
+                "key": "Reasoning",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理_中",
+                    "en-US": "Reasoning (CN)"
+                },
+                "width": 160,
+                "key": "Reasoning_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理_英",
+                    "en-US": "Reasoning (EN)"
+                },
+                "width": 160,
+                "key": "Reasoning_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数学",
+                    "en-US": "Math"
+                },
+                "width": 160,
+                "key": "Math",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数学_中",
+                    "en-US": "Math (CN)"
+                },
+                "width": 160,
+                "key": "Math_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数学_英",
+                    "en-US": "Math (EN)"
+                },
+                "width": 160,
+                "key": "Math_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码",
+                    "en-US": "Code"
+                },
+                "width": 160,
+                "key": "Code",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码_中",
+                    "en-US": "Code (CN)"
+                },
+                "width": 160,
+                "key": "Code_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码_英",
+                    "en-US": "Code (EN)"
+                },
+                "width": 160,
+                "key": "Code_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体",
+                    "en-US": "Agent"
+                },
+                "width": 160,
+                "key": "Agent",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体_中",
+                    "en-US": "Agent (CN)"
+                },
+                "width": 160,
+                "key": "Agent_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体_英",
+                    "en-US": "Agent (EN)"
+                },
+                "width": 160,
+                "key": "Agent_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Language",
+                "Knowledge",
+                "Reasoning",
+                "Math",
+                "Code",
+                "Agent"
+            ],
+            "cn": [
+                "model",
+                "time",
+                "num",
+                "Average_CN",
+                "Language_CN",
+                "Knowledge_CN",
+                "Reasoning_CN",
+                "Math_CN",
+                "Code_CN",
+                "Agent_CN"
+            ],
+            "en": [
+                "model",
+                "time",
+                "num",
+                "Average_EN",
+                "Language_EN",
+                "Knowledge_EN",
+                "Reasoning_EN",
+                "Math_EN",
+                "Code_EN",
+                "Agent_EN"
+            ]
+        }
+    },
+    "SubjectiveColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "均分",
+                    "en-US": "Average"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "均分_中",
+                    "en-US": "Average (CN)"
+                },
+                "width": 160,
+                "key": "Average_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "均分_英",
+                    "en-US": "Average (EN)"
+                },
+                "width": 160,
+                "key": "Average_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言",
+                    "en-US": "Language"
+                },
+                "width": 160,
+                "key": "Language",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言_中",
+                    "en-US": "Language (CN)"
+                },
+                "width": 160,
+                "key": "Language_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言_英",
+                    "en-US": "Language (EN)"
+                },
+                "width": 160,
+                "key": "Language_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识",
+                    "en-US": "Knowledge"
+                },
+                "width": 160,
+                "key": "Knowledge",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识_中",
+                    "en-US": "Knowledge (CN)"
+                },
+                "width": 160,
+                "key": "Knowledge_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识_英",
+                    "en-US": "Knowledge (EN)"
+                },
+                "width": 160,
+                "key": "Knowledge_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理",
+                    "en-US": "Reasoning"
+                },
+                "width": 160,
+                "key": "Reasoning",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理_中",
+                    "en-US": "Reasoning (CN)"
+                },
+                "width": 160,
+                "key": "Reasoning_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理_英",
+                    "en-US": "Reasoning (EN)"
+                },
+                "width": 160,
+                "key": "Reasoning_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码",
+                    "en-US": "Code"
+                },
+                "width": 160,
+                "key": "Code",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码_中",
+                    "en-US": "Code (CN)"
+                },
+                "width": 160,
+                "key": "Code_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码_英",
+                    "en-US": "Code (EN)"
+                },
+                "width": 160,
+                "key": "Code_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "创作",
+                    "en-US": "Creation"
+                },
+                "width": 160,
+                "key": "Creation",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "创作_中",
+                    "en-US": "Creation (CN)"
+                },
+                "width": 160,
+                "key": "Creation_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "创作_英",
+                    "en-US": "Creation (EN)"
+                },
+                "width": 160,
+                "key": "Creation_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "对话",
+                    "en-US": "Conversaion"
+                },
+                "width": 160,
+                "key": "Conversaion",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "对话_中",
+                    "en-US": "Conversaion (CN)"
+                },
+                "width": 160,
+                "key": "Conversaion_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "对话_英",
+                    "en-US": "Conversaion (EN)"
+                },
+                "width": 160,
+                "key": "Conversaion_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Language",
+                "Knowledge",
+                "Reasoning",
+                "Code",
+                "Creation",
+                "Conversaion"
+            ],
+            "cn": [
+                "model",
+                "time",
+                "num",
+                "Average_CN",
+                "Language_CN",
+                "Knowledge_CN",
+                "Reasoning_CN",
+                "Code_CN",
+                "Creation_CN",
+                "Conversaion_CN"
+            ],
+            "en": [
+                "model",
+                "time",
+                "num",
+                "Average_EN",
+                "Language_EN",
+                "Knowledge_EN",
+                "Reasoning_EN",
+                "Code_EN",
+                "Creation_EN",
+                "Conversaion_EN"
+            ]
+        }
+    },
+    "LanguageColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "语言",
+                    "en-US": "Language"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言_中",
+                    "en-US": "Language (CN)"
+                },
+                "width": 160,
+                "key": "Average_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言_英",
+                    "en-US": "Language (EN)"
+                },
+                "width": 160,
+                "key": "Average_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "意图识别_中",
+                    "en-US": "Intention Recognition (CN)"
+                },
+                "width": 160,
+                "key": "Intention_Recognition_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "意图识别_英",
+                    "en-US": "Intention Recognition (EN)"
+                },
+                "width": 160,
+                "key": "Intention_Recognition_EN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "情感分析_中",
+                    "en-US": "Sentiment Analysis (CN)"
+                },
+                "width": 160,
+                "key": "Sentiment_Analysis_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "情感分析_英",
+                    "en-US": "Sentiment Analysis (EN)"
+                },
+                "width": 160,
+                "key": "Sentiment_Analysis_EN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "多语言翻译",
+                    "en-US": "Translation"
+                },
+                "width": 160,
+                "key": "Translation",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "内容评价_中",
+                    "en-US": "Content Critic (CN)"
+                },
+                "width": 160,
+                "key": "Content_Critic_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "内容评价_英",
+                    "en-US": "Content Critic (EN)"
+                },
+                "width": 160,
+                "key": "Content_Critic_EN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "内容总结_中",
+                    "en-US": "Content Summarization (CN)"
+                },
+                "width": 160,
+                "key": "Content_Summarization_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "内容总结_英",
+                    "en-US": "Content Summarization (EN)"
+                },
+                "width": 160,
+                "key": "Content_Summarization_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "中华传统文化理解",
+                    "en-US": "Traditional Cultural Understanding (CN)"
+                },
+                "width": 160,
+                "key": "Traditional_Cultural_Understanding_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "中文语意理解",
+                    "en-US": "Chinese Semantic Understanding (CN)"
+                },
+                "width": 160,
+                "key": "Chinese_Semantic_Understanding_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Average_CN",
+                "Average_EN",
+                "Intention_Recognition_CN_CE",
+                "Intention_Recognition_EN_CE",
+                "Sentiment_Analysis_CN_CE",
+                "Sentiment_Analysis_EN_CE",
+                "Translation",
+                "Content_Critic_CN_CE",
+                "Content_Critic_EN_CE",
+                "Content_Summarization_CN",
+                "Content_Summarization_EN",
+                "Traditional_Cultural_Understanding_CN_CE",
+                "Chinese_Semantic_Understanding_CN_CE"
+            ],
+            "cn": [
+                "model",
+                "time",
+                "num",
+                "Average_CN",
+                "Intention_Recognition_CN_CE",
+                "Sentiment_Analysis_CN_CE",
+                "Translation",
+                "Content_Critic_CN_CE",
+                "Content_Summarization_CN",
+                "Traditional_Cultural_Understanding_CN_CE",
+                "Chinese_Semantic_Understanding_CN_CE"
+            ],
+            "en": [
+                "model",
+                "time",
+                "num",
+                "Average_EN",
+                "Intention_Recognition_EN_CE",
+                "Sentiment_Analysis_EN_CE",
+                "Translation",
+                "Content_Critic_EN_CE",
+                "Content_Summarization_EN"
+            ]
+        }
+    },
+    "KnowledgeColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "知识",
+                    "en-US": "Knowledge"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识_中",
+                    "en-US": "Knowledge (CN)"
+                },
+                "width": 160,
+                "key": "Average_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识_英",
+                    "en-US": "Knowledge (EN)"
+                },
+                "width": 160,
+                "key": "Average_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "常识_中",
+                    "en-US": "Common Sense (CN)"
+                },
+                "width": 160,
+                "key": "Knowledge_Common_Sense_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "人文_中",
+                    "en-US": "Humanity (CN)"
+                },
+                "width": 160,
+                "key": "Knowledge_Humanity_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "自然科学_中",
+                    "en-US": "Natural Science (CN)"
+                },
+                "width": 160,
+                "key": "Knowledge_Natural_Science_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "社会科学_中",
+                    "en-US": "Social Science (CN)"
+                },
+                "width": 160,
+                "key": "Knowledge_Social_Science_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Average_CN",
+                "Average_EN",
+                "Knowledge_Common_Sense_CN_CE",
+                "Knowledge_Humanity_CN_CE",
+                "Knowledge_Natural_Science_CN_CE",
+                "Knowledge_Social_Science_CN_CE"
+            ],
+            "cn": [
+                "model",
+                "time",
+                "num",
+                "Average_CN",
+                "Knowledge_Common_Sense_CN_CE",
+                "Knowledge_Humanity_CN_CE",
+                "Knowledge_Natural_Science_CN_CE",
+                "Knowledge_Social_Science_CN_CE"
+            ],
+            "en": [
+                "model",
+                "time",
+                "num",
+                "Average_EN"
+            ]
+        }
+    },
+    "ReasonColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "推理",
+                    "en-US": "Reason"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理_中",
+                    "en-US": "Reason (CN)"
+                },
+                "width": 160,
+                "key": "Average_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理_英",
+                    "en-US": "Reason (EN)"
+                },
+                "width": 160,
+                "key": "Average_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "常识_中",
+                    "en-US": "Common Sense (CN)"
+                },
+                "width": 160,
+                "key": "Reason_Common_Sense_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "常识_英",
+                    "en-US": "Common Sense (EN)"
+                },
+                "width": 160,
+                "key": "Reason_Common_Sense_EN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "溯因_中",
+                    "en-US": "Abductive (CN)"
+                },
+                "width": 160,
+                "key": "Reason_Abductive_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "溯因_英",
+                    "en-US": "Abductive (EN)"
+                },
+                "width": 160,
+                "key": "Reason_Abductive_EN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "演绎_中",
+                    "en-US": "Deductive (CN)"
+                },
+                "width": 160,
+                "key": "Reason_Deductive_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "演绎_英",
+                    "en-US": "Deductive (EN)"
+                },
+                "width": 160,
+                "key": "Reason_Deductive_EN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "归纳_中",
+                    "en-US": "Inductive (CN)"
+                },
+                "width": 160,
+                "key": "Reason_Inductive_CN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "归纳_英",
+                    "en-US": "Inductive (EN)"
+                },
+                "width": 160,
+                "key": "Reason_Inductive_EN_CE",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Average_CN",
+                "Average_EN",
+                "Reason_Common_Sense_CN_CE",
+                "Reason_Common_Sense_EN_CE",
+                "Reason_Abductive_CN_CE",
+                "Reason_Abductive_EN_CE",
+                "Reason_Deductive_CN_CE",
+                "Reason_Deductive_EN_CE",
+                "Reason_Inductive_CN_CE",
+                "Reason_Inductive_EN_CE"
+            ],
+            "cn": [
+                "model",
+                "time",
+                "num",
+                "Average_CN",
+                "Reason_Common_Sense_CN_CE",
+                "Reason_Abductive_CN_CE",
+                "Reason_Deductive_CN_CE",
+                "Reason_Inductive_CN_CE"
+            ],
+            "en": [
+                "model",
+                "time",
+                "num",
+                "Average_EN",
+                "Reason_Common_Sense_EN_CE",
+                "Reason_Abductive_EN_CE",
+                "Reason_Deductive_EN_CE",
+                "Reason_Inductive_EN_CE"
+            ]
+        }
+    },
+    "MathColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "数学",
+                    "en-US": "Average"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数学_中",
+                    "en-US": "Average (CN)"
+                },
+                "width": 160,
+                "key": "Average_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数学_英",
+                    "en-US": "Average (EN)"
+                },
+                "width": 160,
+                "key": "Average_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数值计算",
+                    "en-US": "Arith"
+                },
+                "width": 160,
+                "key": "Math_Arith",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "小学数学_中",
+                    "en-US": "Primary (CN)"
+                },
+                "width": 160,
+                "key": "Math_Primary_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "小学数学_英",
+                    "en-US": "Primary (EN)"
+                },
+                "width": 160,
+                "key": "Math_Primary_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "初中数学_中",
+                    "en-US": "Middle (CN)"
+                },
+                "width": 160,
+                "key": "Math_Middle_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "初中数学_英",
+                    "en-US": "Middle (EN)"
+                },
+                "width": 160,
+                "key": "Math_Middle_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "高中数学_中",
+                    "en-US": "High (CN)"
+                },
+                "width": 160,
+                "key": "Math_High_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "高中数学_英",
+                    "en-US": "High (EN)"
+                },
+                "width": 160,
+                "key": "Math_High_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "高等数学_中",
+                    "en-US": "College (CN)"
+                },
+                "width": 160,
+                "key": "Math_College_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "高等数学_英",
+                    "en-US": "College (EN)"
+                },
+                "width": 160,
+                "key": "Math_College_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Average_CN",
+                "Average_EN",
+                "Math_Arith",
+                "Math_Primary_CN",
+                "Math_Primary_EN",
+                "Math_Middle_CN",
+                "Math_Middle_EN",
+                "Math_High_CN",
+                "Math_High_EN",
+                "Math_College_CN",
+                "Math_College_EN"
+            ],
+            "cn": [
+                "model",
+                "time",
+                "num",
+                "Average_CN",
+                "Math_Arith",
+                "Math_Primary_CN",
+                "Math_Middle_CN",
+                "Math_High_CN",
+                "Math_College_CN"
+            ],
+            "en": [
+                "model",
+                "time",
+                "num",
+                "Average_EN",
+                "Math_Arith",
+                "Math_Primary_EN",
+                "Math_Middle_EN",
+                "Math_High_EN",
+                "Math_College_EN"
+            ]
+        }
+    },
+    "CodeColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "代码",
+                    "en-US": "Code"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码_中",
+                    "en-US": "Code (CN)"
+                },
+                "width": 160,
+                "key": "Average_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码_英",
+                    "en-US": "Code (EN)"
+                },
+                "width": 160,
+                "key": "Average_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码续写_中",
+                    "en-US": "Completion (CN)"
+                },
+                "width": 160,
+                "key": "HumanEval_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码续写_英",
+                    "en-US": "Completion (EN)"
+                },
+                "width": 160,
+                "key": "HumanEval_Plus_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码生成_中",
+                    "en-US": "Generation (CN)"
+                },
+                "width": 160,
+                "key": "MBPP_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码生成_英",
+                    "en-US": "Generation (EN)"
+                },
+                "width": 160,
+                "key": "MBPP_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "多编程语言",
+                    "en-US": "Multi-Language"
+                },
+                "width": 160,
+                "key": "HumanEvalX",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "算法面试_中",
+                    "en-US": "Interview (CN)"
+                },
+                "width": 160,
+                "key": "LCBench_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "算法面试_英",
+                    "en-US": "Interview (EN)"
+                },
+                "width": 160,
+                "key": "LCBench_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "算法竞赛",
+                    "en-US": "Competition"
+                },
+                "width": 160,
+                "key": "TACO",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Average_CN",
+                "Average_EN",
+                "HumanEval_CN",
+                "HumanEval_Plus_EN",
+                "MBPP_CN",
+                "MBPP_EN",
+                "HumanEvalX",
+                "LCBench_CN",
+                "LCBench_EN",
+                "TACO"
+            ],
+            "cn": [
+                "model",
+                "time",
+                "num",
+                "Average_CN",
+                "HumanEval_CN",
+                "MBPP_CN",
+                "LCBench_CN"
+            ],
+            "en": [
+                "model",
+                "time",
+                "num",
+                "Average_EN",
+                "HumanEval_Plus_EN",
+                "MBPP_EN",
+                "HumanEvalX",
+                "LCBench_EN",
+                "TACO"
+            ]
+        }
+    },
+    "AgentColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体",
+                    "en-US": "Agent"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体_中",
+                    "en-US": "Agent (CN)"
+                },
+                "width": 160,
+                "key": "Average_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体_英",
+                    "en-US": "Agent (EN)"
+                },
+                "width": 160,
+                "key": "Average_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数据科学_中",
+                    "en-US": "Data Science (CN)"
+                },
+                "width": 160,
+                "key": "CIBench_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数据科学_英",
+                    "en-US": "Data Science (EN)"
+                },
+                "width": 160,
+                "key": "CIBench_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "通用工具_中",
+                    "en-US": "Tool Utilization (CN)"
+                },
+                "width": 160,
+                "key": "TEval_CN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "通用工具_英",
+                    "en-US": "Tool Utilization (EN)"
+                },
+                "width": 160,
+                "key": "TEval_EN",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Average_CN",
+                "Average_EN",
+                "CIBench_CN",
+                "CIBench_EN",
+                "TEval_CN",
+                "TEval_EN"
+            ],
+            "cn": [
+                "model",
+                "time",
+                "num",
+                "Average_CN",
+                "CIBench_CN",
+                "TEval_CN"
+            ],
+            "en": [
+                "model",
+                "time",
+                "num",
+                "Average_EN",
+                "CIBench_EN",
+                "TEval_EN"
+            ]
+        }
+    }
+}

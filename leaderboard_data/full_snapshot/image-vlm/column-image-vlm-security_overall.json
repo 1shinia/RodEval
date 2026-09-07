@@ -1,0 +1,125 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release Date"
+                },
+                "width": 150,
+                "key": "date"
+            },
+            {
+                "title": {
+                    "zh-CN": "平均分数",
+                    "en-US": "Average Score"
+                },
+                "width": 140,
+                "key": "Score",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "毒性",
+                    "en-US": "Toxicity"
+                },
+                "width": 130,
+                "key": "Toxicity",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "合法性",
+                    "en-US": "Legality"
+                },
+                "width": 130,
+                "key": "Legality",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "隐私泄露",
+                    "en-US": "Privacy"
+                },
+                "width": 130,
+                "key": "Privacy",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "偏见",
+                    "en-US": "Bias"
+                },
+                "width": 130,
+                "key": "Bias",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "错误信息",
+                    "en-US": "Misinformation"
+                },
+                "width": 130,
+                "key": "Misinformation",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "健康风险",
+                    "en-US": "Health Risk"
+                },
+                "width": 130,
+                "key": "Health_Risk",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "date",
+                "Score",
+                "Toxicity",
+                "Legality",
+                "Privacy",
+                "Bias",
+                "Misinformation",
+                "Health_Risk"
+            ]
+        }
+    },
+    "TabConfig": [
+        {
+            "key": "Overall",
+            "index": "Overall",
+            "name": {
+                "zh-CN": "综合评分",
+                "en-US": "Overall"
+            },
+            "tableData": "OverallTable",
+            "tableColumn": "OverallColumn"
+        }
+    ]
+}

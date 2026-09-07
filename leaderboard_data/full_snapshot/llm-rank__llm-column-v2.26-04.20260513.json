@@ -1,0 +1,676 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "均分",
+                    "en-US": "Average"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "语言",
+                    "en-US": "Language"
+                },
+                "width": 160,
+                "key": "Language",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "知识",
+                    "en-US": "Knowledge"
+                },
+                "width": 160,
+                "key": "Knowledge",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "推理",
+                    "en-US": "Reasoning"
+                },
+                "width": 160,
+                "key": "Reasoning",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数学",
+                    "en-US": "Math"
+                },
+                "width": 160,
+                "key": "Math",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "代码",
+                    "en-US": "Code"
+                },
+                "width": 160,
+                "key": "Code",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体",
+                    "en-US": "Agentic Tool Using"
+                },
+                "width": 160,
+                "key": "Agent",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Language",
+                "Knowledge",
+                "Reasoning",
+                "Math",
+                "Code",
+                "Agent"
+            ]
+        }
+    },
+    "LanguageColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "语言",
+                    "en-US": "Language"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "自然语言处理",
+                    "en-US": "NLP"
+                },
+                "width": 160,
+                "key": "NLP",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "创作",
+                    "en-US": "Creation"
+                },
+                "width": 160,
+                "key": "Creation",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "对话",
+                    "en-US": "Chat"
+                },
+                "width": 160,
+                "key": "Chat",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "指令跟随",
+                    "en-US": "Instruct Following"
+                },
+                "width": 160,
+                "key": "IF",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "NLP",
+                "Creation",
+                "Chat",
+                "IF"
+            ]
+        }
+    },
+    "KnowledgeColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "知识",
+                    "en-US": "Knowledge"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "理科",
+                    "en-US": "Science"
+                },
+                "width": 160,
+                "key": "Knowledge_Science",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "人文",
+                    "en-US": "Humanity"
+                },
+                "width": 160,
+                "key": "Knowledge_Humanity",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "工科",
+                    "en-US": "Engineering"
+                },
+                "width": 160,
+                "key": "Knowledge_Engineering",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "社会科学",
+                    "en-US": "Social Science"
+                },
+                "width": 160,
+                "key": "Knowledge_Social_Science",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "常识",
+                    "en-US": "Common Sense"
+                },
+                "width": 160,
+                "key": "Knowledge_CommonSense",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Knowledge_Science",
+                "Knowledge_Humanity",
+                "Knowledge_Engineering",
+                "Knowledge_Social_Science",
+                "Knowledge_CommonSense"
+            ]
+        }
+    },
+    "ReasonColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "推理",
+                    "en-US": "Reason"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "通用高难推理",
+                    "en-US": "Advanced Common Reasoning"
+                },
+                "width": 160,
+                "key": "Common_Reasoning",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "学科高难推理",
+                    "en-US": "Advanced Academic Reasoning"
+                },
+                "width": 160,
+                "key": "Academic_Reasoning",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Common_Reasoning",
+                "Academic_Reasoning"
+            ]
+        }
+    },
+    "MathColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "数学",
+                    "en-US": "Math"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "高等数学",
+                    "en-US": "College"
+                },
+                "width": 160,
+                "key": "Math_College",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "数学竞赛",
+                    "en-US": "Advanced Competition"
+                },
+                "width": 160,
+                "key": "Math_Competition",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Math_College",
+                "Math_Competition"
+            ]
+        }
+    },
+    "CodeColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "代码",
+                    "en-US": "Code"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "综合代码能力（含智能体编程）",
+                    "en-US": "Comprehensive Coding Capabilities (Including Agentic Coding)"
+                },
+                "width": 160,
+                "key": "Comprehensive_Coding_Ability",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Comprehensive_Coding_Ability"
+            ]
+        }
+    },
+    "AgentColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布日期",
+                    "en-US": "Release"
+                },
+                "width": 150,
+                "key": "time",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Parameters"
+                },
+                "width": 130,
+                "key": "num",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体",
+                    "en-US": "Agentic Tool Using"
+                },
+                "width": 160,
+                "key": "Average",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "高难工具调用",
+                    "en-US": "Advanced Tool Using"
+                },
+                "width": 160,
+                "key": "Comprehensive_Tool_Using",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "time",
+                "num",
+                "Average",
+                "Comprehensive_Tool_Using"
+            ]
+        }
+    },
+    "TabConfig": [
+        {
+            "key": "Overall",
+            "index": "Overall",
+            "name": {
+                "zh-CN": "综合评分",
+                "en-US": "Overall"
+            },
+            "tableData": "OverallTable",
+            "tableColumn": "OverallColumn"
+        },
+        {
+            "key": "Language",
+            "index": "Language",
+            "name": {
+                "zh-CN": "语言",
+                "en-US": "Language"
+            },
+            "tableData": "LanguageTable",
+            "tableColumn": "LanguageColumn"
+        },
+        {
+            "key": "Knowledge",
+            "index": "Knowledge",
+            "name": {
+                "zh-CN": "知识",
+                "en-US": "Knowledge"
+            },
+            "tableData": "KnowledgeTable",
+            "tableColumn": "KnowledgeColumn"
+        },
+        {
+            "key": "Reasoning",
+            "index": "Reasoning",
+            "name": {
+                "zh-CN": "推理",
+                "en-US": "Reasoning"
+            },
+            "tableData": "ReasonTable",
+            "tableColumn": "ReasonColumn"
+        },
+        {
+            "key": "Math",
+            "index": "Math",
+            "name": {
+                "zh-CN": "数学",
+                "en-US": "Math"
+            },
+            "tableData": "MathTable",
+            "tableColumn": "MathColumn"
+        },
+        {
+            "key": "Code",
+            "index": "Code",
+            "name": {
+                "zh-CN": "代码",
+                "en-US": "Code"
+            },
+            "tableData": "CodeTable",
+            "tableColumn": "CodeColumn"
+        },
+        {
+            "key": "Agent",
+            "index": "Agent",
+            "name": {
+                "zh-CN": "智能体",
+                "en-US": "Agent"
+            },
+            "tableData": "AgentTable",
+            "tableColumn": "AgentColumn"
+        }
+    ]
+}

@@ -13,6 +13,7 @@ from .blueprints import bp_eval, bp_perf, bp_reports
 from .blueprints.aigc import bp_aigc
 from .blueprints.audio import bp_audio
 from .blueprints.auth import bp_auth, require_auth
+from .blueprints.leaderboard import bp_leaderboard
 from .utils import OUTPUT_DIR as _DEFAULT_ROOT
 
 logger = get_logger()
@@ -78,6 +79,7 @@ def create_app(outputs: str = None):
     app.register_blueprint(bp_aigc)
     app.register_blueprint(bp_audio)
     app.register_blueprint(bp_auth)
+    app.register_blueprint(bp_leaderboard)
 
     # Use HuggingFace mirror for MTEB dataset downloads (faster in CN)
     os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
@@ -451,6 +453,9 @@ def run_service(host: str = '0.0.0.0', port: int = 9000, debug: bool = False, ou
     logger.info('  GET  /api/v1/aigc/media/<task_id>/<filename> - Serve generated media')
     logger.info('  GET  /api/v1/aigc/thumbnails/<task_id>/<filename> - Serve thumbnails')
     logger.info('  GET  /api/v1/aigc/benchmarks         - List AIGC benchmarks')
+    logger.info('  GET  /api/v1/leaderboard/meta        - OpenCompass leaderboard periods')
+    logger.info('  GET  /api/v1/leaderboard/llm         - LLM ranking tables (category dimension)')
+    logger.info('  GET  /api/v1/leaderboard/multimodal  - Multimodal ranking table')
     logger.info('Refer to docs for parameters: https://evalscope.readthedocs.io/en/latest/user_guides/service.html')
 
     # Print a user-friendly dashboard URL

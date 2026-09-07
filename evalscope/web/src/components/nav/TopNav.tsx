@@ -6,7 +6,7 @@ import { toast } from '@/components/common/Toast'
 import LocaleToggle from './LocaleToggle'
 import ThemeToggle from './ThemeToggle'
 import RunningTasksIndicator from './RunningTasksIndicator'
-import { LayoutDashboard, Sparkles, ClipboardCheck, GitCompareArrows, Activity, BarChart4, Medal, Menu, X, User, Users, LogOut, KeyRound } from 'lucide-react'
+import { LayoutDashboard, Sparkles, ClipboardCheck, GitCompareArrows, Activity, BarChart4, Medal, Menu, X, User, Users, LogOut, KeyRound, Trophy, ChevronDown } from 'lucide-react'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 px-3.5 py-2 rounded-lg text-base font-medium transition-all duration-200 ${
@@ -35,6 +35,7 @@ export default function TopNav() {
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [lbOpen, setLbOpen] = useState(false)
   const [pwDialogOpen, setPwDialogOpen] = useState(false)
   const [oldPw, setOldPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -85,6 +86,35 @@ export default function TopNav() {
                 {item.icon} {item.label}
               </NavLink>
             ))}
+            {/* 评测榜单（下拉）：分 LLM / 多模态 */}
+            <div
+              className="relative"
+              onMouseEnter={() => setLbOpen(true)}
+              onMouseLeave={() => setLbOpen(false)}
+            >
+              <NavLink to="/leaderboard" className={linkClass} onClick={() => setLbOpen((o) => !o)}>
+                <Trophy size={18} /> 评测榜单
+                <ChevronDown size={14} className={`transition-transform ${lbOpen ? 'rotate-180' : ''}`} />
+              </NavLink>
+              {lbOpen && (
+                <div className="absolute left-0 top-full mt-1 w-40 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] shadow-lg py-1 z-50">
+                  <NavLink
+                    to="/leaderboard?type=llm"
+                    onClick={() => setLbOpen(false)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card2)] transition-colors"
+                  >
+                    LLM 榜单
+                  </NavLink>
+                  <NavLink
+                    to="/leaderboard?type=multimodal"
+                    onClick={() => setLbOpen(false)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card2)] transition-colors"
+                  >
+                    多模态榜单
+                  </NavLink>
+                </div>
+              )}
+            </div>
           </nav>
           <nav className="hidden md:flex lg:hidden items-center gap-0.5">
             {navItems.map((item) => (
@@ -164,6 +194,12 @@ export default function TopNav() {
               {item.icon} {item.label}
             </NavLink>
           ))}
+          <NavLink to="/leaderboard?type=llm" className={mobileLinkClass} onClick={() => setMobileOpen(false)}>
+            <Trophy size={18} /> LLM 榜单
+          </NavLink>
+          <NavLink to="/leaderboard?type=multimodal" className={mobileLinkClass} onClick={() => setMobileOpen(false)}>
+            <Trophy size={18} /> 多模态榜单
+          </NavLink>
         </nav>
       </div>
     </header>

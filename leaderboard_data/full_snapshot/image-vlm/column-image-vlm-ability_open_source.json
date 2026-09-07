@@ -1,0 +1,324 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 250,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布时间",
+                    "en-US": "Release"
+                },
+                "width": 120,
+                "key": "date"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Params"
+                },
+                "width": 80,
+                "key": "para_num"
+            },
+            {
+                "title": {
+                    "zh-CN": "语言模型",
+                    "en-US": "Language Model"
+                },
+                "width": 150,
+                "key": "Language_Model"
+            },
+            {
+                "title": {
+                    "zh-CN": "视觉模型",
+                    "en-US": "Vision Model"
+                },
+                "width": 150,
+                "key": "Vision_Model"
+            },
+            {
+                "title": {
+                    "zh-CN": "平均分数",
+                    "en-US": "Avg. Score"
+                },
+                "width": 80,
+                "key": "Avg_Score",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "MMBench V1.1",
+                    "en-US": "MMBench V1.1"
+                },
+                "width": 120,
+                "key": "MMBench_TEST",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "MMStar",
+                    "en-US": "MMStar"
+                },
+                "width": 120,
+                "key": "MMStar",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "MMMU",
+                    "en-US": "MMMU"
+                },
+                "width": 120,
+                "key": "MMMU_VAL",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "MathVista",
+                    "en-US": "MathVista"
+                },
+                "width": 120,
+                "key": "MathVista",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "HallusionBench Avg.",
+                    "en-US": "HallusionBench Avg."
+                },
+                "width": 120,
+                "key": "HallusionBench",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "AI2D",
+                    "en-US": "AI2D"
+                },
+                "width": 120,
+                "key": "AI2D",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "OCRBench",
+                    "en-US": "OCRBench"
+                },
+                "width": 120,
+                "key": "OCRBench",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "MMVet",
+                    "en-US": "MMVet"
+                },
+                "width": 120,
+                "key": "MMVet",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "date",
+                "para_num",
+                "Language_Model",
+                "Vision_Model",
+                "Avg_Score",
+                "MMBench_TEST",
+                "MMStar",
+                "MMMU_VAL",
+                "MathVista",
+                "HallusionBench",
+                "AI2D",
+                "OCRBench",
+                "MMVet"
+            ]
+        }
+    },
+    "MathColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 250,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "评测时间",
+                    "en-US": "Eval Time"
+                },
+                "width": 120,
+                "key": "date"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Params"
+                },
+                "width": 80,
+                "key": "para_num"
+            },
+            {
+                "title": {
+                    "zh-CN": "语言模型",
+                    "en-US": "Language Model"
+                },
+                "width": 150,
+                "key": "Language_Model"
+            },
+            {
+                "title": {
+                    "zh-CN": "视觉模型",
+                    "en-US": "Vision Model"
+                },
+                "width": 150,
+                "key": "Vision_Model"
+            },
+            {
+                "title": {
+                    "zh-CN": "平均分数",
+                    "en-US": "Avg. Score"
+                },
+                "width": 80,
+                "key": "Avg_Score",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "MathVista",
+                    "en-US": "MathVista"
+                },
+                "width": 120,
+                "key": "MathVista",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "MathVision",
+                    "en-US": "MathVision"
+                },
+                "width": 120,
+                "key": "MathVision",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "MathVerse",
+                    "en-US": "MathVerse"
+                },
+                "width": 120,
+                "key": "MathVerse",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "DynaMath",
+                    "en-US": "DynaMath"
+                },
+                "width": 120,
+                "key": "DynaMath",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "WeMath",
+                    "en-US": "WeMath"
+                },
+                "width": 120,
+                "key": "WeMath",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "LogicVista",
+                    "en-US": "LogicVista"
+                },
+                "width": 120,
+                "key": "LogicVista",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "date",
+                "para_num",
+                "Language_Model",
+                "Vision_Model",
+                "Avg_Score",
+                "MathVista",
+                "MathVision",
+                "MathVerse",
+                "DynaMath",
+                "WeMath",
+                "LogicVista"
+            ]
+        }
+    },
+    "TabConfig": [
+        {
+            "key": "Overall",
+            "index": "Overall",
+            "name": {
+                "zh-CN": "综合评分",
+                "en-US": "Overall"
+            },
+            "tableData": "OverallTable",
+            "tableColumn": "OverallColumn"
+        },
+        {
+            "key": "Math",
+            "index": "Math",
+            "name": {
+                "zh-CN": "数学推理",
+                "en-US": "Math"
+            },
+            "tableData": "MathTable",
+            "tableColumn": "MathColumn"
+        }
+    ]
+}

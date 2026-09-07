@@ -29,6 +29,7 @@ const PerfTaskPage = lazy(() => import('@/pages/PerfTaskPage'))
 const PerfReportsPage = lazy(() => import('@/pages/PerfReportsPage'))
 const ReportViewerPage = lazy(() => import('@/pages/ReportViewerPage'))
 const BenchmarksPage = lazy(() => import('@/pages/BenchmarksPage'))
+const LeaderboardPage = lazy(() => import('@/pages/LeaderboardPage'))
 const AIGCReportDetailPage = lazy(() => import('@/pages/AIGCReportDetailPage'))
 const AudioReportDetailPage = lazy(() => import('@/pages/AudioReportDetailPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
@@ -85,6 +86,7 @@ function AppRoutes() {
           <Route path="/perf" element={<PageErrorBoundary pageName="perf"><PerfTaskPage /></PageErrorBoundary>} />
           <Route path="/perf-reports" element={<PageErrorBoundary pageName="perf-reports"><PerfReportsPage /></PageErrorBoundary>} />
           <Route path="/benchmarks" element={<PageErrorBoundary pageName="benchmarks"><BenchmarksPage /></PageErrorBoundary>} />
+          <Route path="/leaderboard" element={<PageErrorBoundary pageName="leaderboard"><LeaderboardPage /></PageErrorBoundary>} />
           <Route path="/viewer" element={<PageErrorBoundary pageName="viewer"><ReportViewerPage /></PageErrorBoundary>} />
           <Route path="/reports/aigc/:taskId" element={<PageErrorBoundary pageName="aigc-report"><AIGCReportDetailPage /></PageErrorBoundary>} />
           <Route path="/reports/audio/:taskId" element={<PageErrorBoundary pageName="audio-report"><AudioReportDetailPage /></PageErrorBoundary>} />

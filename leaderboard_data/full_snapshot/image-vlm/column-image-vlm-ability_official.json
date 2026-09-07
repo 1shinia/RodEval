@@ -1,0 +1,164 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 250,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布时间",
+                    "en-US": "Release"
+                },
+                "width": 120,
+                "key": "date"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量",
+                    "en-US": "Params"
+                },
+                "width": 80,
+                "key": "para_num"
+            },
+            {
+                "title": {
+                    "zh-CN": "语言模型",
+                    "en-US": "Language Model"
+                },
+                "width": 150,
+                "key": "Language_Model"
+            },
+            {
+                "title": {
+                    "zh-CN": "视觉模型",
+                    "en-US": "Vision Model"
+                },
+                "width": 150,
+                "key": "Vision_Model"
+            },
+            {
+                "title": {
+                    "zh-CN": "平均分数（不含智能体）",
+                    "en-US": "Avg Score (w/o Agent Score)"
+                },
+                "width": 120,
+                "key": "Avg_Score_wo_Agent",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "平均分数（含智能体）",
+                    "en-US": "Avg Score (w/ Agent Score)"
+                },
+                "width": 120,
+                "key": "Avg_Score_w_Agent",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "通用感知",
+                    "en-US": "General Perception"
+                },
+                "width": 120,
+                "key": "Perception",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "空间感知",
+                    "en-US": "Spatial Perception"
+                },
+                "width": 120,
+                "key": "Spatial",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "信息图形感知",
+                    "en-US": "Infographic Understanding"
+                },
+                "width": 120,
+                "key": "Infographic",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "多模态推理",
+                    "en-US": "MultiModal Reasoning"
+                },
+                "width": 120,
+                "key": "Reasoning",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "多模态创作",
+                    "en-US": "MultiModal Creation"
+                },
+                "width": 120,
+                "key": "Creation",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "智能体",
+                    "en-US": "Agentic Tool Using"
+                },
+                "width": 120,
+                "key": "Agent",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "date",
+                "para_num",
+                "Language_Model",
+                "Vision_Model",
+                "Avg_Score_wo_Agent",
+                "Avg_Score_w_Agent",
+                "Perception",
+                "Spatial",
+                "Infographic",
+                "Reasoning",
+                "Creation",
+                "Agent"
+            ]
+        }
+    },
+    "TabConfig": [
+        {
+            "key": "Overall",
+            "index": "Overall",
+            "name": {
+                "zh-CN": "综合评分",
+                "en-US": "Overall"
+            },
+            "tableData": "OverallTable",
+            "tableColumn": "OverallColumn"
+        }
+    ]
+}
