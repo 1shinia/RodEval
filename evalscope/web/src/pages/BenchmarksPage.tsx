@@ -48,7 +48,7 @@ export default function BenchmarksPage() {
   // Normalise a raw API entry so all new fields have safe defaults
   // inferCategory: when the backend hasn't been restarted (no `category` field),
   // infer from which list the item came from.
-  const normalize = (e: BenchmarkEntry, inferCategory?: 'llm' | 'vlm' | 'aigc'): BenchmarkEntry => ({
+  const normalize = (e: BenchmarkEntry, inferCategory?: 'llm' | 'vlm' | 'rag' | 'aigc'): BenchmarkEntry => ({
     ...e,
     pretty_name: e.pretty_name ?? e.meta?.pretty_name ?? e.name,
     tags: Array.isArray(e.tags) ? e.tags : Array.isArray((e.meta as Record<string, unknown>)?.tags) ? (e.meta as Record<string, unknown>).tags as string[] : [],
