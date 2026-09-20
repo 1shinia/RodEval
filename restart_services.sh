@@ -33,14 +33,18 @@ setsid nohup npx vite --host 0.0.0.0 --port 5173 \
 echo "  vite pid: $!"
 
 # ── 就绪探活 ─────────────────────────────────────────────
-echo "== waiting for readiness =="
+echo "== waiting for readiness (up to 90s, 冷启动实测约60s) =="
 code=000
-for i in $(seq 1 30); do
+t0=$(date +%s)
+for i in $(seq 1 90); do
   code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9002/ 2>/dev/null)
   [ "$code" != "000" ] && break
+  if [ $((i % 15)) -eq 0 ]; then
+    echo "  ... still starting ($i s)"
+  fi
   sleep 1
 done
-echo "backend : HTTP $code (401 = 正常, 需登录)"
+echo "backend : HTTP $code (401 = 正常, 需登录) [ready in $(($(date +%s) - t0))s]"
 code_fe=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5173/ 2>/dev/null)
 echo "frontend: HTTP $code_fe"
 echo "== 日志: $LOG_DIR/evalscope_service.log / $LOG_DIR/vite.log =="
