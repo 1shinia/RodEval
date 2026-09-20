@@ -1,5 +1,5 @@
 import { apiPost, api, getAuthHeaders } from './client'
-import type { BenchmarksResponse, EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
+import type { BenchmarkEntry, BenchmarksResponse, EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
 
 export interface RunningTask {
   task_id: string
@@ -58,11 +58,29 @@ export async function resumeEvalTask(taskId: string, apiKey?: string): Promise<E
   return apiPost<EvalInvokeResponse>('/api/v1/eval/resume/invoke', body, undefined, 0)
 }
 
-export async function listBenchmarks(type?: 'text' | 'multimodal' | 'aigc', all?: boolean): Promise<BenchmarksResponse> {
+/** How much README text the benchmark list endpoint should embed per entry. */
+export type BenchmarkDescriptionMode = 'full' | 'preview' | 'none'
+
+export async function listBenchmarks(
+  type?: 'text' | 'multimodal' | 'aigc',
+  all?: boolean,
+  description?: BenchmarkDescriptionMode,
+): Promise<BenchmarksResponse> {
   const params: Record<string, string> = {}
   if (type) params.type = type
   if (all) params.all = 'true'
+  if (description) params.description = description
   return api<BenchmarksResponse>('/api/v1/eval/benchmarks', params)
+}
+
+/**
+ * Fetch a single benchmark with its complete README description.
+ *
+ * The list endpoint ships truncated previews to keep its payload small, so
+ * detail views call this once the user opens a specific benchmark.
+ */
+export async function getBenchmarkDetail(name: string): Promise<BenchmarkEntry> {
+  return api<BenchmarkEntry>(`/api/v1/eval/benchmarks/${encodeURIComponent(name)}`)
 }
 
 // ── Batch evaluation ──

@@ -39,6 +39,10 @@ bp_eval = Blueprint('eval', __name__, url_prefix='/api/v1/eval')
 
 _TERMINAL_PROGRESS_STATUSES = {'completed', 'error', 'stopped', 'cancelled', 'failed'}
 
+#: Accepted values for the ``description`` query param on the benchmark list
+#: endpoint.  See ``build_benchmark_entry`` for the payload each mode produces.
+_DESCRIPTION_MODES = ('full', 'preview', 'none')
+
 
 def _task_response_status_code(response) -> int:
     """Return an HTTP status code from a Flask response or ``(response, code)`` tuple."""
@@ -1281,15 +1285,26 @@ def list_benchmarks():
         type (str, optional): Filter to ``'text'``, ``'multimodal'``, or ``'rag'`` only.
         all (str, optional): When ``'true'``, return *all* benchmarks discovered
             from the ``_meta`` directory instead of the curated default lists.
+        description (str, optional): How much README text to embed in each
+            entry — ``'full'`` (default), ``'preview'``, or ``'none'``.  The
+            catalogue is large and README bodies dominate it, so list views
+            should request ``'preview'`` and fetch the complete README from the
+            single-benchmark endpoint when the user opens a detail modal.
     """
     try:
         filter_type = request.args.get('type', '').lower()
         return_all = request.args.get('all', '').lower() == 'true'
+        description_mode = request.args.get('description', 'full').lower()
+        if description_mode not in _DESCRIPTION_MODES:
+            return jsonify({
+                'error': f"Unknown description mode '{description_mode}'. "
+                         f"Use one of: {', '.join(_DESCRIPTION_MODES)}."
+            }), 400
 
         if return_all:
             # Discover every benchmark from _meta directory
             all_names = discover_all_benchmarks()
-            all_entries = [build_benchmark_entry(name) for name in all_names]
+            all_entries = [build_benchmark_entry(name, description_mode) for name in all_names]
 
             if filter_type == 'text':
                 result = {'text': [e for e in all_entries if e.get('category') in ('llm', 'agent')]}
@@ -1315,11 +1330,11 @@ def list_benchmarks():
 
             result: Dict[str, Any] = {}
             if filter_type in ('', 'text'):
-                result['text'] = [build_benchmark_entry(name) for name in text_names]
+                result['text'] = [build_benchmark_entry(name, description_mode) for name in text_names]
             if filter_type in ('', 'multimodal'):
-                result['multimodal'] = [build_benchmark_entry(name) for name in multimodal_names]
+                result['multimodal'] = [build_benchmark_entry(name, description_mode) for name in multimodal_names]
             if filter_type in ('', 'rag'):
-                result['rag'] = [build_benchmark_entry(name) for name in rag_names]
+                result['rag'] = [build_benchmark_entry(name, description_mode) for name in rag_names]
 
         if filter_type and filter_type not in ('text', 'multimodal', 'rag', 'aigc'):
             return jsonify({'error': f"Unknown type '{filter_type}'. Use 'text', 'multimodal', or 'rag'."}), 400
@@ -1329,6 +1344,31 @@ def list_benchmarks():
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] Failed to list benchmarks: {e}', exc_info=True)
         return jsonify({'error': 'Failed to list benchmarks', 'error_id': error_id}), 500
+
+
+@bp_eval.route('/benchmarks/<name>', methods=['GET'])
+def get_benchmark(name: str):
+    """Return one benchmark entry with its complete README description.
+
+    The list endpoint ships truncated descriptions to keep its response small
+    (README bodies are ~89% of the full payload).  Clients that rendered a card
+    from a preview call this endpoint to populate a detail view.
+
+    Args:
+        name: Benchmark identifier exactly as returned in the list payload.
+
+    Returns:
+        200 with the complete entry, 404 when ``name`` is not in the catalogue,
+        or 500 on unexpected failure.
+    """
+    try:
+        if name not in discover_all_benchmarks():
+            return jsonify({'error': f"Unknown benchmark '{name}'."}), 404
+        return jsonify(build_benchmark_entry(name, 'full')), 200
+    except Exception as e:
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f'[{error_id}] Failed to load benchmark {name}: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to load benchmark', 'error_id': error_id}), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

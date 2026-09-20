@@ -244,6 +244,12 @@ export interface BenchmarkEntry {
     en?: { full: string; sections: Record<string, string> }
     zh?: { full: string; sections: Record<string, string> }
   }
+  /**
+   * Set by the list endpoint when `description` holds only a truncated preview.
+   * The complete README must then be fetched with `getBenchmarkDetail(name)`.
+   * Absent or false means `description` is already complete.
+   */
+  description_truncated?: boolean
 }
 
 export interface BenchmarksResponse {

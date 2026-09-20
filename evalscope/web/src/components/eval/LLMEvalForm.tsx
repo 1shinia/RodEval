@@ -112,7 +112,10 @@ export default function LLMEvalForm({ context }: Props) {
   }, [initialDataset])
 
   useEffect(() => {
-    listBenchmarks(undefined, true)
+    // Only names, tags and meta.sandbox_config are consumed here, so skip
+    // README bodies entirely — this form must not pay for the ~89% of the
+    // benchmark payload that descriptions account for.
+    listBenchmarks(undefined, true, 'none')
       .then((res) => {
         const all = [...(res.text ?? []), ...(res.multimodal ?? [])]
         const names: string[] = []

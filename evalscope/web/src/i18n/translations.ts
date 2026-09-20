@@ -303,6 +303,9 @@ const en: Dict = {
     showing: 'Showing ${n} of ${total}',
     includes: 'Datasets:',
     datasets: 'datasets',
+    loadFailed: 'Failed to load benchmarks',
+    detailFailed: 'Failed to load the description',
+    retry: 'Retry',
   },
   prediction: {
     chatView: 'Chat',
@@ -910,6 +913,9 @@ const zh: Dict = {
     showing: '显示 ${n} / ${total}',
     includes: '包含数据集:',
     datasets: '个数据集',
+    loadFailed: '基准测试列表加载失败',
+    detailFailed: '描述内容加载失败',
+    retry: '重试',
   },
   prediction: {
     chatView: '对话',

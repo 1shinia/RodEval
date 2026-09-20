@@ -179,6 +179,27 @@ def parse_benchmark_description(readme_content: str) -> Dict[str, Any]:
     return {'full': full_content, 'sections': sections}
 
 
+#: Character budget used by ``description_mode='preview'``.  The benchmark list
+#: endpoint serialises the whole catalogue in one response, and the README
+#: bodies dominate that payload (~89% of ~4.6 MB, measured).  Cards render only
+#: a two-line summary, so the list view requests a truncated preview and fetches
+#: the full README on demand when the user opens a detail modal.
+_DESCRIPTION_PREVIEW_CHARS = 300
+
+
+def _trim_description(parsed: Optional[Dict[str, Any]], mode: str) -> Optional[Dict[str, Any]]:
+    """Shrink a parsed README description according to ``mode``.
+
+    Only ``'preview'`` alters the input; ``'full'`` and any unrecognised mode
+    pass the parsed value through untouched, so an unexpected value can never
+    silently drop content.
+    """
+    if parsed is None or mode != 'preview':
+        return parsed
+    full = parsed.get('full') or ''
+    return {'full': full[:_DESCRIPTION_PREVIEW_CHARS], 'sections': {}}
+
+
 def discover_all_benchmarks() -> List[str]:
     """Scan the ``_meta`` directory and return all benchmark names found."""
     if not BENCHMARK_META_DIR.exists():
@@ -186,11 +207,22 @@ def discover_all_benchmarks() -> List[str]:
     return sorted(p.stem for p in BENCHMARK_META_DIR.glob('*.json'))
 
 
-def build_benchmark_entry(name: str) -> Dict[str, Any]:
+def build_benchmark_entry(name: str, description_mode: str = 'full') -> Dict[str, Any]:
     """Load metadata for a single benchmark and build the API response entry.
 
     Args:
         name: Benchmark identifier (e.g. ``'gsm8k'``).
+        description_mode: How much of the README body to embed.
+
+            * ``'full'`` (default) — complete text plus parsed ``sections``.
+              Preserves the original behaviour for callers that need whole
+              READMEs (e.g. the benchmark comparison view).
+            * ``'preview'`` — ``full`` truncated to
+              ``_DESCRIPTION_PREVIEW_CHARS`` characters and ``sections`` emptied.
+              ``description_truncated`` is set only when content was actually
+              cut, so the client knows it must fetch the remainder on demand.
+            * ``'none'`` — ``description`` omitted entirely, for callers that
+              only consume names, tags and metadata.
 
     Returns:
         A dict containing ``name``, ``meta``, ``description``, and several
@@ -207,10 +239,23 @@ def build_benchmark_entry(name: str) -> Dict[str, Any]:
     zh_raw = readme.get('zh') or ''
     en_raw = readme.get('en') or ''
 
-    description = {
-        'zh': parse_benchmark_description(zh_raw) if zh_raw else None,
-        'en': parse_benchmark_description(en_raw) if en_raw else None,
-    }
+    zh_parsed = parse_benchmark_description(zh_raw) if zh_raw else None
+    en_parsed = parse_benchmark_description(en_raw) if en_raw else None
+
+    # A README that already fits the preview budget arrives complete, so the flag
+    # must mean "content was actually cut" — keying it off the requested mode
+    # alone would make clients re-fetch every short README for nothing.
+    truncated = description_mode == 'preview' and any(
+        len(p['full']) > _DESCRIPTION_PREVIEW_CHARS for p in (zh_parsed, en_parsed) if p
+    )
+
+    if description_mode == 'none':
+        description: Dict[str, Any] = {}
+    else:
+        description = {
+            'zh': _trim_description(zh_parsed, description_mode),
+            'en': _trim_description(en_parsed, description_mode),
+        }
 
     meta = data.get('meta', {})
     statistics = data.get('statistics', {})
@@ -232,4 +277,7 @@ def build_benchmark_entry(name: str) -> Dict[str, Any]:
         'metrics': metrics,
         'meta': meta,
         'description': description,
+        # True when ``description`` holds only part of the README, so the client
+        # must fetch the rest via the single-benchmark endpoint.
+        'description_truncated': truncated,
     }

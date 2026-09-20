@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocale } from '@/contexts/LocaleContext'
-import { listBenchmarks } from '@/api/eval'
+import { listBenchmarks, getBenchmarkDetail } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
 import type { BenchmarkEntry } from '@/api/types'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
@@ -35,6 +35,14 @@ export default function BenchmarksPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [selectedEntry, setSelectedEntry] = useState<BenchmarkEntry | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  // Cards carry a truncated description; the modal fetches the complete README.
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  // Identifies the in-flight detail request so a slow response for a previously
+  // opened card cannot overwrite the one the user is actually looking at.
+  const detailRequestRef = useRef<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Normalise a raw API entry so all new fields have safe defaults
@@ -54,7 +62,10 @@ export default function BenchmarksPage() {
 
   useEffect(() => {
     setLoading(true)
-    listBenchmarks(undefined, true)
+    setLoadError(null)
+    // 'preview' keeps the catalogue payload small: cards render a two-line
+    // summary, and the detail modal fetches the full README on demand.
+    listBenchmarks(undefined, true, 'preview')
       .then((res) => {
         const textList = (res.text ?? []).map((e) => normalize(e, 'llm'))
         const mmList = (res.multimodal ?? []).map((e) => normalize(e, 'vlm'))
@@ -68,9 +79,16 @@ export default function BenchmarksPage() {
         const aigcList = (res.aigc ?? []).map((e) => normalize(e, 'aigc'))
         setAllBenchmarks([...textList, ...mmList, ...ragList, ...aigcList])
       })
-      .catch((e) => { toast.error(e instanceof Error ? e.message : 'Failed to load benchmarks') })
+      .catch((e) => {
+        const message = e instanceof Error ? e.message : 'Failed to load benchmarks'
+        // Record the failure in page state as well as the toast: previously a
+        // failed request left the catalogue rendering as "no results", which
+        // made a load failure indistinguishable from an empty catalogue.
+        setLoadError(message)
+        toast.error(message)
+      })
       .finally(() => setLoading(false))
-  }, [])
+  }, [reloadKey])
 
   // Debounce search
   useEffect(() => {
@@ -136,11 +154,34 @@ export default function BenchmarksPage() {
   }, [tabFiltered, debouncedSearch, selectedTags, getDescription])
 
   const handleCardClick = useCallback((entry: BenchmarkEntry) => {
+    detailRequestRef.current = entry.name
     setSelectedEntry(entry)
+    setDetailError(null)
+    // The list ships truncated descriptions; only fetch when there is more.
+    if (!entry.description_truncated) {
+      setDetailLoading(false)
+      return
+    }
+    setDetailLoading(true)
+    getBenchmarkDetail(entry.name)
+      .then((full) => {
+        if (detailRequestRef.current !== entry.name) return
+        setSelectedEntry(full)
+      })
+      .catch((e) => {
+        if (detailRequestRef.current !== entry.name) return
+        setDetailError(e instanceof Error ? e.message : 'Failed to load description')
+      })
+      .finally(() => {
+        if (detailRequestRef.current === entry.name) setDetailLoading(false)
+      })
   }, [])
 
   const closeDetail = useCallback(() => {
+    detailRequestRef.current = null
     setSelectedEntry(null)
+    setDetailLoading(false)
+    setDetailError(null)
   }, [])
 
   const toggleTag = (tag: string) => {
@@ -164,6 +205,29 @@ export default function BenchmarksPage() {
   ]
 
   if (loading) return <LoadingSpinner />
+
+  // A failed load must be visibly distinct from an empty catalogue: the empty
+  // state further down means "nothing matched the filters", not "the request
+  // never arrived". Rendering both the same way used to hide real failures.
+  if (loadError) {
+    return (
+      <div className="page-enter space-y-5">
+        <div className="text-center py-16">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--bg-deep)] mb-4">
+            <BookOpen size={24} className="text-[var(--accent)]" />
+          </div>
+          <p className="text-sm text-[var(--text)]">{t('benchmarks.loadFailed')}</p>
+          <p className="mt-2 text-xs text-[var(--text-muted)] break-all">{loadError}</p>
+          <button
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="mt-4 px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] border border-[var(--border-md)] text-[var(--text)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors cursor-pointer"
+          >
+            {t('benchmarks.retry')}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-enter space-y-5">
@@ -422,16 +486,33 @@ export default function BenchmarksPage() {
               </button>
             </div>
 
-            {/* Modal body — full markdown */}
+            {/* Modal body — full markdown, fetched lazily on open */}
             <div className="flex-1 overflow-y-auto p-5">
-              <MarkdownRenderer
-                content={
-                  (locale === 'zh'
-                    ? selectedEntry.description?.zh?.full
-                    : selectedEntry.description?.en?.full
-                  ) ?? ''
-                }
-              />
+              {detailLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <LoadingSpinner />
+                </div>
+              ) : detailError ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-[var(--text)]">{t('benchmarks.detailFailed')}</p>
+                  <p className="mt-2 text-xs text-[var(--text-muted)] break-all">{detailError}</p>
+                  <button
+                    onClick={() => selectedEntry && handleCardClick(selectedEntry)}
+                    className="mt-4 px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] border border-[var(--border-md)] text-[var(--text)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors cursor-pointer"
+                  >
+                    {t('benchmarks.retry')}
+                  </button>
+                </div>
+              ) : (
+                <MarkdownRenderer
+                  content={
+                    (locale === 'zh'
+                      ? selectedEntry.description?.zh?.full
+                      : selectedEntry.description?.en?.full
+                    ) ?? ''
+                  }
+                />
+              )}
             </div>
           </div>
         </div>,
