@@ -1,0 +1,167 @@
+{
+    "说明": "如果中英文环境不同，用 desc 的写法（zh-CN / en-US 对象）；如果中英文相同，可以直接用字符串",
+    "OverallTable": [
+        {
+            "key": 0,
+            "model": "Claude Opus 4.8",
+            "org": "Anthropic",
+            "open_source": "NO",
+            "date": "2026/5/28",
+            "Avg_Score": 0.7100,
+            "Max_Score": 0.7368,
+            "Std_Deviation": 0.0701,
+            "Avg_Time": 12.2,
+            "Avg_Cost": 169.22,
+            "Avg_Requests": 2678,
+            "Avg_Tokens": 139.32
+        },
+        {
+            "key": 1,
+            "model": "GPT-5.5",
+            "org": "OpenAI",
+            "open_source": "NO",
+            "date": "2026/4/23",
+            "Avg_Score": 0.6524,
+            "Max_Score": 0.6582,
+            "Std_Deviation": 0.0913,
+            "Avg_Time": 15.0,
+            "Avg_Cost": 154.17,
+            "Avg_Requests": 2335,
+            "Avg_Tokens": 92.338
+        },
+        {
+            "key": 2,
+            "model": "DeepSeek-V4-Pro",
+            "org": "DeepSeek",
+            "open_source": "YES",
+            "date": "2026/4/24",
+            "Avg_Score": 0.5423,
+            "Max_Score": 0.5783,
+            "Std_Deviation": 0.1175,
+            "Avg_Time": 18.7,
+            "Avg_Cost": 68.18,
+            "Avg_Requests": 2601,
+            "Avg_Tokens": 131.009
+        },
+        {
+            "key": 3,
+            "model": "Qwen3.7-Plus",
+            "org": "Alibaba",
+            "open_source": "NO",
+            "date": "2026/5/31",
+            "Avg_Score": 0.5170,
+            "Max_Score": 0.5450,
+            "Std_Deviation": 0.1257,
+            "Avg_Time": 16.0,
+            "Avg_Cost": 12.58,
+            "Avg_Requests": 2646,
+            "Avg_Tokens": 109.883
+        },
+        {
+            "key": 4,
+            "model": "Gemini 3.1 Pro Preview",
+            "org": "Google",
+            "open_source": "NO",
+            "date": "2026/2/19",
+            "Avg_Score": 0.5141,
+            "Max_Score": 0.5224,
+            "Std_Deviation": 0.1246,
+            "Avg_Time": 16.6,
+            "Avg_Cost": 157.95,
+            "Avg_Requests": 6279,
+            "Avg_Tokens": 271.04
+        },
+        {
+            "key": 5,
+            "model": "MiMo-V2.5-Pro",
+            "org": "Xiaomi",
+            "open_source": "YES",
+            "date": "2026/4/23",
+            "Avg_Score": 0.5032,
+            "Max_Score": 0.5222,
+            "Std_Deviation": 0.1198,
+            "Avg_Time": 18.8,
+            "Avg_Cost": 16.83,
+            "Avg_Requests": 2676,
+            "Avg_Tokens": 132.365
+        },
+        {
+            "key": 6,
+            "model": "MiniMax-M3",
+            "org": "MiniMax",
+            "open_source": "YES",
+            "date": "2026/5/31",
+            "Avg_Score": 0.5024,
+            "Max_Score": 0.5157,
+            "Std_Deviation": 0.1261,
+            "Avg_Time": 22.2,
+            "Avg_Cost": 30.76,
+            "Avg_Requests": 4797,
+            "Avg_Tokens": 260.664
+        },
+        {
+            "key": 7,
+            "model": "GLM-5.2",
+            "org": "Zhipu AI",
+            "open_source": "YES",
+            "date": "2026/6/16",
+            "Avg_Score": 0.4627,
+            "Max_Score": 0.4820,
+            "Std_Deviation": 0.1195,
+            "Avg_Time": 18.9,
+            "Avg_Cost": 77.15,
+            "Avg_Requests": 2466,
+            "Avg_Tokens": 111.333
+        },
+        {
+            "key": 8,
+            "model": "Hy3 Preview",
+            "org": "Tencent",
+            "open_source": "YES",
+            "date": "2026/4/24",
+            "Avg_Score": 0.4315,
+            "Max_Score": 0.4497,
+            "Std_Deviation": 0.1329,
+            "Avg_Time": 12.3,
+            "Avg_Cost": 3.86,
+            "Avg_Requests": 2312,
+            "Avg_Tokens": 103.531
+        },
+        {
+            "key": 9,
+            "model": "Grok-4.3",
+            "org": "xAI",
+            "open_source": "NO",
+            "date": "2026/4/30",
+            "Avg_Score": 0.3784,
+            "Max_Score": 0.3915,
+            "Std_Deviation": 0.1097,
+            "Avg_Time": 2.4,
+            "Avg_Cost": 8.08,
+            "Avg_Requests": 940,
+            "Avg_Tokens": 16.453
+        },
+        {
+            "key": 10,
+            "model": "Kimi K2.6",
+            "org": "Moonshot AI",
+            "open_source": "YES",
+            "date": "2026/4/20",
+            "Avg_Score": 0.2982,
+            "Max_Score": 0.4858,
+            "Std_Deviation": 0.2090,
+            "Avg_Time": 12.3,
+            "Avg_Cost": 31.79,
+            "Avg_Requests": 1937,
+            "Avg_Tokens": 91.032
+        }
+    ],
+    "globalData": {
+        "OverallTable": {
+            "tableDesc": {
+                "zh-CN": "2026-06-24 更新 · 基于官方闭源评测集（共包含 85 项多场景任务），在 OpenClaw 框架下切换不同模型，每模型执行 3 轮，平均值全部为单轮评测均值",
+                "en-US": "Updated 2026-06-24 · Based on official closed-source evaluation set (85 tasks), in OpenClaw harness, each model executed 3 rounds, and all average values are single-round averages."
+            }
+        }
+    }
+}

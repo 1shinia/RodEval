@@ -1,0 +1,241 @@
+{
+    "说明": "如果中英文环境不同，用 desc 的写法（zh-CN / en-US 对象）；如果中英文相同，可以直接用字符串",
+    "OverallTable": [
+        {
+            "key": 0,
+            "model": "Claude-4.5-Sonnet",
+            "org": "Anthropic",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 52.54,
+            "Multimodal_Perception": 57.87,
+            "Image_Understanding": 43.64,
+            "Multimodal_Reasoning": 56.11
+        },
+        {
+            "key": 1,
+            "model": "Claude-4.1-Opus",
+            "org": "Anthropic",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 54.03,
+            "Multimodal_Perception": 58.25,
+            "Image_Understanding": 45.19,
+            "Multimodal_Reasoning": 58.66
+        },
+        {
+            "key": 2,
+            "model": "GPT-4o",
+            "org": "OpenAI",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 45.56,
+            "Multimodal_Perception": 52.78,
+            "Image_Understanding": 25.93,
+            "Multimodal_Reasoning": 57.97
+        },
+        {
+            "key": 3,
+            "model": "GPT-5",
+            "org": "OpenAI",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 54.61,
+            "Multimodal_Perception": 59.94,
+            "Image_Understanding": 42.44,
+            "Multimodal_Reasoning": 61.46
+        },
+        {
+            "key": 4,
+            "model": "GPT-o3",
+            "org": "OpenAI",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 49.11,
+            "Multimodal_Perception": 55.23,
+            "Image_Understanding": 32.84,
+            "Multimodal_Reasoning": 59.27
+        },
+        {
+            "key": 5,
+            "model": "Gemini-2.5-Flash",
+            "org": "DeepMind",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 50.47,
+            "Multimodal_Perception": 55.98,
+            "Image_Understanding": 38.2,
+            "Multimodal_Reasoning": 57.22
+        },
+        {
+            "key": 6,
+            "model": "Gemini-2.5-Pro",
+            "org": "DeepMind",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 52.39,
+            "Multimodal_Perception": 52.12,
+            "Image_Understanding": 43.76,
+            "Multimodal_Reasoning": 61.28
+        },
+        {
+            "key": 7,
+            "model": "Grok-2-vision-1212",
+            "org": "xAI",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 46.93,
+            "Multimodal_Perception": 64.0,
+            "Image_Understanding": 25.04,
+            "Multimodal_Reasoning": 51.76
+        },
+        {
+            "key": 8,
+            "model": "Seed1.6-vision",
+            "org": "ByteDance",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 55.88,
+            "Multimodal_Perception": 65.79,
+            "Image_Understanding": 44.75,
+            "Multimodal_Reasoning": 57.11
+        },
+        {
+            "key": 9,
+            "model": "GLM-4.5V",
+            "org": "Zhipu AI",
+            "open_source": "YES",
+            "date": "2025/12/5",
+            "para_num": "106B",
+            "Score": 49.57,
+            "Multimodal_Perception": 59.1,
+            "Image_Understanding": 38.57,
+            "Multimodal_Reasoning": 51.04
+        },
+        {
+            "key": 10,
+            "model": "Llama-4-Maverick",
+            "org": "Meta",
+            "open_source": "YES",
+            "date": "2025/12/5",
+            "para_num": "400B",
+            "Score": 49.65,
+            "Multimodal_Perception": 56.74,
+            "Image_Understanding": 36.83,
+            "Multimodal_Reasoning": 55.39
+        },
+        {
+            "key": 11,
+            "model": "Qwen3-VL-235B-A22B",
+            "org": "Alibaba",
+            "open_source": "YES",
+            "date": "2025/12/5",
+            "para_num": "235B",
+            "Score": 53.82,
+            "Multimodal_Perception": 72.29,
+            "Image_Understanding": 38.35,
+            "Multimodal_Reasoning": 50.83
+        },
+        {
+            "key": 12,
+            "model": "Qwen3-Max",
+            "org": "Alibaba",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "1000B",
+            "Score": 31.59,
+            "Multimodal_Perception": 24.51,
+            "Image_Understanding": 20.4,
+            "Multimodal_Reasoning": 49.86
+        },
+        {
+            "key": 13,
+            "model": "GPT-5.1",
+            "org": "OpenAI",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 48.63,
+            "Multimodal_Perception": 54.1,
+            "Image_Understanding": 33.05,
+            "Multimodal_Reasoning": 58.73
+        },
+        {
+            "key": 14,
+            "model": "Gemini-3-Pro",
+            "org": "DeepMind",
+            "open_source": "NO",
+            "date": "2025/12/5",
+            "para_num": "N/A",
+            "Score": 62.88,
+            "Multimodal_Perception": 66.54,
+            "Image_Understanding": 55.62,
+            "Multimodal_Reasoning": 66.49
+        },
+        {
+            "key": 15,
+            "model": "GPT-5.2",
+            "org": "OpenAI",
+            "open_source": "NO",
+            "date": "2026/2/9",
+            "para_num": "N/A",
+            "Score": 53.46,
+            "Multimodal_Perception": 61.17,
+            "Image_Understanding": 41.94,
+            "Multimodal_Reasoning": 57.26
+        },
+        {
+            "key": 16,
+            "model": "Seed-1.8",
+            "org": "ByteDance",
+            "open_source": "NO",
+            "date": "2026/2/9",
+            "para_num": "N/A",
+            "Score": 56.23,
+            "Multimodal_Perception": 64.0,
+            "Image_Understanding": 48.78,
+            "Multimodal_Reasoning": 55.83
+        },
+        {
+            "key": 17,
+            "model": "Grok-4.1",
+            "org": "xAI",
+            "open_source": "NO",
+            "date": "2026/2/9",
+            "para_num": "N/A",
+            "Score": 47.42,
+            "Multimodal_Perception": 58.06,
+            "Image_Understanding": 31.35,
+            "Multimodal_Reasoning": 52.84
+        },
+        {
+            "key": 18,
+            "model": "Claude-4.5-Opus",
+            "org": "Anthropic",
+            "open_source": "NO",
+            "date": "2026/2/9",
+            "para_num": "N/A",
+            "Score": 59.91,
+            "Multimodal_Perception": 61.92,
+            "Image_Understanding": 55.03,
+            "Multimodal_Reasoning": 62.79
+        }
+    ],
+    "globalData": {
+        "OverallTable": {
+            "tableDesc": {
+                "zh-CN": "2026-02-09 更新",
+                "en-US": "Updated 2026-02-09"
+            }
+        }
+    }
+}

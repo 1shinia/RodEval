@@ -1,0 +1,82 @@
+{
+  "zh-CN": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · Agent",
+      "title": "智能体评测榜单",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/agent.svg",
+      "description": "突破单模型评测局限，聚焦智能体规划决策、工具调用、环境交互与多轮任务表现，兼顾结果与成本、效率、稳定性，客观衡量 Agent 从「能对话」到「会做事」的真实落地能力。",
+      "stats": [
+        {
+          "label": "评测智能体框架",
+          "value": "2",
+          "descriptionParts": {
+            "prefix": "涵盖 ",
+            "mono": "OpenClaw、Hermes",
+            "suffix": " 两大热门开源框架"
+          }
+        },
+        {
+          "label": "评测模型",
+          "value": "11",
+          "descriptionParts": {
+            "prefix": "包括 ",
+            "mono": "GPT、Claude、Qwen、DeepSeek、GLM",
+            "suffix": " 等主流模型"
+          }
+        }
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "能力榜单",
+          "title": "能力榜单",
+          "icon": "ability",
+          "lineTabs": [
+            { "key": "openclaw", "name": "OpenClaw 模型榜"},
+            { "key": "hermes", "name": "Hermes 模型榜"} 
+          ]
+        }
+      ]
+    }
+  },
+  "en-US": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · Agent",
+      "title": "Agent Leaderboard",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/agent.svg",
+      "description": "Beyond single-model benchmarks—evaluating agents on planning, tool use, environment interaction, and multi-turn tasks, while balancing results with cost, efficiency, and stability to measure the leap from chatting to truly getting things done.",
+      "stats": [
+        {
+          "label": "Evaluated Harnesses",
+          "value": "2",
+          "descriptionParts": {
+            "mono": "Covers two popular open-source agent harnesses: OpenClaw and Hermes"
+          }
+        },
+        {
+          "label": "评测模型",
+          "value": "11",
+          "descriptionParts": {
+            "mono": "Supports leading models including GPT, CLaude, Qwen, DeepSeek, GLM, and more"
+          }
+        }
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "Ability Rankings",
+          "title": "Ability Rankings",
+          "icon": "ability",
+          "lineTabs": [
+            { "key": "openclaw", "name": "OpenClaw Models Leaderboard"},
+            { "key": "hermes", "name": "Hermes Models Leaderboard"} 
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -7,49 +7,72 @@ import LoadingSpinner from '@/components/common/LoadingSpinner'
 import { toast } from '@/components/common/Toast'
 import { Trophy } from 'lucide-react'
 import type { LbMeta, LbColumn, LbPeriodOption, LlmLeaderboard, MmLeaderboard } from '@/api/leaderboard'
-import {
-  getLeaderboardMeta,
-  getLlmLeaderboard,
-  getMultimodalLeaderboard,
-} from '@/api/leaderboard'
-
-type LbType = 'llm' | 'multimodal'
-
-const typeOptions = [
-  { value: 'llm', label: 'LLM 榜单' },
-  { value: 'multimodal', label: '多模态榜单' },
-]
+import { getLeaderboardMeta, getLlmLeaderboard, getBoard } from '@/api/leaderboard'
 
 export default function LeaderboardPage() {
   const { locale } = useLocale()
   const [searchParams] = useSearchParams()
-  const typeFromUrl = searchParams.get('type') === 'multimodal' ? 'multimodal' : 'llm'
+  const urlType = searchParams.get('type') ?? 'llm'
 
   const [meta, setMeta] = useState<LbMeta | null>(null)
-  const [type, setType] = useState<LbType>(typeFromUrl)
+  const [type, setType] = useState<string>(urlType === 'llm' ? 'llm' : urlType)
+  const [rawOssTab, setRawOssTab] = useState('')
   const [llmPeriod, setLlmPeriod] = useState('')
-  const [mmTab, setMmTab] = useState('official')
   const [category, setCategory] = useState('')
   const [llm, setLlm] = useState<LlmLeaderboard | null>(null)
-  const [mm, setMm] = useState<MmLeaderboard | null>(null)
+  const [oss, setOss] = useState<MmLeaderboard | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // 首次拉取 meta（榜单类型 + LLM 时间段 + 多模态榜单类别）
+  // 首次拉取 meta（榜单类型清单 + LLM 时间段 + 各榜页签）
   useEffect(() => {
     getLeaderboardMeta()
       .then((m) => {
         setMeta(m)
         setLlmPeriod((p) => p || m.default_llm || '')
-        setMmTab((t) => (m.vlm_tabs?.some((x) => x.value === t) ? t : m.vlm_tabs?.[0]?.value ?? 'official'))
       })
       .catch((e) => { toast.error(e instanceof Error ? e.message : '加载榜单失败') })
       .finally(() => setLoading(false))
   }, [])
 
+  // 有效榜单类型：URL 里带非法 id 时回退 llm（渲染期派生，不在 effect 里改状态）
+  const validType = useMemo(() => {
+    if (type === 'llm') return 'llm'
+    return meta?.boards.some((b) => b.id === type) ? type : 'llm'
+  }, [meta, type])
+
+  // 榜单类型选项（llm 在最前，其余按后端返回顺序）
+  const typeOptions: LbPeriodOption[] = useMemo(
+    () => (meta?.boards ?? []).map((b) => ({ value: b.id, label: b.label })),
+    [meta],
+  )
+
+  // 当前 OSS 榜（非 llm）的注册项与页签
+  const currentBoard = useMemo(
+    () => (validType === 'llm' ? null : (meta?.boards.find((b) => b.id === validType) ?? null)),
+    [meta, validType],
+  )
+  const ossTabs: LbPeriodOption[] = useMemo(() => currentBoard?.tabs ?? [], [currentBoard])
+
+  // 当前有效页签：所选页签对当前榜单无效时回退到该榜第一个（渲染期派生）
+  const ossTab = useMemo(() => {
+    if (!currentBoard?.tabs?.length) return ''
+    return currentBoard.tabs.some((x) => x.value === rawOssTab)
+      ? rawOssTab
+      : currentBoard.tabs[0].value
+  }, [currentBoard, rawOssTab])
+
+  // 切换榜单类型：清掉旧数据
+  const changeType = (v: string) => {
+    if (v === validType) return
+    setType(v)
+    setLlm(null)
+    setOss(null)
+  }
+
   // 按当前类型拉数据（切换下拉自动触发）
   useEffect(() => {
     if (!meta) return
-    if (type === 'llm' && llmPeriod) {
+    if (validType === 'llm' && llmPeriod) {
       let stale = false
       getLlmLeaderboard(llmPeriod)
         .then((d) => {
@@ -60,32 +83,30 @@ export default function LeaderboardPage() {
         .catch((e) => { toast.error(e instanceof Error ? e.message : '加载 LLM 榜单失败') })
       return () => { stale = true }
     }
-    if (type === 'multimodal' && mmTab) {
+    if (validType !== 'llm' && ossTab) {
       let stale = false
-      getMultimodalLeaderboard(mmTab)
-        .then((d) => { if (!stale) setMm(d) })
-        .catch((e) => { toast.error(e instanceof Error ? e.message : '加载多模态榜单失败') })
+      getBoard(validType, ossTab)
+        .then((d) => { if (!stale) setOss(d) })
+        .catch((e) => { toast.error(e instanceof Error ? e.message : '加载榜单失败') })
       return () => { stale = true }
     }
     return undefined
-  }, [meta, type, llmPeriod, mmTab])
+  }, [meta, validType, llmPeriod, ossTab])
 
   const llmPeriods: LbPeriodOption[] = useMemo(() => meta?.llm_periods ?? [], [meta])
-  const mmTabs: LbPeriodOption[] = useMemo(() => meta?.vlm_tabs ?? [], [meta])
 
   const changePeriod = (v: string) => setLlmPeriod(v)
-  const changeType = (v: string) => setType(v === 'multimodal' ? 'multimodal' : 'llm')
 
   // 当前激活的数据表与列
-  const activeTable = type === 'llm'
+  const activeTable = validType === 'llm'
     ? (llm?.tables.find((t) => t.key === category) ?? llm?.tables[0] ?? null)
     : null
-  const activeCols: LbColumn[] = type === 'llm'
+  const activeCols: LbColumn[] = validType === 'llm'
     ? (activeTable?.columns ?? [])
-    : (mm?.columns ?? [])
-  const rows: Record<string, unknown>[] = type === 'llm'
+    : (oss?.columns ?? [])
+  const rows: Record<string, unknown>[] = validType === 'llm'
     ? (activeTable?.rows ?? [])
-    : (mm?.rows ?? [])
+    : (oss?.rows ?? [])
 
   // 把后端列配置映射成 Table 组件可用的列（数值列可排序，文本列只展示）
   const buildTableCols = useCallback(
@@ -108,10 +129,13 @@ export default function LeaderboardPage() {
     [locale],
   )
 
-  // 多模态默认按「最常展示的均分列」排序（image-vlm 用 Avg_Score_* 前缀）
-  const mmSortKey = useMemo(
-    () => (mm?.columns.find((c) => c.key.startsWith('Avg_Score'))?.key ?? 'Avg Score') as string,
-    [mm],
+  // OSS 榜默认按「上游标记 sorter=descend」的主分列排序（ai4science=Score、agent=Avg_Score、
+  // physical=Avg_Success_Rate、image-vlm=Avg_Score_wo_Agent），回退到 Avg_Score 前缀猜
+  const ossSortKey = useMemo(
+    () => (oss?.columns.find((c) => c.sorter === 'descend')?.key
+      ?? oss?.columns.find((c) => c.key.startsWith('Avg_Score'))?.key
+      ?? 'Avg Score') as string,
+    [oss],
   )
 
   if (loading && !meta) return <LoadingSpinner />
@@ -128,13 +152,13 @@ export default function LeaderboardPage() {
         </h1>
       </div>
 
-      {/* 下拉框：榜单类型 / 分类维度(LLM) / 时间段(LLM) / 榜单类别(多模态) */}
+      {/* 下拉框：榜单类型 / 分类维度(LLM) / 时间段(LLM) / 子榜单(其余) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 flex-wrap">
         <div className="w-44">
-          <Select label="榜单类型" options={typeOptions} value={type} onChange={changeType} />
+          <Select label="榜单类型" options={typeOptions} value={validType} onChange={changeType} />
         </div>
 
-        {type === 'llm' && (
+        {validType === 'llm' && (
           <div className="w-44">
             <Select
               label="分类维度"
@@ -145,19 +169,19 @@ export default function LeaderboardPage() {
           </div>
         )}
 
-        {type === 'llm' && llmPeriods.length > 0 && (
+        {validType === 'llm' && llmPeriods.length > 0 && (
           <div className="w-56">
             <Select label="时间段" options={llmPeriods} value={llmPeriod} onChange={changePeriod} />
           </div>
         )}
 
-        {type === 'multimodal' && mmTabs.length > 0 && (
+        {validType !== 'llm' && ossTabs.length > 0 && (
           <div className="w-56">
-            <Select label="榜单" options={mmTabs} value={mmTab} onChange={setMmTab} />
+            <Select label="榜单" options={ossTabs} value={ossTab} onChange={setRawOssTab} />
           </div>
         )}
 
-        {type === 'llm' && llm && (
+        {validType === 'llm' && llm && (
           <div className="flex items-center gap-2 pt-5 text-xs text-[var(--text-muted)]">
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent-dim)] text-[var(--accent)]">
               {llmTabs.length} 个分类维度
@@ -171,7 +195,7 @@ export default function LeaderboardPage() {
 
       {/* 数据表 */}
       {meta && (
-        type === 'llm'
+        validType === 'llm'
           ? (llm ? (
               <Table
                 columns={buildTableCols(activeCols, rows)}
@@ -179,11 +203,11 @@ export default function LeaderboardPage() {
                 defaultSort={{ key: 'Average', dir: 'desc' }}
               />
             ) : <LoadingSpinner />)
-          : (mm ? (
+          : (oss ? (
               <Table
                 columns={buildTableCols(activeCols, rows)}
                 data={rows}
-                defaultSort={{ key: mmSortKey, dir: 'desc' }}
+                defaultSort={{ key: ossSortKey, dir: 'desc' }}
               />
             ) : <LoadingSpinner />)
       )}

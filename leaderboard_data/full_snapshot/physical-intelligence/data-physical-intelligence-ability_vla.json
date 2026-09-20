@@ -1,0 +1,91 @@
+{
+    "说明": "如果中英文环境不同，用 desc 的写法（zh-CN / en-US 对象）；如果中英文相同，可以直接用字符串",
+    "OverallTable": [
+        {
+            "key": 0,
+            "model": "Pi0.5",
+            "org": "Physical Intelligence",
+            "open_source": "",
+            "date": "2026/4/28",
+            "Train_Steps": "200K",
+            "Seeds": 3,
+            "Avg_Score": 45.61,
+            "Avg_Success_Rate": 0.2953,
+            "VT_Score": 48.07,
+            "VT_SR": 0.3205,
+            "VU_Score": 42.89,
+            "VU_SR": 0.2652,
+            "Mobile_Score": 49.69,
+            "Mobile_SR": 0.346,
+            "Dexterous_Score": 32.7,
+            "Dexterous_SR": 0.1536
+        },
+        {
+            "key": 1,
+            "model": "InternVLA-A1",
+            "org": "Shanghai AI Lab",
+            "open_source": "",
+            "date": "2026/4/28",
+            "Train_Steps": "200K",
+            "Seeds": 3,
+            "Avg_Score": 40.23,
+            "Avg_Success_Rate": 0.2759,
+            "VT_Score": 44.22,
+            "VT_SR": 0.3308,
+            "VU_Score": 33.84,
+            "VU_SR": 0.2077,
+            "Mobile_Score": 49.56,
+            "Mobile_SR": 0.3482,
+            "Dexterous_Score": 11.69,
+            "Dexterous_SR": 0.584
+        },
+        {
+            "key": 2,
+            "model": "Pi0",
+            "org": "Physical Intelligence",
+            "open_source": "",
+            "date": "2026/4/28",
+            "Train_Steps": "200K",
+            "Seeds": 3,
+            "Avg_Score": 38.37,
+            "Avg_Success_Rate": 0.2444,
+            "VT_Score": 42.92,
+            "VT_SR": 0.3051,
+            "VU_Score": 39.26,
+            "VU_SR": 0.2543,
+            "Mobile_Score": 41.86,
+            "Mobile_SR": 0.2863,
+            "Dexterous_Score": 30.97,
+            "Dexterous_SR": 0.1812
+        },
+        {
+            "key": 3,
+            "model": "XVLA",
+            "org": "N/A",
+            "open_source": "N/A",
+            "date": "2026/4/28",
+            "Train_Steps": "200K",
+            "Seeds": 3,
+            "Avg_Score": 37.51,
+            "Avg_Success_Rate": 0.2473,
+            "VT_Score": 42.11,
+            "VT_SR": 0.2827,
+            "VU_Score": 35.92,
+            "VU_SR": 0.2266,
+            "Mobile_Score": 43.1,
+            "Mobile_SR": 0.3073,
+            "Dexterous_Score": 23.93,
+            "Dexterous_SR": 0.1048
+        }
+    ],
+    "globalData": {
+        "OverallTable": {
+            "tableDesc": {
+                "zh-CN": "2026-04-28 更新 · 基于[EBench](https://github.com/InternRobotics/EBench)评测集",
+                "en-US": "Updated 2026-04-28 · Based on [EBench](https://github.com/InternRobotics/EBench)"
+            }
+        }
+    }
+}
+
+    

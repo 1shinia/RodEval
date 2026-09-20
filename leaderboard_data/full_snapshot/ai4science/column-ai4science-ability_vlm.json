@@ -1,0 +1,98 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "评测时间",
+                    "en-US": "Eval Time"
+                },
+                "width": 160,
+                "key": "date"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量(B)",
+                    "en-US": "Params(B)"
+                },
+                "width": 150,
+                "key": "para_num"
+            },
+            {
+                "title": {
+                    "zh-CN": "总体评分",
+                    "en-US": "Overall Score"
+                },
+                "width": 200,
+                "key": "Score",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "科学多模态感知",
+                    "en-US": "Scientific Multimodal Perception"
+                },
+                "width": 180,
+                "key": "Multimodal_Perception",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "科学图像理解",
+                    "en-US": "Scientific Image Understanding"
+                },
+                "width": 180,
+                "key": "Image_Understanding",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "科学多模态推理",
+                    "en-US": "Scientific Multimodal Reasoning"
+                },
+                "width": 200,
+                "key": "Multimodal_Reasoning",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "date",
+                "para_num",
+                "Score",
+                "Multimodal_Perception",
+                "Image_Understanding",
+                "Multimodal_Reasoning"
+            ]
+        }
+    },
+    "TabConfig": [
+        {
+            "key": "Overall",
+            "index": "Overall",
+            "name": {
+                "zh-CN": "综合评分",
+                "en-US": "Overall"
+            },
+            "tableData": "OverallTable",
+            "tableColumn": "OverallColumn"
+        }
+    ]
+}

@@ -1,0 +1,88 @@
+{
+  "zh-CN": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · VLM",
+      "title": "多模态模型评测榜单",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/Multimodal.svg",
+      "description": "聚焦视觉-语言多模态大模型，提供覆盖图文理解、视觉感知、多模态推理等维度的标准化评测，呈现客观、可追溯的模型能力对比，助力开发者与研究者快速洞察 VLM 技术格局。",
+      "stats": [
+        {
+          "label": "评测模型",
+          "value": "271",
+          "descriptionParts": {
+            "prefix": "包括 ",
+            "mono": "OpenAI, Anthropic, Google, DeepSeek, Seed",
+            "suffix": " 等主流模型"
+          }
+        }
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "能力榜单",
+          "title": "能力榜单",
+          "icon": "ability",
+          "lineTabs": [
+            { "key": "official", "name": "官方评测榜"},
+            { "key": "open_source", "name": "开源评测榜"},
+            { "key": "arena_votes", "name": "竞技场投票榜", "request_column_url": "https://opencompass.org.cn/api/v2/realtime-elo/column?pipeline=vision", "request_data_url": "https://opencompass.org.cn/api/v2/realtime-elo/data?pipeline=vision&board=all"}
+          ]
+        }, 
+        {
+          "id": "security",
+          "navLabel": "安全榜单",
+          "title": "安全榜单",
+          "icon": "security",
+          "lineTabs": [
+            { "key": "overall", "name": "安全综合榜"}
+          ]
+        }
+      ]
+    }
+  },
+  "en-US": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · VLM",
+      "title": "MultiModal Model Leaderboard",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/Multimodal.svg",
+      "description": "Focusing on vision-language models, we deliver standardized evaluations across image-text understanding, visual perception, and multimodal reasoning—presenting objective, traceable comparisons to help developers and researchers quickly grasp the VLM landscape.",
+      "stats": [
+        {
+          "label": "Evaluated Models",
+          "value": "271",
+          "descriptionParts": {
+            "prefix": "Including ",
+            "mono": "OpenAI, Anthropic, Google, DeepSeek, Seed",
+            "suffix": " and other leading models"
+          }
+        }
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "Ability Rankings",
+          "title": "Ability Rankings",
+          "icon": "ability",
+          "lineTabs": [
+            { "key": "official", "name": "Official Leaderboard"},
+            { "key": "open_source", "name": "Open Source Leaderboard"},
+            { "key": "arena_votes", "name": "Arena Votes Leaderboard", "request_column_url": "https://opencompass.org.cn/api/v2/realtime-elo/column?pipeline=vision", "request_data_url": "https://opencompass.org.cn/api/v2/realtime-elo/data?pipeline=vision&board=all"}
+          ]
+        },
+        {
+          "id": "security",
+          "navLabel": "Security Rankings",
+          "title": "Security Rankings",
+          "icon": "security",
+          "lineTabs": [
+            { "key": "overall", "name": "Overall"}
+          ]
+        }
+      ]
+    }
+  }
+}

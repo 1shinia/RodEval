@@ -1,0 +1,125 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 200,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "发布时间",
+                    "en-US": "Release Date"
+                },
+                "width": 100,
+                "key": "date"
+            },
+            {
+                "title": {
+                    "zh-CN": "平均分",
+                    "en-US": "Average Score"
+                },
+                "width": 100,
+                "key": "Avg_Score",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "最高分",
+                    "en-US": "Max Score"
+                },
+                "width": 100,
+                "key": "Max_Score",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "多轮分数标准差",
+                    "en-US": "Standard Deviation"
+                },
+                "width": 120,
+                "key": "Std_Deviation",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "平均耗时（h）",
+                    "en-US": "Average Time(h)"
+                },
+                "width": 90,
+                "key": "Avg_Time",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "平均费用（$）",
+                    "en-US": "Average Cost($)"
+                },
+                "width": 90,
+                "key": "Avg_Cost",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "平均请求次数",
+                    "en-US": "Average Requests"
+                },
+                "width": 90,
+                "key": "Avg_Requests",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "平均Tokens（M）",
+                    "en-US": "Average Tokens(M)"
+                },
+                "width": 100,
+                "key": "Avg_Tokens",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "date",
+                "Avg_Score",
+                "Max_Score",
+                "Std_Deviation",
+                "Avg_Time",
+                "Avg_Cost",
+                "Avg_Requests",
+                "Avg_Tokens"
+            ]
+        }
+    },
+    "TabConfig": [
+        {
+            "key": "Overall",
+            "index": "Overall",
+            "name": {
+                "zh-CN": "综合评分",
+                "en-US": "Overall"
+            },
+            "tableData": "OverallTable",
+            "tableColumn": "OverallColumn"
+        }
+    ]
+}

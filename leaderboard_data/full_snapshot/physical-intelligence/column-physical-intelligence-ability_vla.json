@@ -1,0 +1,179 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 200,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "评测时间",
+                    "en-US": "Eval Time"
+                },
+                "width": 100,
+                "key": "date"
+            },
+            {
+                "title": {
+                    "zh-CN": "训练步数",
+                    "en-US": "Train Steps"
+                },
+                "width": 100,
+                "key": "Train_Steps"
+            },
+            {
+                "title": {
+                    "zh-CN": "种子数",
+                    "en-US": "Seeds"
+                },
+                "width": 80,
+                "key": "Seeds"
+            },
+            {
+                "title": {
+                    "zh-CN": "Test 分数",
+                    "en-US": "Test Score"
+                },
+                "width": 100,
+                "key": "Avg_Score",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "Test 成功率",
+                    "en-US": "Test SR"
+                },
+                "width": 90,
+                "key": "Avg_Success_Rate",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "Validation Train 分数",
+                    "en-US": "Validation Train Score"
+                },
+                "width": 100,
+                "key": "VT_Score",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "Validation Train 成功率",
+                    "en-US": "Validation Train SR"
+                },
+                "width": 90,
+                "key": "VT_SR",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "Validation Unseen 分数",
+                    "en-US": "Validation Unseen Score"
+                },
+                "width": 100,
+                "key": "VU_Score",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "Validation Unseen 成功率",
+                    "en-US": "Validation Unseen SR"
+                },
+                "width": 90,
+                "key": "VU_SR",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "移动操作分数",
+                    "en-US": "Mobile Score"
+                },
+                "width": 120,
+                "key": "Mobile_Score",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "移动操作成功率",
+                    "en-US": "Mobile SR"
+                },
+                "width": 120,
+                "key": "Mobile_SR",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "灵巧操作分数",
+                    "en-US": "Dexterous Score"
+                },
+                "width": 130,
+                "key": "Dexterous_Score",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "灵巧操作成功率",
+                    "en-US": "Dexterous SR"
+                },
+                "width": 130,
+                "key": "Dexterous_SR",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "date",
+                "Train_Steps",
+                "Seeds",
+                "Avg_Score",
+                "Avg_Success_Rate",
+                "VT_Score",
+                "VT_SR",
+                "VU_Score",
+                "VU_SR",
+                "Mobile_Score",
+                "Mobile_SR",
+                "Dexterous_Score",
+                "Dexterous_SR"
+            ]
+        }
+    },
+    "TabConfig": [
+        {
+            "key": "Overall",
+            "index": "Overall",
+            "name": {
+                "zh-CN": "综合评分",
+                "en-US": "Overall"
+            },
+            "tableData": "OverallTable",
+            "tableColumn": "OverallColumn"
+        }
+    ]
+}

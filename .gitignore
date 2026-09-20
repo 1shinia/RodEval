@@ -93,6 +93,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# OpenCompass 榜单快照 promote 产生的备份目录（只保留最近 3 份，不入库）
+leaderboard_data/full_snapshot.bak.*/
+
 # Spyder project settings
 .spyderproject
 .spyproject

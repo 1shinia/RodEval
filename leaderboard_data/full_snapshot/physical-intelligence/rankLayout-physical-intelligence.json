@@ -1,0 +1,50 @@
+{
+  "zh-CN": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · Physical AI",
+      "title": "物理智能评测榜单",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/physics.svg",
+      "description": "基于静态、仿真、真机三位一体的评测方法，覆盖操作、导航、感知全栈能力维度，构建虚实一致、开放、严谨的具身评测体系。",
+      "stats": [
+        
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "能力榜单",
+          "title": "能力榜单",
+          "icon": "ability",
+          "lineTabs": [
+            { "key": "vla", "name": "具身操作榜"}
+          ]
+        }
+      ]
+    }
+  },
+  "en-US": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · Physical AI",
+      "title": "Physical Intelligence Leaderboard",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/physics.svg",
+      "description": "Trinity evaluation: static, simulation, real‑world. Covers full‑stack embodied AI and builds a sim-to-real, open, and rigorous benchmark system.",
+      "stats": [
+
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "Ability Rankings",
+          "title": "Ability Rankings",
+          "icon": "ability",
+          "lineTabs": [
+            { "key": "vla", "name": "Embodied AI Manipulation Leaderboard"}
+          ]
+        }
+      ]
+    }
+  }
+}

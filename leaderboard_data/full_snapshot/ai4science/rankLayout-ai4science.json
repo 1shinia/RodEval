@@ -1,0 +1,52 @@
+{
+  "zh-CN": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · AI for Science",
+      "title": "科学智能评测榜单",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/science.svg",
+      "description": "依托于书生科学发现平台，打造面向多学科、多模态的科学智能评测体系，专注衡量大模型/智能体在核心科研能力上的真实水平。",
+      "stats": [
+        
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "能力榜单",
+          "title": "能力榜单",
+          "icon": "ability",
+          "lineTabs": [
+            { "key": "llm", "name": "大语言模型榜"},
+            { "key": "vlm", "name": "多模态模型榜"}
+          ]
+        }
+      ]
+    }
+  },
+  "en-US": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · AI for Science",
+      "title": "Scientific Intelligence Leaderboard",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/science.svg",
+      "description": "Rely on Intern Discovery, build a multidisciplinary and multimodal scientific intelligence evaluation system to measure the true level of core scientific research capabilities of large models/agents.",
+      "stats": [
+
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "Ability Rankings",
+          "title": "Ability Rankings",
+          "icon": "ability",
+          "lineTabs": [
+            { "key": "llm", "name": "Large Language Model Leaderboard"},
+            { "key": "vlm", "name": "Multimodal Model Leaderboard"}
+          ]
+        }
+      ]
+    }
+  }
+}

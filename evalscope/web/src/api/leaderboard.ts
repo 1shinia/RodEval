@@ -5,10 +5,17 @@ export interface LbPeriodOption {
   label: string
 }
 
+export interface LbBoardOption {
+  id: string
+  label: string
+  tabs?: LbPeriodOption[]
+}
+
 export interface LbMeta {
   llm_periods: LbPeriodOption[]
   mm_periods: LbPeriodOption[]
   vlm_tabs: LbPeriodOption[]
+  boards: LbBoardOption[]
   default_llm: string | null
   default_mm: string | null
 }
@@ -18,6 +25,7 @@ export interface LbColumn {
   zh: string
   en: string
   width?: number | null
+  sorter?: string | null
 }
 
 export interface LbTab {
@@ -57,4 +65,8 @@ export async function getLlmLeaderboard(period?: string): Promise<LlmLeaderboard
 
 export async function getMultimodalLeaderboard(tab?: string): Promise<MmLeaderboard> {
   return api<MmLeaderboard>('/api/v1/leaderboard/multimodal', tab ? { tab } : {})
+}
+
+export async function getBoard(board: string, tab?: string): Promise<MmLeaderboard> {
+  return api<MmLeaderboard>('/api/v1/leaderboard/board', tab ? { board, tab } : { board })
 }

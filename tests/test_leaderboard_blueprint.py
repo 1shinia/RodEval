@@ -61,6 +61,33 @@ def snapshot_root(tmp_path: Path) -> Path:
             {'key': 'Avg_Score_wo_Agent', 'title': {'zh-CN': '平均分数（不含智能体）', 'en-US': 'Avg (wo agent)'}},
         ], 'groups': {'all': ['model', 'Avg_Score_wo_Agent']}},
     })
+
+    # 智能体 —— agent 榜（带布局文件，验证布局驱动页签 + 只暴露有 data 的页签）
+    agent = snap / 'agent'
+    agent.mkdir(parents=True)
+    _write(agent / 'rankLayout-agent.json', {
+        'zh-CN': {
+            'hero': {'title': '智能体评测榜单'},
+            'ranks': {'sections': [
+                {'id': 'ability', 'lineTabs': [
+                    {'key': 'openclaw', 'name': {'zh-CN': 'OpenClaw 模型榜'}},
+                    {'key': 'hermes', 'name': {'zh-CN': 'Hermes 模型榜'}},
+                ]},
+            ]},
+        },
+    })
+    _write(agent / 'data-agent-ability_openclaw.json', {
+        'OverallTable': [{'key': 0, 'model': 'OpenClaw-1', 'Score': 88.5}],
+        'globalData': {},
+    })
+    _write(agent / 'column-agent-ability_openclaw.json', {
+        'TabConfig': [{'key': 'Overall', 'index': 'Overall', 'name': {'zh-CN': '综合评分', 'en-US': 'Overall'},
+                       'tableData': 'OverallTable', 'tableColumn': 'OverallColumn'}],
+        'OverallColumn': {'columns': [
+            {'key': 'model', 'title': {'zh-CN': '模型', 'en-US': 'Model'}},
+            {'key': 'Score', 'title': {'zh-CN': '分数', 'en-US': 'Score'}},
+        ]},
+    })
     return tmp_path
 
 
@@ -116,3 +143,51 @@ def test_path_traversal_period_falls_back(client):
     r = client.get('/api/v1/leaderboard/llm', query_string={'period': '..%2F..%2Fsecret'})
     assert r.status_code == 200
     assert r.get_json()['period'] == '26-07.20260724'
+
+
+def test_meta_boards_lists_all(client):
+    data = client.get('/api/v1/leaderboard/meta').get_json()
+    boards = {b['id']: b for b in data['boards']}
+    assert list(boards) == ['llm', 'multimodal', 'agent', 'ai4science', 'physical-intelligence']
+    # 多模态（无布局文件，回退到旧中文名表）
+    assert boards['multimodal']['tabs'] == [{'value': 'ability_official', 'label': '官方评测榜'}]
+    # 智能体（有布局文件，只暴露有 data 的页签：hermes 无 data 故不出现）
+    assert boards['agent']['tabs'] == [{'value': 'ability_openclaw', 'label': 'OpenClaw 模型榜'}]
+    # 未落盘的新榜：出现在清单里但页签为空
+    assert boards['ai4science']['tabs'] == []
+    assert boards['physical-intelligence']['tabs'] == []
+
+
+def test_board_serves_agent(client):
+    d = client.get('/api/v1/leaderboard/board', query_string={'board': 'agent'}).get_json()
+    assert d['board'] == 'agent'
+    assert d['tab'] == 'ability_openclaw'
+    assert d['name'] == 'OpenClaw 模型榜'
+    assert len(d['rows']) == 1
+    assert d['rows'][0]['model'] == 'OpenClaw-1'
+    assert [c['key'] for c in d['columns']] == ['model', 'Score']
+
+
+def test_board_unknown_404(client):
+    r = client.get('/api/v1/leaderboard/board', query_string={'board': 'nope'})
+    assert r.status_code == 404
+
+
+def test_board_unknown_tab_falls_back_to_first(client):
+    d = client.get('/api/v1/leaderboard/board',
+                   query_string={'board': 'agent', 'tab': 'ability_hermes'}).get_json()
+    # hermes 无 data → 不在页签清单 → 回退到第一个有效页签 openclaw
+    assert d['tab'] == 'ability_openclaw'
+
+
+def test_extend_cols_surfaces_sorter():
+    """列配置里 customizeRender.sorter 是前端默认排序的权威信号，须透出。"""
+    config = {'columns': [
+        {'key': 'model', 'title': {'zh-CN': '模型'}},
+        {'key': 'Score', 'title': {'zh-CN': '总体评分'}, 'customizeRender': {'sorter': 'descend'}},
+        {'key': 'Knowledge', 'title': {'zh-CN': '知识'}, 'customizeRender': {'sorter': ''}},
+    ]}
+    cols = lb._extend_cols(config)
+    assert cols[0]['sorter'] is None
+    assert cols[1]['sorter'] == 'descend'
+    assert cols[2]['sorter'] == ''

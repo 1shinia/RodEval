@@ -1,0 +1,110 @@
+{
+    "OverallColumn": {
+        "columns": [
+            {
+                "title": {
+                    "zh-CN": "模型",
+                    "en-US": "Model"
+                },
+                "width": 220,
+                "key": "model",
+                "fixed": "left"
+            },
+            {
+                "title": {
+                    "zh-CN": "评测时间",
+                    "en-US": "Eval Time"
+                },
+                "width": 160,
+                "key": "date"
+            },
+            {
+                "title": {
+                    "zh-CN": "参数量(B)",
+                    "en-US": "Params(B)"
+                },
+                "width": 150,
+                "key": "para_num"
+            },
+            {
+                "title": {
+                    "zh-CN": "总体评分",
+                    "en-US": "Overall Score"
+                },
+                "width": 200,
+                "key": "Score",
+                "customizeRender": {
+                    "sorter": "descend"
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "科学知识理解",
+                    "en-US": "Scientific Knowledge Understanding"
+                },
+                "width": 180,
+                "key": "Knowledge_Understanding",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "科学代码生成",
+                    "en-US": "Scientific Code Generation"
+                },
+                "width": 180,
+                "key": "Code_Generation",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "科学符号推理",
+                    "en-US": "Scientific Symbolic Reasoning"
+                },
+                "width": 200,
+                "key": "Symbolic_Reasoning",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            },
+            {
+                "title": {
+                    "zh-CN": "科学假设生成",
+                    "en-US": "Scientific Hypothesis Generation"
+                },
+                "width": 200,
+                "key": "Hypothesis_Generation",
+                "customizeRender": {
+                    "sorter": ""
+                }
+            }
+        ],
+        "groups": {
+            "all": [
+                "model",
+                "date",
+                "para_num",
+                "Score",
+                "Knowledge_Understanding",
+                "Code_Generation",
+                "Symbolic_Reasoning",
+                "Hypothesis_Generation"
+            ]
+        }
+    },
+    "TabConfig": [
+        {
+            "key": "Overall",
+            "index": "Overall",
+            "name": {
+                "zh-CN": "综合评分",
+                "en-US": "Overall"
+            },
+            "tableData": "OverallTable",
+            "tableColumn": "OverallColumn"
+        }
+    ]
+}
