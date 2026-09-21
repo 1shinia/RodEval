@@ -302,8 +302,21 @@ export default function PerfReportsPage() {
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)]">
               <h3 className="text-base font-semibold text-[var(--text)]">{t('perf.slaResults')}</h3>
-              <button onClick={() => setSlaData(null)}
-                className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer">✕</button>
+              <div className="flex items-center gap-2">
+                {/* 有 sla_summary.json 的任务，行内「报告」按钮打开的是本弹窗（handleViewReport 的 try 分支），
+                    catch 分支只在无 SLA 结果时才开报告 ⇒ 这里必须给出通往 HTML 报告的入口，
+                    否则这类任务的报告在列表里就再也点不开了 */}
+                <a
+                  href={`/viewer?url=${encodeURIComponent(getPerfReportUrl(slaData.taskId))}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded text-[var(--accent)] hover:bg-[var(--accent-dim)] transition-colors"
+                >
+                  <ExternalLink size={13} />{t('perf.report')}
+                </a>
+                <button onClick={() => setSlaData(null)}
+                  className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer">✕</button>
+              </div>
             </div>
             <div className="p-5 space-y-5">
               {/* Conclusion table */}
