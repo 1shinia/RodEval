@@ -39,6 +39,15 @@ const GroupHeading = ({ label, hint }: { label: string; hint?: string }) => (
   </div>
 )
 
+// Extra Args 最后合并进请求体（后端 payload.update），这几个键一旦被覆盖，压测结果就不再可信：
+// model 被换掉 ⇒ 报告里的模型名与实际请求不符；prompt / messages 被换掉 ⇒ 所有请求变成同一段文本；
+// stream 被换掉 ⇒ 流式指标口径改变（后端还会留下 stream_options，请求体自相矛盾）。
+const EXTRA_ARGS_FORBIDDEN = ['model', 'messages', 'prompt', 'stream']
+
+// 只接受 JSON 对象：数组/字符串/数字会被展开成意外的键（如 "abc" → {0:'a',1:'b',2:'c'}）。
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
 export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit, onModeChange }: Props) {
   const { t } = useLocale()
   const [testMode, setTestMode] = useState<'single' | 'batch'>('single')
@@ -136,10 +145,23 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     }
     if (extraArgs.trim()) {
       try { config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), ...JSON.parse(extraArgs) } }
-      catch { /* handled in validation */ }
+      catch { /* 由 checkExtraArgs 在提交前校验，这里仅跳过合并 */ }
     }
     if (readTimeout) config.read_timeout = Number(readTimeout)
     return config
+  }
+
+  /** Extra Args 校验：必须是 JSON 对象，且不含会破坏压测有效性的禁用键。合法返回 null，否则返回错误文案。 */
+  const checkExtraArgs = (): string | null => {
+    if (!extraArgs.trim()) return null
+    try {
+      const parsed: unknown = JSON.parse(extraArgs)
+      if (!isPlainObject(parsed)) return t('perf.extraArgsNotObject')
+      const forbidden = EXTRA_ARGS_FORBIDDEN.filter((k) => k in parsed)
+      return forbidden.length > 0 ? t('perf.extraArgsForbidden', { keys: forbidden.join(', ') }) : null
+    } catch {
+      return t('perf.invalidJson')
+    }
   }
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
@@ -147,8 +169,16 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
 
     if (isBatch) {
       // Batch mode: validate CSV uploaded, then submit via onBatchSubmit
+      setBatchError('')
       if (!batchInfo?.batch_id) {
-        setBatchError('请先上传模型列表文件')
+        setBatchError(t('perf.errCsvRequired'))
+        return
+      }
+      // 批量路径原先完全跳过校验：未上传 CSV 之外的错误（含 Extra Args 的非法 JSON / 禁用键）
+      // 会被 buildSharedConfig 静默丢弃，用户以为参数生效了
+      const extraArgsErr = checkExtraArgs()
+      if (extraArgsErr) {
+        setBatchError(extraArgsErr)
         return
       }
       const sharedConfig = buildSharedConfig()
@@ -158,19 +188,19 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
 
     // Single mode validation
     const newErrors: Record<string, string> = {}
-    if (!model.trim()) newErrors.model = 'Required'
-    if (!url.trim()) newErrors.url = 'Required'
-    if (!apiKey.trim()) newErrors.apiKey = 'Required'
+    if (!model.trim()) newErrors.model = t('perf.required')
+    if (!url.trim()) newErrors.url = t('perf.required')
+    if (!apiKey.trim()) newErrors.apiKey = t('perf.required')
 
     // URL format
     if (url.trim()) {
       try {
         const u = new URL(url.trim())
         if (!['http:', 'https:'].includes(u.protocol)) {
-          newErrors.url = 'URL 必须以 http:// 或 https:// 开头'
+          newErrors.url = t('perf.errUrlScheme')
         }
       } catch {
-        newErrors.url = 'URL 格式不正确'
+        newErrors.url = t('perf.errUrlInvalid')
       }
     }
 
@@ -181,44 +211,44 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         for (const p of parts) {
           const n = Number(p)
           if (!Number.isInteger(n) || n < 1) {
-            newErrors[key] = `${label} 必须为正整数（逗号分隔）`
+            newErrors[key] = t('perf.errPosIntComma', { label })
             break
           }
         }
       }
     }
-    checkCommaSepPosInt(parallel, 'parallel', '并发数')
-    checkCommaSepPosInt(number, 'number', '请求数')
+    checkCommaSepPosInt(parallel, 'parallel', t('perf.parallelLabel'))
+    checkCommaSepPosInt(number, 'number', t('perf.numberLabel'))
 
     // Rate: positive number
     if (rate) {
       const r = Number(rate)
-      if (isNaN(r) || r <= 0) newErrors.rate = '请求速率必须为正数'
+      if (isNaN(r) || r <= 0) newErrors.rate = t('perf.errRatePositive')
     }
 
     // Warmup ratio: integer 1-99 (percent of total requests)
     if (warmupRatio) {
       const w = Number(warmupRatio)
-      if (!Number.isInteger(w) || w < 1 || w > 99) newErrors.warmupRatio = '预热比例必须为 1-99 的整数'
+      if (!Number.isInteger(w) || w < 1 || w > 99) newErrors.warmupRatio = t('perf.errWarmupRange')
     }
 
     // Duration budget: positive integer seconds
     if (duration) {
       const d = Number(duration)
-      if (!Number.isInteger(d) || d < 1) newErrors.duration = '运行时长预算必须为正整数'
+      if (!Number.isInteger(d) || d < 1) newErrors.duration = t('perf.errDurationPosInt')
     }
 
     // Token / prompt length fields: positive integers
     const checkPosInt = (val: string, key: string, label: string) => {
       if (val) {
         const n = Number(val)
-        if (!Number.isInteger(n) || n < 1) newErrors[key] = `${label} 必须为正整数`
+        if (!Number.isInteger(n) || n < 1) newErrors[key] = t('perf.errPosInt', { label })
       }
     }
-    checkPosInt(maxTokens, 'maxTokens', '最大输出长度')
-    checkPosInt(minTokens, 'minTokens', '最小输出长度')
-    checkPosInt(maxPromptLen, 'maxPromptLen', '最大 Prompt 长度')
-    checkPosInt(minPromptLen, 'minPromptLen', '最小 Prompt 长度')
+    checkPosInt(maxTokens, 'maxTokens', t('perf.maxTokens'))
+    checkPosInt(minTokens, 'minTokens', t('perf.minTokens'))
+    checkPosInt(maxPromptLen, 'maxPromptLen', t('perf.maxPromptLen'))
+    checkPosInt(minPromptLen, 'minPromptLen', t('perf.minPromptLen'))
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -234,8 +264,8 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     if (apiKey) config.api_key = apiKey
 
     if (extraArgs.trim()) {
-      try { config.extra_args = { ...(config.extra_args as Record<string, unknown> || {}), ...JSON.parse(extraArgs) } }
-      catch { newErrors.extra_args = t('perf.invalidJson') }
+      const extraArgsErr = checkExtraArgs()
+      if (extraArgsErr) newErrors.extra_args = extraArgsErr
     }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -249,16 +279,16 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
 
       {/* Test Mode Toggle */}
       <div className="flex items-center gap-6">
-        <label className={`${FORM_LABEL_CLASS} !mb-0`}>测试模式</label>
+        <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('perf.testMode')}</label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="radio" name="tm" value="single" checked={!isBatch}
             onChange={() => { setTestMode('single'); onModeChange?.('single') }} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">单模型测试</span>
+          <span className="text-sm text-[var(--text)]">{t('perf.modeSingle')}</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="radio" name="tm" value="batch" checked={isBatch}
             onChange={() => { setTestMode('batch'); onModeChange?.('batch') }} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">批量测试</span>
+          <span className="text-sm text-[var(--text)]">{t('perf.modeBatch')}</span>
         </label>
       </div>
 
@@ -272,7 +302,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-dim)]/10 transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              下载模板
+              {t('perf.downloadTemplate')}
             </a>
 
             <input
@@ -288,7 +318,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled}
             >
-              选择文件
+              {t('perf.selectFile')}
             </Button>
 
             {batchFile && (
@@ -298,14 +328,14 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
                 onClick={handleBatchUpload}
                 disabled={disabled || batchUploading}
               >
-                {batchUploading ? '上传中...' : '上传文件'}
+                {batchUploading ? t('perf.uploading') : t('perf.uploadFile')}
               </Button>
             )}
           </div>
 
           {batchFile && !batchInfo && !batchError && (
             <p className="text-xs text-[var(--text-muted)]">
-              已选择: {batchFile.name} — 点击"上传文件"解析模型列表
+              {t('perf.fileChosen', { name: batchFile.name })}
             </p>
           )}
 
@@ -316,7 +346,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
           {batchInfo && (
             <div className="space-y-1">
               <p className="text-xs text-[var(--green)]">
-                ✓ 上传成功，共 {batchInfo.model_count} 个模型
+                {t('perf.uploadOk', { n: batchInfo.model_count })}
               </p>
               <div className="flex flex-wrap gap-1">
                 {batchInfo.models.map((m) => (
@@ -448,10 +478,10 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
             className={inputClass(errors.minPromptLen)} placeholder={t('perf.placeholderDefaultVal', { v: '0' })} />
         </FormField>
 
-        <FormField label="请求超时（秒）" error={errors.readTimeout}>
+        <FormField label={t('perf.readTimeout')} error={errors.readTimeout}>
           <input type="number" value={readTimeout}
             onChange={(e) => { setReadTimeout(e.target.value.replace(/[^0-9]/g, '')); if (errors.readTimeout) setErrors((p) => ({ ...p, readTimeout: '' })) }}
-            className={inputClass(errors.readTimeout)} placeholder="默认 300" />
+            className={inputClass(errors.readTimeout)} placeholder={t('perf.placeholderDefaultVal', { v: '300' })} />
         </FormField>
 
       </div>
@@ -469,7 +499,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
           </FormField>
           )}
 
-          <FormField label="Extra Args (JSON)" className="md:col-span-2" error={errors.extra_args}>
+          <FormField label={t('perf.extraArgs')} className="md:col-span-2" error={errors.extra_args} hint={t('perf.extraArgsHint')}>
             <textarea
               value={extraArgs}
               onChange={(e) => { setExtraArgs(e.target.value); if (errors.extra_args) setErrors((p) => ({ ...p, extra_args: '' })) }}
@@ -482,7 +512,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       </Collapsible>
 
       <Button type="submit" variant="primary" disabled={disabled} className="btn-glow">
-        {isBatch ? '开始批量测试' : t('perf.startPerf')}
+        {isBatch ? t('perf.startBatch') : t('perf.startPerf')}
       </Button>
     </form>
   )
