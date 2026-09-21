@@ -71,6 +71,9 @@ export default function LLMEvalForm({ context }: Props) {
   const [datasetLocalType, setDatasetLocalType] = useState('general_qa')
   const [datasetDir, setDatasetDir] = useState('')
   const isLocalDataset = datasetHub === 'local'
+  // Anthropic 的思考走 thinking.budget_tokens（后端从 generation_config.reasoning_tokens 映射），
+  // 不认 OpenAI/Qwen 系的 extra_body.enable_thinking ⇒ 该协议下不下发这个键，并禁用「思考模式」下拉
+  const isAnthropic = evalType === 'anthropic'
 
   // Common
   const [limit, setLimit] = useState('')
@@ -211,6 +214,33 @@ export default function LLMEvalForm({ context }: Props) {
         try { Object.assign(dsArgs, JSON.parse(datasetArgs) as Record<string, unknown>) }
         catch { toast.error('数据集参数 JSON 格式不正确'); return }
       }
+      // 生成参数 / 裁判模型 / 系统提示词必须用单模型那套「嵌套」形状，否则后端静默忽略：
+      //  ・TaskConfig 没有顶层 temperature/top_p/max_tokens/top_k ⇒ 平铺发送无效（批量采样参数此前就是这么失效的）
+      //  ・裁判只认 judge_model_args（没有顶层 judge_model/judge_api_url/judge_api_key）
+      //  ・system_prompt 也不是 TaskConfig 字段，单模型把它注入到每个数据集的参数里
+      const genConfig: Record<string, unknown> = {}
+      if (temperature) genConfig.temperature = Number(temperature)
+      if (topP) genConfig.top_p = Number(topP)
+      if (maxTokens) genConfig.max_tokens = Number(maxTokens)
+      if (topK) genConfig.top_k = Number(topK)
+      // 与单模型一致：Anthropic 不下发 enable_thinking
+      if (thinkingMode !== 'auto' && !isAnthropic) {
+        genConfig.extra_body = { ...(genConfig.extra_body as Record<string, unknown> || {}), enable_thinking: thinkingMode === 'on' }
+      }
+      if (systemPrompt.trim()) {
+        for (const ds of dsList) {
+          const entry = (dsArgs[ds] as Record<string, unknown>) || {}
+          dsArgs[ds] = { system_prompt: systemPrompt.trim(), ...entry }
+        }
+      }
+      const judgeArgs: Record<string, unknown> = {}
+      if (judgeModel.trim() || judgeApiUrl.trim() || judgeApiKey.trim()) {
+        if (judgeModel.trim()) judgeArgs.model_id = judgeModel.trim()
+        if (judgeApiUrl.trim()) judgeArgs.api_url = judgeApiUrl.trim()
+        // 与后端 _build_task_config_openai 的防御一致：部分配置时用主 key 兜底，避免裁判 401
+        judgeArgs.api_key = judgeApiKey.trim() || apiKey || ''
+        judgeArgs.eval_type = isAnthropic ? 'anthropic_api' : 'openai_api'
+      }
       const shared: Record<string, unknown> = {
         eval_backend: context.evalMode === 'rag' ? 'RAGEval' : context.evalMode === 'aigc' ? 'AIGCEval' : context.evalMode === 'audio' ? 'AudioEval' : '',
         datasets: dsList,
@@ -222,20 +252,13 @@ export default function LLMEvalForm({ context }: Props) {
         repeats: repeats ? Number(repeats) : 1,
         timeout: timeout ? Number(timeout) : 300,
         stream,
-        temperature: temperature || undefined,
-        top_p: topP || undefined,
-        max_tokens: maxTokens || undefined,
-        top_k: topK || undefined,
         seed: seed || undefined,
         judge_strategy: judgeStrategy,
-        judge_model: judgeModel || undefined,
-        judge_api_url: judgeApiUrl || undefined,
-        judge_api_key: judgeApiKey || undefined,
         ignore_errors: ignoreErrors,
         use_sandbox: useSandbox,
         dataset_args: Object.keys(dsArgs).length ? dsArgs : undefined,
-        system_prompt: systemPrompt || undefined,
-        thinking_mode: thinkingMode,
+        generation_config: Object.keys(genConfig).length ? genConfig : undefined,
+        judge_model_args: Object.keys(judgeArgs).length ? judgeArgs : undefined,
       }
       onBatchSubmit(batchInfo.batch_id, shared)
       return
@@ -339,8 +362,9 @@ export default function LLMEvalForm({ context }: Props) {
     if (maxTokens) genConfig.max_tokens = Number(maxTokens)
     if (topK) genConfig.top_k = Number(topK)
     if (Object.keys(genConfig).length > 0) config.generation_config = genConfig
-    // Thinking mode
-    if (thinkingMode !== 'auto') {
+    // Thinking mode：enable_thinking 是 OpenAI/Qwen 系参数，Anthropic 不认（其 thinking 走 reasoning_tokens），
+    // 该协议下不发，避免未知字段被塞进请求体
+    if (thinkingMode !== 'auto' && !isAnthropic) {
       genConfig.extra_body = { ...(genConfig.extra_body || {}), enable_thinking: thinkingMode === 'on' }
       config.generation_config = genConfig
     }
@@ -576,8 +600,9 @@ export default function LLMEvalForm({ context }: Props) {
             {/* Thinking mode */}
             <div className="md:col-span-3 border-t border-[var(--border-md)] pt-3">
               <div className="flex items-center gap-4">
-                <FormField label={t('eval.thinkingMode')}>
-                  <select value={thinkingMode} onChange={(e) => setThinkingMode(e.target.value)} className={FORM_INPUT_CLASS}>
+                <FormField label={t('eval.thinkingMode')} hint={isAnthropic ? t('eval.thinkingModeAnthropicHint') : undefined}>
+                  <select value={thinkingMode} disabled={isAnthropic} onChange={(e) => setThinkingMode(e.target.value)}
+                    className={`${FORM_INPUT_CLASS} ${isAnthropic ? 'opacity-50 cursor-not-allowed' : ''}`}>
                     <option value="auto">{t('eval.thinkingModeAuto')}</option>
                     <option value="on">{t('eval.thinkingModeOn')}</option>
                     <option value="off">{t('eval.thinkingModeOff')}</option>

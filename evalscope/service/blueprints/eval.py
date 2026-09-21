@@ -1515,29 +1515,28 @@ def launch_eval_batch():
 
     # current_uid was captured above (used for ownership + slot reservation).
 
+    # 只保留 TaskConfig 真正认得的键：生成参数走 generation_config、裁判走 judge_model_args。
+    # 顶层 temperature/top_p/max_tokens/top_k/thinking_mode/judge_model/judge_api_url/judge_api_key/
+    # system_prompt 都不是 TaskConfig 字段，平铺透传会被 pydantic 静默忽略 —— 批量模式下这批参数曾因此全部失效。
     shared_config = {
         'user_id': current_uid,
         'eval_backend': data.get('eval_backend', ''),
         'datasets': data.get('datasets', []),
+        'dataset_hub': data.get('dataset_hub'),
+        'dataset_dir': data.get('dataset_dir'),
+        'random_sample': data.get('random_sample'),
         'limit': data.get('limit'),
         'eval_batch_size': data.get('eval_batch_size', 1),
         'repeats': data.get('repeats', 1),
         'timeout': data.get('timeout', 300),
         'stream': data.get('stream', False),
-        'temperature': data.get('temperature'),
-        'top_p': data.get('top_p'),
-        'max_tokens': data.get('max_tokens'),
-        'top_k': data.get('top_k'),
         'seed': data.get('seed', 42),
         'judge_strategy': data.get('judge_strategy', 'auto'),
-        'judge_model': data.get('judge_model'),
-        'judge_api_url': data.get('judge_api_url'),
-        'judge_api_key': data.get('judge_api_key'),
         'ignore_errors': data.get('ignore_errors', False),
         'use_sandbox': data.get('use_sandbox', False),
         'dataset_args': data.get('dataset_args'),
-        'system_prompt': data.get('system_prompt'),
-        'thinking_mode': data.get('thinking_mode'),
+        'generation_config': data.get('generation_config'),
+        'judge_model_args': data.get('judge_model_args'),
         'eval_config': data.get('eval_config'),
     }
 
@@ -1585,17 +1584,13 @@ def launch_eval_batch():
                     if eval_backend:
                         eval_data['eval_backend'] = eval_backend
 
-                    # Merge shared config
-                    # dataset_hub / dataset_dir / random_sample 必须在内：否则批量模式下
-                    # 「数据集来源（含本地数据集路径）」「数据集目录」「随机采样」三个控件
-                    # 会被静默丢弃，与单模型路径行为不一致（本地数据集还会按默认 hub 去拉数据）
+                    # Merge shared config（只列 TaskConfig 认得的键：生成参数走 generation_config、
+                    # 裁判走 judge_model_args；平铺的采样/裁判/系统提示词键会被 pydantic 静默忽略）
                     for key in ('datasets', 'dataset_hub', 'dataset_dir', 'random_sample',
                                 'limit', 'eval_batch_size', 'repeats',
-                                'timeout', 'stream', 'temperature', 'top_p', 'max_tokens',
-                                'top_k', 'seed', 'judge_strategy', 'judge_model',
-                                'judge_api_url', 'judge_api_key', 'ignore_errors',
-                                'use_sandbox',
-                                'dataset_args', 'system_prompt', 'thinking_mode'):
+                                'timeout', 'stream', 'seed', 'judge_strategy',
+                                'ignore_errors', 'use_sandbox',
+                                'dataset_args', 'generation_config', 'judge_model_args'):
                         val = shared_config.get(key)
                         if val is not None:
                             eval_data[key] = val
