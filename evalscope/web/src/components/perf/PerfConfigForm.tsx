@@ -28,11 +28,6 @@ const LLM_DATASETS_VISIBLE = ['random', 'random_vl']
 // 下拉实际选项 = 全集与可见白名单的交集（保持全集顺序）
 const LLM_DATASETS = LLM_DATASETS_ALL.filter((d) => LLM_DATASETS_VISIBLE.includes(d))
 
-// 依赖 Tokenizer 的参数（如 Prefix 长度）在无 Tokenizer 时静默失效。本版界面不提供 Tokenizer
-// 配置入口（交付形态：由部署方在服务端接入），故这些参数一律置灰并说明原因，避免用户填了没有效果。
-// 服务端接入 Tokenizer 后把此常量翻为 true 即可恢复可用，无需再改组件。
-const TOKENIZER_CONFIGURED = false
-
 // 分组小标题：跨两列，标题 + 细分隔线 + 可选的一行行为说明（说明字号与 FormField 的 hint 一致）。
 const GroupHeading = ({ label, hint }: { label: string; hint?: string }) => (
   <div className="md:col-span-2 mt-1">
@@ -69,7 +64,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   const [dataset, setDataset] = useState('random')
   const [maxPromptLen, setMaxPromptLen] = useState('')
   const [minPromptLen, setMinPromptLen] = useState('')
-  const [prefixLength, setPrefixLength] = useState('')
   const [thinkingMode, setThinkingMode] = useState('auto')
   const [extraArgs, setExtraArgs] = useState('')
   const [readTimeout, setReadTimeout] = useState('')
@@ -137,7 +131,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     if (dataset) config.dataset = dataset
     if (maxPromptLen) config.max_prompt_length = Number(maxPromptLen)
     if (minPromptLen) config.min_prompt_length = Number(minPromptLen)
-    if (prefixLength) config.prefix_length = Number(prefixLength)
     if (thinkingMode !== 'auto') {
       config.extra_args = { enable_thinking: thinkingMode === 'on' }
     }
@@ -226,12 +219,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     checkPosInt(minTokens, 'minTokens', '最小输出长度')
     checkPosInt(maxPromptLen, 'maxPromptLen', '最大 Prompt 长度')
     checkPosInt(minPromptLen, 'minPromptLen', '最小 Prompt 长度')
-
-    // prefixLength: non-negative integer
-    if (prefixLength) {
-      const n = Number(prefixLength)
-      if (!Number.isInteger(n) || n < 0) newErrors.prefixLength = '前缀长度必须为非负整数'
-    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -473,7 +460,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       <Collapsible header={<span className="text-sm text-[var(--accent)]">{t('perf.moreParams')}</span>} defaultOpen={false} chevronAfter chevronColor="var(--accent)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
           {!isEmbeddingOrRerank(api) && (
-          <FormField label={t('perf.thinkingMode')}>
+          <FormField label={t('perf.thinkingMode')} hint={t('perf.thinkingModeHint')}>
             <select value={thinkingMode} onChange={(e) => setThinkingMode(e.target.value)} className={FORM_INPUT_CLASS}>
               <option value="auto">{t('perf.thinkingModeAuto')}</option>
               <option value="on">{t('perf.thinkingModeOn')}</option>
@@ -481,12 +468,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
             </select>
           </FormField>
           )}
-
-          <FormField label={t('perf.prefixLength')} error={errors.prefixLength} hint={t('perf.prefixLengthHint')}>
-            <input type="number" value={prefixLength} disabled={!TOKENIZER_CONFIGURED}
-              onChange={(e) => { setPrefixLength(e.target.value.replace(/[^0-9]/g, '')); if (errors.prefixLength) setErrors((p) => ({ ...p, prefixLength: '' })) }}
-              className={`${inputClass(errors.prefixLength)} disabled:opacity-50 disabled:cursor-not-allowed`} placeholder="0" />
-          </FormField>
 
           <FormField label="Extra Args (JSON)" className="md:col-span-2" error={errors.extra_args}>
             <textarea
