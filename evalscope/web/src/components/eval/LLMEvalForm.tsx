@@ -197,9 +197,26 @@ export default function LLMEvalForm({ context }: Props) {
     // Batch mode: delegate to onBatchSubmit
     if (isBatch) {
       if (!batchInfo?.batch_id) { toast.error('请先上传模型列表文件'); return }
+      const dsList = datasets.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+      if (!dsList.length) { toast.error('请先填写测试数据集'); return }
+      // 本地数据集：批量路径此前不带 hub / path（shared 与后端合并白名单里都没有这两个键），
+      // 会被静默丢弃并按默认 hub 去拉数据 —— 这里与单模型路径对齐。
+      if (isLocalDataset && !datasetPath.trim()) { toast.error('本地数据集需要填写数据集路径'); return }
+      const dsArgs: Record<string, unknown> = {}
+      if (isLocalDataset) {
+        for (const ds of dsList) dsArgs[ds] = { local_path: datasetPath.trim() }
+      }
+      if (datasetArgs.trim()) {
+        // 此前这里把 JSON 文本原样当字符串发出，后端 TaskConfig.dataset_args 需要的是对象
+        try { Object.assign(dsArgs, JSON.parse(datasetArgs) as Record<string, unknown>) }
+        catch { toast.error('数据集参数 JSON 格式不正确'); return }
+      }
       const shared: Record<string, unknown> = {
         eval_backend: context.evalMode === 'rag' ? 'RAGEval' : context.evalMode === 'aigc' ? 'AIGCEval' : context.evalMode === 'audio' ? 'AudioEval' : '',
-        datasets: datasets ? datasets.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+        datasets: dsList,
+        dataset_hub: isLocalDataset ? 'local' : datasetHub,
+        dataset_dir: datasetDir || undefined,
+        random_sample: limit && randomSample ? true : undefined,
         limit: limit ? Number(limit) : undefined,
         eval_batch_size: evalBatchSize ? Number(evalBatchSize) : 1,
         repeats: repeats ? Number(repeats) : 1,
@@ -216,7 +233,7 @@ export default function LLMEvalForm({ context }: Props) {
         judge_api_key: judgeApiKey || undefined,
         ignore_errors: ignoreErrors,
         use_sandbox: useSandbox,
-        dataset_args: datasetArgs || undefined,
+        dataset_args: Object.keys(dsArgs).length ? dsArgs : undefined,
         system_prompt: systemPrompt || undefined,
         thinking_mode: thinkingMode,
       }

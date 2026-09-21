@@ -1586,7 +1586,11 @@ def launch_eval_batch():
                         eval_data['eval_backend'] = eval_backend
 
                     # Merge shared config
-                    for key in ('datasets', 'limit', 'eval_batch_size', 'repeats',
+                    # dataset_hub / dataset_dir / random_sample 必须在内：否则批量模式下
+                    # 「数据集来源（含本地数据集路径）」「数据集目录」「随机采样」三个控件
+                    # 会被静默丢弃，与单模型路径行为不一致（本地数据集还会按默认 hub 去拉数据）
+                    for key in ('datasets', 'dataset_hub', 'dataset_dir', 'random_sample',
+                                'limit', 'eval_batch_size', 'repeats',
                                 'timeout', 'stream', 'temperature', 'top_p', 'max_tokens',
                                 'top_k', 'seed', 'judge_strategy', 'judge_model',
                                 'judge_api_url', 'judge_api_key', 'ignore_errors',
