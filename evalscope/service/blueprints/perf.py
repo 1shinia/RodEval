@@ -189,7 +189,7 @@ def download_template():
         BATCH_CSV_TEMPLATE,
         mimetype='text/csv',
         as_attachment=True,
-        download_name='model_list_template.csv',
+        download_name='perf_model_list_template.csv',
     )
 
 
