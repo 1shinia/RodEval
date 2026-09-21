@@ -28,6 +28,22 @@ const LLM_DATASETS_VISIBLE = ['random', 'random_vl']
 // 下拉实际选项 = 全集与可见白名单的交集（保持全集顺序）
 const LLM_DATASETS = LLM_DATASETS_ALL.filter((d) => LLM_DATASETS_VISIBLE.includes(d))
 
+// 依赖 Tokenizer 的参数（如 Prefix 长度）在无 Tokenizer 时静默失效。本版界面不提供 Tokenizer
+// 配置入口（交付形态：由部署方在服务端接入），故这些参数一律置灰并说明原因，避免用户填了没有效果。
+// 服务端接入 Tokenizer 后把此常量翻为 true 即可恢复可用，无需再改组件。
+const TOKENIZER_CONFIGURED = false
+
+// 分组小标题：跨两列，标题 + 细分隔线 + 可选的一行行为说明（说明字号与 FormField 的 hint 一致）。
+const GroupHeading = ({ label, hint }: { label: string; hint?: string }) => (
+  <div className="md:col-span-2 mt-1">
+    <div className="flex items-center gap-3">
+      <span className="text-sm font-medium text-[var(--text)] whitespace-nowrap">{label}</span>
+      <span className="h-px flex-1 bg-[var(--border)]" />
+    </div>
+    {hint && <p className="text-xs text-[var(--text-muted)] mt-1">{hint}</p>}
+  </div>
+)
+
 export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit, onModeChange }: Props) {
   const { t } = useLocale()
   const [testMode, setTestMode] = useState<'single' | 'batch'>('single')
@@ -206,8 +222,8 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         if (!Number.isInteger(n) || n < 1) newErrors[key] = `${label} 必须为正整数`
       }
     }
-    checkPosInt(maxTokens, 'maxTokens', '最大 Token 数')
-    checkPosInt(minTokens, 'minTokens', '最小 Token 数')
+    checkPosInt(maxTokens, 'maxTokens', '最大输出长度')
+    checkPosInt(minTokens, 'minTokens', '最小输出长度')
     checkPosInt(maxPromptLen, 'maxPromptLen', '最大 Prompt 长度')
     checkPosInt(minPromptLen, 'minPromptLen', '最小 Prompt 长度')
 
@@ -415,8 +431,9 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
             className={inputClass(errors.duration)} placeholder={t('perf.placeholderNoLimit')} />
         </FormField>
 
-        {/* ── Token / Prompt ── */}
+        {/* ── 输出长度 / 输入长度（Prompt） ── */}
         {!isEmbeddingOrRerank(api) && (<>
+        <GroupHeading label={t('perf.outputLenGroup')} />
         <FormField label={t('perf.maxTokens')} error={errors.maxTokens}>
           <input type="number" value={maxTokens}
             onChange={(e) => { setMaxTokens(e.target.value.replace(/[^0-9]/g, '')); if (errors.maxTokens) setErrors((p) => ({ ...p, maxTokens: '' })) }}
@@ -430,13 +447,15 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         </FormField>
         </>)}
 
-        <FormField label={t('perf.maxPromptLen')} error={errors.maxPromptLen}>
+        <GroupHeading label={t('perf.promptLenGroup')} hint={t('perf.promptLenHint')} />
+
+        <FormField label={t('perf.maxPromptLen')} error={errors.maxPromptLen} hint={t('perf.maxPromptLenHint')}>
           <input type="number" value={maxPromptLen}
             onChange={(e) => { setMaxPromptLen(e.target.value.replace(/[^0-9]/g, '')); if (errors.maxPromptLen) setErrors((p) => ({ ...p, maxPromptLen: '' })) }}
             className={inputClass(errors.maxPromptLen)} placeholder={t('perf.placeholderDefaultVal', { v: '131072' })} />
         </FormField>
 
-        <FormField label={t('perf.minPromptLen')} error={errors.minPromptLen}>
+        <FormField label={t('perf.minPromptLen')} error={errors.minPromptLen} hint={t('perf.minPromptLenHint')}>
           <input type="number" value={minPromptLen}
             onChange={(e) => { setMinPromptLen(e.target.value.replace(/[^0-9]/g, '')); if (errors.minPromptLen) setErrors((p) => ({ ...p, minPromptLen: '' })) }}
             className={inputClass(errors.minPromptLen)} placeholder={t('perf.placeholderDefaultVal', { v: '0' })} />
@@ -463,10 +482,10 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
           </FormField>
           )}
 
-          <FormField label={t('perf.prefixLength')} error={errors.prefixLength}>
-            <input type="number" value={prefixLength}
+          <FormField label={t('perf.prefixLength')} error={errors.prefixLength} hint={t('perf.prefixLengthHint')}>
+            <input type="number" value={prefixLength} disabled={!TOKENIZER_CONFIGURED}
               onChange={(e) => { setPrefixLength(e.target.value.replace(/[^0-9]/g, '')); if (errors.prefixLength) setErrors((p) => ({ ...p, prefixLength: '' })) }}
-              className={inputClass(errors.prefixLength)} placeholder="0" />
+              className={`${inputClass(errors.prefixLength)} disabled:opacity-50 disabled:cursor-not-allowed`} placeholder="0" />
           </FormField>
 
           <FormField label="Extra Args (JSON)" className="md:col-span-2" error={errors.extra_args}>
