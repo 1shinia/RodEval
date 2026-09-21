@@ -393,14 +393,15 @@ def launch_batch_perf():
                 if not number:
                     number = [10]
 
-                # max_tokens: CSV overrides, fallback to shared_config
+                # max_tokens: CSV 行 > 表单共享配置 > 不写该字段（交给后端默认值 2048）。
+                # 原先兜底 200，会让批量模式与单模型模式（留空即后端默认）的输出长度口径不一致。
                 csv_max_tokens = (row.get('max_tokens') or '').strip()
                 if csv_max_tokens:
                     max_tok = int(csv_max_tokens)
                 elif shared_config.get('max_tokens'):
                     max_tok = int(shared_config['max_tokens'])
                 else:
-                    max_tok = 200
+                    max_tok = None
 
                 stream = (row.get('stream', 'TRUE') or 'TRUE').strip().upper() == 'TRUE'
 
@@ -411,10 +412,11 @@ def launch_batch_perf():
                     'api_key': (row.get('api_key') or '').strip(),
                     'parallel': parallel,
                     'number': number,
-                    'max_tokens': max_tok,
                     'stream': stream,
                     'dataset': shared_config['dataset'],
                 }
+                if max_tok is not None:
+                    perf_data['max_tokens'] = max_tok
                 if row.get('prompt', '').strip():
                     perf_data['prompt'] = row['prompt'].strip()
                 if shared_config['rate']:
