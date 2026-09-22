@@ -17,6 +17,7 @@ def task_artifact_owned_by(
     user_id: int,
     is_admin: bool,
     output_dir: str,
+    allow_admin_legacy: bool = True,
 ) -> bool:
     """Return whether ``user_id`` may read artifacts belonging to ``task_id``.
 
@@ -45,4 +46,4 @@ def task_artifact_owned_by(
         with open(marker, encoding='utf-8') as f:
             return int(f.read().strip()) == int(user_id)
     except (OSError, ValueError):
-        return bool(is_admin)
+        return bool(is_admin and allow_admin_legacy)

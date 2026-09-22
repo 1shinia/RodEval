@@ -14,6 +14,7 @@ from ..utils import (
     count_running_tasks,
     create_log_file,
     get_log_content,
+    resolve_task_dir,
     run_in_subprocess,
     run_perf_wrapper,
     serialize_result,
@@ -1298,16 +1299,19 @@ def delete_performance_test():
         return jsonify({'error': str(e)}), 400
 
     import shutil
-    task_dir = os.path.join(OUTPUT_DIR, task_id)
-    if not os.path.isdir(task_dir):
-        return jsonify({'error': f'Task not found: {task_id}'}), 404
+    try:
+        task_dir = resolve_task_dir(task_id, OUTPUT_DIR, must_exist=True)
+    except ValueError as e:
+        status = 404 if str(e) == 'Task not found' else 400
+        return jsonify({'error': str(e)}), status
 
-    # Verify ownership
-    # (exists + not owner -> deny; unindexed dir -> admin only)
-    from .auth import get_current_user_id, check_task_ownership
+    # Destructive operations require durable ownership evidence; admin status
+    # alone must not authorize an arbitrary unindexed directory.
+    from .auth import get_current_user_id, check_task_artifact_access
     from .. import db as _db
-    allowed, _owner = check_task_ownership('perf_tasks', task_id)
-    if not allowed:
+    if not check_task_artifact_access(
+        task_id, ('perf_tasks', 'task_registry', 'task_state'), allow_admin_legacy=False
+    ):
         return jsonify({'error': 'Task not found'}), 404
 
     try:

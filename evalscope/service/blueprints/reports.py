@@ -38,7 +38,7 @@ from evalscope.utils.data_utils import (
 )
 from evalscope.utils.io_utils import OutputsStructure
 from evalscope.utils.logger import get_logger
-from ..utils import OUTPUT_DIR, validate_report_name, validate_root_path
+from ..utils import OUTPUT_DIR, resolve_task_dir, validate_report_name, validate_root_path
 
 logger = get_logger()
 
@@ -659,20 +659,15 @@ def delete_report():
         return jsonify({'error': 'report_name is required'}), 400
     try:
         root = _root_path()
-        prefix, _, _ = process_report_name(report_name)
-        report_dir = os.path.realpath(os.path.join(root, prefix))
-        # Security: ensure resolved path is within root
-        if report_dir != root and not report_dir.startswith(root + os.sep):
-            return jsonify({'error': 'Access denied: invalid report path'}), 403
-        if not os.path.isdir(report_dir):
-            return jsonify({'error': 'Report folder not found'}), 404
-
-        # Verify ownership before deletion
-        # (exists + not owner -> deny; unindexed dir -> admin only)
-        from .auth import get_current_user_id, check_task_ownership
         task_id, _, _ = process_report_name(report_name)
-        allowed, _owner = check_task_ownership('eval_reports', task_id)
-        if not allowed:
+        report_dir = resolve_task_dir(task_id, root, must_exist=True)
+
+        # Deletion requires durable ownership evidence.  Keep the more lenient
+        # admin fallback for legacy report reads, but never for filesystem removal.
+        from .auth import get_current_user_id, check_task_artifact_access
+        if not check_task_artifact_access(
+            task_id, ('eval_reports', 'task_registry', 'task_state'), allow_admin_legacy=False
+        ):
             return jsonify({'error': 'Report not found'}), 404
 
         import shutil
@@ -688,6 +683,8 @@ def delete_report():
             logger.warning(f'Failed to delete {task_id} from SQLite: {e}')
 
         return jsonify({'ok': True}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] Failed to delete report {report_name}: {e}', exc_info=True)

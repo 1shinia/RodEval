@@ -5,7 +5,12 @@ import os
 from pathlib import Path
 
 from flask import Blueprint, jsonify, send_file
-from evalscope.service.utils.log import OUTPUT_DIR as _OUTPUT_DIR, validate_task_id
+from evalscope.service.utils.log import (
+    OUTPUT_DIR as _OUTPUT_DIR,
+    resolve_task_dir,
+    resolve_task_file,
+    validate_task_id,
+)
 from evalscope.service.time_utils import epoch_to_utc_iso
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
@@ -145,19 +150,16 @@ def get_audio_report(task_id: str):
 
 @bp_audio.route('/file/<task_id>/<path:filename>', methods=['GET'])
 def serve_file(task_id: str, filename: str):
-    """Serve file from audio output directory with path traversal protection."""
+    """Serve generated audio artifacts from the task audio directory."""
     denied = _require_task_access(task_id)
     if denied is not None:
         return denied
-    task_dir = os.path.realpath(os.path.join(OUTPUT_DIR, task_id))
-    safe_path = os.path.realpath(os.path.join(task_dir, filename))
-
-    if os.path.commonpath([task_dir, safe_path]) != task_dir:
+    try:
+        safe_path = resolve_task_file(task_id, filename, OUTPUT_DIR, allowed_subdirs=('audio',))
+    except ValueError as e:
+        if str(e) == 'File not found':
+            return jsonify({'error': 'File not found'}), 404
         return jsonify({'error': 'Invalid path'}), 403
-
-    if not os.path.exists(safe_path):
-        return jsonify({'error': 'File not found'}), 404
-
     return send_file(safe_path)
 
 
@@ -165,19 +167,19 @@ def serve_file(task_id: str, filename: str):
 def delete_audio_report(task_id: str):
     """Delete an Audio evaluation report by task_id."""
     import shutil
-    task_dir = (OUTPUT_DIR / task_id).resolve()
-    output_root = OUTPUT_DIR.resolve()
-    if not str(task_dir).startswith(str(output_root) + os.sep) and task_dir != output_root:
-        return jsonify({'error': 'Access denied'}), 403
-    if not task_dir.is_dir():
-        return jsonify({'error': 'Report not found'}), 404
+    try:
+        task_dir = resolve_task_dir(task_id, OUTPUT_DIR, must_exist=True)
+    except ValueError as e:
+        status = 404 if str(e) == 'Task not found' else 400
+        return jsonify({'error': str(e)}), status
 
-    # Verify ownership before deletion
-    # (exists + not owner -> deny; unindexed dir -> admin only)
-    from .auth import get_current_user_id, check_task_ownership
+    # Destructive operations require durable ownership evidence; admin status
+    # alone must not turn an arbitrary unindexed directory into a task.
+    from .auth import get_current_user_id, check_task_artifact_access
     from .. import db as _db
-    allowed, _owner = check_task_ownership('eval_reports', task_id)
-    if not allowed:
+    if not check_task_artifact_access(
+        task_id, ('eval_reports', 'task_registry', 'task_state'), allow_admin_legacy=False
+    ):
         return jsonify({'error': 'Report not found'}), 404
 
     shutil.rmtree(str(task_dir))

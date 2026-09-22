@@ -330,7 +330,12 @@ def check_task_ownership(table: str, task_id: str) -> tuple[bool, int | None]:
     return row[0] == uid, row[0]
 
 
-def check_task_artifact_access(task_id: str, tables: tuple[str, ...]) -> bool:
+def check_task_artifact_access(
+    task_id: str,
+    tables: tuple[str, ...],
+    *,
+    allow_admin_legacy: bool = True,
+) -> bool:
     """Authorize reports/logs/SSE/files through the shared task policy."""
     uid = get_current_user_id()
     if uid is None:
@@ -344,6 +349,7 @@ def check_task_artifact_access(task_id: str, tables: tuple[str, ...]) -> bool:
         user_id=uid,
         is_admin=get_current_role() == 'admin',
         output_dir=str(OUTPUT_DIR),
+        allow_admin_legacy=allow_admin_legacy,
     )
 
 

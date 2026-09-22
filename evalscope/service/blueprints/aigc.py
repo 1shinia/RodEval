@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Any, Dict
 
 from evalscope.backend.aigc_eval.backend_manager import AIGCBackendManager
-from evalscope.service.utils.log import OUTPUT_DIR as _OUTPUT_DIR, create_log_file, validate_task_id
+from evalscope.service.utils.log import (
+    OUTPUT_DIR as _OUTPUT_DIR,
+    create_log_file,
+    resolve_task_dir,
+    resolve_task_file,
+    validate_task_id,
+)
 from evalscope.service.utils.process import register_process, try_reserve_new_slot, unregister_process
 from evalscope.utils.logger import configure_logging, get_logger
 from evalscope.service.time_utils import epoch_to_utc_iso
@@ -155,15 +161,12 @@ def serve_media(task_id: str, filename: str):
     denied = _require_task_access(task_id)
     if denied is not None:
         return denied
-    base_dir = os.path.realpath(os.path.join(OUTPUT_DIR, task_id, 'media'))
-    safe_path = os.path.realpath(os.path.join(base_dir, filename))
-
-    if os.path.commonpath([base_dir, safe_path]) != base_dir:
+    try:
+        safe_path = resolve_task_file(task_id, filename, OUTPUT_DIR, allowed_subdirs=('media',))
+    except ValueError as e:
+        if str(e) == 'File not found':
+            return jsonify({'error': 'File not found'}), 404
         return jsonify({'error': 'Invalid path'}), 403
-
-    if not os.path.exists(safe_path):
-        return jsonify({'error': 'File not found'}), 404
-
     return send_file(safe_path)
 
 
@@ -173,15 +176,12 @@ def serve_thumbnail(task_id: str, filename: str):
     denied = _require_task_access(task_id)
     if denied is not None:
         return denied
-    base_dir = os.path.realpath(os.path.join(OUTPUT_DIR, task_id, 'thumbnails'))
-    safe_path = os.path.realpath(os.path.join(base_dir, filename))
-
-    if os.path.commonpath([base_dir, safe_path]) != base_dir:
+    try:
+        safe_path = resolve_task_file(task_id, filename, OUTPUT_DIR, allowed_subdirs=('thumbnails',))
+    except ValueError as e:
+        if str(e) == 'File not found':
+            return jsonify({'error': 'File not found'}), 404
         return jsonify({'error': 'Invalid path'}), 403
-
-    if not os.path.exists(safe_path):
-        return jsonify({'error': 'File not found'}), 404
-
     return send_file(safe_path)
 
 
@@ -222,19 +222,21 @@ def get_aigc_report():
 
 @bp_aigc.route('/file/<task_id>/<path:filename>', methods=['GET'])
 def serve_file(task_id: str, filename: str):
-    """Serve any file from the task output directory with path traversal protection."""
+    """Serve generated artifacts from the task's public media directories."""
     denied = _require_task_access(task_id)
     if denied is not None:
         return denied
-    task_dir = os.path.realpath(os.path.join(OUTPUT_DIR, task_id))
-    safe_path = os.path.realpath(os.path.join(task_dir, filename))
-
-    if os.path.commonpath([task_dir, safe_path]) != task_dir:
+    try:
+        safe_path = resolve_task_file(
+            task_id,
+            filename,
+            OUTPUT_DIR,
+            allowed_subdirs=('images', 'videos', 'frames', 'thumbnails', 'media'),
+        )
+    except ValueError as e:
+        if str(e) == 'File not found':
+            return jsonify({'error': 'File not found'}), 404
         return jsonify({'error': 'Invalid path'}), 403
-
-    if not os.path.exists(safe_path):
-        return jsonify({'error': 'File not found'}), 404
-
     return send_file(safe_path)
 
 
@@ -515,19 +517,20 @@ def _execute_aigc_task(task_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
 def delete_aigc_report(task_id: str):
     """Delete an AIGC evaluation report by task_id."""
     import shutil
-    task_dir = (OUTPUT_DIR / task_id).resolve()
-    output_root = OUTPUT_DIR.resolve()
-    if not str(task_dir).startswith(str(output_root) + os.sep) and task_dir != output_root:
-        return jsonify({'error': 'Access denied'}), 403
-    if not task_dir.is_dir():
-        return jsonify({'error': 'Report not found'}), 404
+    try:
+        task_dir = resolve_task_dir(task_id, OUTPUT_DIR, must_exist=True)
+    except ValueError as e:
+        status = 404 if str(e) == 'Task not found' else 400
+        return jsonify({'error': str(e)}), status
 
-    # Verify ownership before deletion
-    # (exists + not owner -> deny; unindexed dir -> admin only)
-    from .auth import get_current_user_id, check_task_ownership
+    # Destructive operations require durable ownership evidence.  Unlike reads,
+    # an unindexed legacy directory is not deletable merely because the caller
+    # is an administrator.
+    from .auth import get_current_user_id, check_task_artifact_access
     from .. import db as _db
-    allowed, _owner = check_task_ownership('eval_reports', task_id)
-    if not allowed:
+    if not check_task_artifact_access(
+        task_id, ('eval_reports', 'task_registry', 'task_state'), allow_admin_legacy=False
+    ):
         return jsonify({'error': 'Report not found'}), 404
 
     shutil.rmtree(str(task_dir))

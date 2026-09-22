@@ -1,5 +1,7 @@
 import os
+import re
 from collections import deque
+from pathlib import Path
 
 from evalscope.constants import DEFAULT_WORK_DIR
 
@@ -9,21 +11,67 @@ _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 _default_output = os.path.join(_project_root, 'outputs') if os.path.isdir(_project_root) else DEFAULT_WORK_DIR
 OUTPUT_DIR = os.path.abspath(os.getenv('EVALSCOPE_OUTPUT_DIR', _default_output))
 
+_TASK_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$')
+
 
 def validate_task_id(task_id: str) -> None:
-    """Validate a task_id value.
-
-    Raises:
-        ValueError: if task_id is empty, too long, or contains path-traversal characters.
-    """
-    if not task_id:
+    """Validate a task identifier before it is used in a filesystem path."""
+    if not isinstance(task_id, str) or not task_id:
         raise ValueError('task_id is required')
     if len(task_id) > 255:
         raise ValueError('task_id is too long')
-    if '\x00' in task_id:
+    if task_id in ('.', '..') or not _TASK_ID_PATTERN.fullmatch(task_id):
         raise ValueError('Invalid task_id')
-    if os.path.basename(task_id) != task_id:
-        raise ValueError('Invalid task_id')
+
+
+def resolve_task_dir(task_id: str, output_dir: str | os.PathLike | None = None, *, must_exist: bool = False) -> Path:
+    """Resolve a task directory and require a direct child of the output root."""
+    validate_task_id(task_id)
+    root = Path(output_dir or OUTPUT_DIR).resolve()
+    task_entry = root / task_id
+    if task_entry.is_symlink():
+        raise ValueError('Invalid task path')
+    task_dir = task_entry.resolve()
+    if task_dir == root or task_dir.parent != root:
+        raise ValueError('Invalid task path')
+    if must_exist and not task_dir.is_dir():
+        raise ValueError('Task not found')
+    return task_dir
+
+
+def resolve_task_file(
+    task_id: str,
+    filename: str,
+    output_dir: str | os.PathLike | None = None,
+    *,
+    allowed_subdirs: tuple[str, ...],
+) -> Path:
+    """Resolve an existing regular task artifact under an allowed subdirectory."""
+    task_dir = resolve_task_dir(task_id, output_dir, must_exist=True)
+    if not isinstance(filename, str) or not filename or '\x00' in filename:
+        raise ValueError('Invalid path')
+
+    candidate_raw = task_dir / filename
+    candidate = candidate_raw.resolve()
+    allowed_roots = [(task_dir / subdir).resolve() for subdir in allowed_subdirs]
+    if not any(candidate != root and candidate.is_relative_to(root) for root in allowed_roots):
+        raise ValueError('Invalid path')
+
+    # Reject symlinks at any existing path component, even when their resolved
+    # target happens to remain inside the task directory.
+    current = task_dir
+    try:
+        relative_parts = candidate_raw.relative_to(task_dir).parts
+    except ValueError as exc:
+        raise ValueError('Invalid path') from exc
+    for part in relative_parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError('Invalid path')
+
+    if not candidate.is_file():
+        raise ValueError('File not found')
+    return candidate
 
 
 def validate_root_path(root: str, allowed_root: str | None = None) -> str:
