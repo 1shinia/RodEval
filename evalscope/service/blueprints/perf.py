@@ -12,10 +12,12 @@ from ..time_utils import epoch_to_utc_iso, utc_now_iso
 from ..utils import (
     OUTPUT_DIR,
     count_running_tasks,
+    cleanup_expired_files,
     create_log_file,
     get_log_content,
     resolve_task_dir,
     run_in_subprocess,
+    remove_batch_upload,
     run_perf_wrapper,
     serialize_result,
     stop_process,
@@ -245,10 +247,12 @@ def upload_batch_csv():
 
     # Save to temp file on server for later batch run
     os.makedirs(BATCH_UPLOAD_DIR, exist_ok=True)
+    cleanup_expired_files(BATCH_UPLOAD_DIR)
     batch_id = uuid.uuid4().hex[:12]
     saved_path = os.path.join(BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     with open(saved_path, 'w', encoding='utf-8') as outf:
         outf.write(content)
+    os.chmod(saved_path, 0o600)
     # Record the uploader so launch/status/stop can enforce ownership.  A
     # marker file (rather than the in-memory state) survives a service restart.
     from .auth import get_current_user_id
@@ -259,7 +263,7 @@ def upload_batch_csv():
         'batch_id': batch_id,
         'model_count': len(rows),
         'models': [r['name'] for r in rows],
-        'preview': rows[:5],
+        'preview': [{key: value for key, value in row.items() if key != 'api_key'} for row in rows[:5]],
     }), 200
 
 
@@ -583,8 +587,10 @@ def launch_batch_perf():
 
             if state['status'] == 'running':
                 state['status'] = 'completed'
+            remove_batch_upload(BATCH_UPLOAD_DIR, batch_id)
         except Exception as e:
             state['status'] = 'error'
+            remove_batch_upload(BATCH_UPLOAD_DIR, batch_id)
             logger.error(f'[batch:{batch_id}] Fatal error: {e}', exc_info=True)
 
     thread = threading.Thread(target=_run_batch, daemon=True)

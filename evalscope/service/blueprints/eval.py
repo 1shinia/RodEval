@@ -21,8 +21,10 @@ from ..utils import (
     build_benchmark_entry,
     count_running_tasks,
     create_log_file,
+    cleanup_expired_files,
     discover_all_benchmarks,
     get_log_content,
+    remove_batch_upload,
     run_eval_wrapper,
     run_in_subprocess,
     serialize_result,
@@ -42,6 +44,29 @@ _TERMINAL_PROGRESS_STATUSES = {'completed', 'error', 'stopped', 'cancelled', 'fa
 #: Accepted values for the ``description`` query param on the benchmark list
 #: endpoint.  See ``build_benchmark_entry`` for the payload each mode produces.
 _DESCRIPTION_MODES = ('full', 'preview', 'none')
+
+
+def _inject_resume_credentials(saved_data: dict, request_data: dict) -> dict:
+    """Return a resume config containing only credentials from this request."""
+    import copy
+
+    restored = copy.deepcopy(saved_data)
+    if restored.get('api_key') == '***':
+        restored.pop('api_key', None)
+    if request_data.get('api_key'):
+        restored['api_key'] = request_data['api_key']
+
+    judge_args = restored.get('judge_model_args')
+    if isinstance(judge_args, dict):
+        if judge_args.get('api_key') == '***':
+            judge_args.pop('api_key', None)
+        request_judge = request_data.get('judge_model_args')
+        judge_key = request_judge.get('api_key') if isinstance(request_judge, dict) else None
+        judge_key = judge_key or request_data.get('api_key')
+        if judge_key:
+            judge_args['api_key'] = judge_key
+        restored['judge_model_args'] = judge_args
+    return restored
 
 
 def _task_response_status_code(response) -> int:
@@ -905,7 +930,6 @@ def resume_evaluation():
         return jsonify({'error': 'task_id is required'}), 400
 
     task_id = data['task_id']
-    api_key = data.get('api_key')  # API key must be re-provided (not saved in config for security)
     try:
         validate_task_id(task_id)
     except ValueError as e:
@@ -971,13 +995,12 @@ def resume_evaluation():
                 'error_id': error_id
             }), 500
 
-        # Enable cache reuse - point to the same work_dir
+        # Re-inject API keys from this request only; persisted values are redacted.
+        task_config = TaskConfig.from_dict(_inject_resume_credentials(
+            task_config.to_dict(), data
+        ))
         task_config.use_cache = work_dir
         task_config.work_dir = work_dir
-
-        # Re-inject API key (stripped from saved config for security)
-        if api_key:
-            task_config.api_key = api_key
 
         logger.info(
             f'[{task_id}] Resuming: model={task_config.model} '
@@ -1440,10 +1463,12 @@ def upload_eval_batch_csv():
         return jsonify({'error': 'CSV 中没有有效的模型行'}), 400
 
     os.makedirs(EVAL_BATCH_UPLOAD_DIR, exist_ok=True)
+    cleanup_expired_files(EVAL_BATCH_UPLOAD_DIR)
     batch_id = uuid.uuid4().hex[:12]
     saved_path = os.path.join(EVAL_BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     with open(saved_path, 'w', encoding='utf-8') as outf:
         outf.write(content)
+    os.chmod(saved_path, 0o600)
     # Record the uploader so launch/status/stop can enforce ownership.  A
     # marker file (rather than the in-memory state) survives a service restart.
     from .auth import get_current_user_id
@@ -1454,7 +1479,7 @@ def upload_eval_batch_csv():
         'batch_id': batch_id,
         'model_count': len(rows),
         'models': [r['name'] for r in rows],
-        'preview': rows[:10],
+        'preview': [{key: value for key, value in row.items() if key != 'api_key'} for row in rows[:10]],
     }), 200
 
 
@@ -1664,8 +1689,10 @@ def launch_eval_batch():
 
             if s['status'] == 'running':
                 s['status'] = 'completed'
+            remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, batch_id)
         except Exception as e:
             s['status'] = 'error'
+            remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, batch_id)
             logger.error(f'[eval-batch:{batch_id}] Fatal: {e}', exc_info=True)
 
     thread = threading.Thread(target=_run_eval_batch, daemon=True)

@@ -14,6 +14,37 @@ OUTPUT_DIR = os.path.abspath(os.getenv('EVALSCOPE_OUTPUT_DIR', _default_output))
 _TASK_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$')
 
 
+def cleanup_expired_files(directory: str, max_age_seconds: int = 86400) -> int:
+    """Remove stale temporary upload files and their owner markers."""
+    import time
+
+    removed = 0
+    cutoff = time.time() - max_age_seconds
+    try:
+        for entry in Path(directory).glob('*'):
+            if entry.suffix not in {'.csv', '.owner'} or entry.stat().st_mtime >= cutoff:
+                continue
+            try:
+                entry.unlink()
+                removed += 1
+            except OSError:
+                continue
+    except OSError:
+        return removed
+    return removed
+
+
+def remove_batch_upload(directory: str, batch_id: str) -> None:
+    """Remove a batch CSV and its ownership marker."""
+    for suffix in ('.csv', '.csv.owner'):
+        try:
+            (Path(directory) / f'{batch_id}{suffix}').unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+
 def validate_task_id(task_id: str) -> None:
     """Validate a task identifier before it is used in a filesystem path."""
     if not isinstance(task_id, str) or not task_id:

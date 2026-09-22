@@ -11,9 +11,11 @@ from .benchmarks import (
 )
 from .log import (
     OUTPUT_DIR,
+    cleanup_expired_files,
     cleanup_old_task_logs,
     create_log_file,
     get_log_content,
+    remove_batch_upload,
     resolve_task_dir,
     resolve_task_file,
     validate_report_name,
@@ -37,10 +39,13 @@ from .process import (
 __all__ = [
     'OUTPUT_DIR',
     'count_running_tasks',
+    'cleanup_expired_files',
+    'cleanup_old_task_logs',
     'create_log_file',
     'finalize_slot',
     'get_log_content',
     'get_running_tasks',
+    'remove_batch_upload',
     'resolve_task_dir',
     'resolve_task_file',
     'validate_root_path',

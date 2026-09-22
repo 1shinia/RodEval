@@ -119,3 +119,21 @@ def test_owner_can_status_own_batch(clients):
     batch_id = _upload_csv(client_a)
     _seed_batch_state(batch_id, uid_a)
     assert client_a.get(f'/api/v1/perf/batch/status/{batch_id}').status_code == 200
+
+
+def test_upload_preview_hides_api_key_and_secures_temporary_csv(clients):
+    client_a, *_ = clients
+    secret = 'batch-secret-sentinel'
+    resp = client_a.post(
+        '/api/v1/perf/batch/upload',
+        data={'file': (io.BytesIO(
+            f'model,api,base_url,api_key\nm1,openai,http://x,{secret}\n'.encode()
+        ), 'models.csv')},
+        content_type='multipart/form-data',
+    )
+    assert resp.status_code == 200, resp.data
+    assert secret not in resp.get_data(as_text=True)
+    batch_id = resp.get_json()['batch_id']
+    saved = os.path.join(svc_perf.BATCH_UPLOAD_DIR, f'{batch_id}.csv')
+    assert os.path.isfile(saved)
+    assert oct(os.stat(saved).st_mode & 0o777) == '0o600'

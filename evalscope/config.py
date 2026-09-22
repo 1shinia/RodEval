@@ -96,20 +96,31 @@ class SandboxTaskConfig(BaseArgument):
 _SENSITIVE_KEY_PATTERNS = ('api_key', 'token', 'secret', 'password', 'passwd', 'auth')
 
 
-def _redact_sensitive(obj):
-    """Recursively redact values for keys matching sensitive patterns."""
+def _is_sensitive_key(key: Any) -> bool:
+    normalized = str(key).strip().lower().replace('-', '_')
+    return (
+        normalized in {'authorization', 'cookie'}
+        or any(
+            normalized == pattern
+            or normalized.startswith(pattern + '_')
+            or normalized.endswith('_' + pattern)
+            for pattern in _SENSITIVE_KEY_PATTERNS
+        )
+    )
+
+
+def _redact_sensitive(obj: Any) -> Any:
+    """Recursively redact credential-like values without mutating the input."""
     if isinstance(obj, dict):
-        for key in list(obj.keys()):
-            lower = key.lower()
-            # Only match standalone keys or compound keys with underscore
-            # (api_key, auth_token), not accidental substrings (max_tokens).
-            if any(lower == p or lower.endswith('_' + p) or lower.startswith(p + '_') for p in _SENSITIVE_KEY_PATTERNS):
-                obj[key] = '***'
-            else:
-                _redact_sensitive(obj[key])
-    elif isinstance(obj, list):
-        for item in obj:
-            _redact_sensitive(item)
+        return {
+            key: '***' if _is_sensitive_key(key) else _redact_sensitive(value)
+            for key, value in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_redact_sensitive(item) for item in obj]
+    if isinstance(obj, tuple):
+        return tuple(_redact_sensitive(item) for item in obj)
+    return obj
 
 
 class TaskConfig(BaseArgument):
@@ -546,9 +557,7 @@ class TaskConfig(BaseArgument):
 
         # Recursively redact credential-like values in nested dicts
         # (run after serialization so GenerateConfig/model fields are covered)
-        _redact_sensitive(result)
-
-        return result
+        return _redact_sensitive(result)
 
 
 def parse_task_config(task_cfg) -> TaskConfig:

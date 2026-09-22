@@ -590,16 +590,10 @@ class Arguments(BaseArgument):
 
     def to_dict(self):
         """Return a dict representation with sensitive fields redacted."""
-        import copy
+        from evalscope.config import _redact_sensitive
+
         result = self.model_dump()
-        result.pop('api_key', None)
-        result.pop('wandb_api_key', None)
-        result.pop('swanlab_api_key', None)
-        # Redact Authorization header so the Bearer token is not logged
-        if 'headers' in result and isinstance(result['headers'], dict):
-            result['headers'] = copy.deepcopy(result['headers'])
-            if 'Authorization' in result['headers']:
-                result['headers']['Authorization'] = '***'
+        result = _redact_sensitive(result)
         return result
 
     @contextmanager
