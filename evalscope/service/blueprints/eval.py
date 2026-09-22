@@ -1402,6 +1402,8 @@ import csv as _csv_mod
 import threading
 
 from flask import current_app
+from .. import db as _db
+from ..batch_resume import batch_manifest_hash, resumable_row_indexes
 
 EVAL_BATCH_CSV_TEMPLATE = os.path.join(os.path.dirname(OUTPUT_DIR), 'data', 'eval_model_list.csv')
 EVAL_BATCH_UPLOAD_DIR = os.path.join(OUTPUT_DIR, '_eval_batch_uploads')
@@ -1484,22 +1486,31 @@ def upload_eval_batch_csv():
 
 
 @bp_eval.route('/batch/launch', methods=['POST'])
+@bp_eval.route('/batch/resume', methods=['POST'])
 def launch_eval_batch():
-    """Launch batch evaluations in background."""
+    """Launch a new batch or resume a cancelled batch in background."""
     data = request.get_json()
     if not data or not data.get('batch_id'):
         return jsonify({'error': 'batch_id is required'}), 400
 
     batch_id = data['batch_id']
+    is_resume = request.path.endswith('/resume')
+    upload_id = data.get('upload_id') if is_resume else batch_id
+    if is_resume and not upload_id:
+        return jsonify({'error': 'upload_id is required'}), 400
     try:
         validate_task_id(batch_id)
+        validate_task_id(upload_id)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
     from .auth import get_current_user_id, get_current_role
     current_uid = get_current_user_id()
 
-    csv_path = os.path.join(EVAL_BATCH_UPLOAD_DIR, f'{batch_id}.csv')
+    if is_resume and batch_id in _eval_batch_state and _eval_batch_state[batch_id].get('status') == 'running':
+        return jsonify({'error': 'Batch already running'}), 409
+
+    csv_path = os.path.join(EVAL_BATCH_UPLOAD_DIR, f'{upload_id}.csv')
     if not os.path.isfile(csv_path):
         return jsonify({'error': f'Batch file not found: {batch_id}'}), 404
 
@@ -1522,21 +1533,6 @@ def launch_eval_batch():
         model_rows = [r for r in reader if (r.get('model') or '').strip()]
 
     total = len(model_rows)
-
-    state = {
-        'batch_id': batch_id,
-        'user_id': current_uid,
-        'status': 'running',
-        'total': total,
-        'completed': 0,
-        'errors': 0,
-        'current_model': '',
-        'current_task_id': '',
-        'results': [],
-        'error_details': [],
-        'cancel_requested': False,
-    }
-    _eval_batch_state[batch_id] = state
 
     # current_uid was captured above (used for ownership + slot reservation).
 
@@ -1565,6 +1561,75 @@ def launch_eval_batch():
         'eval_config': data.get('eval_config'),
     }
 
+    manifest_hash = batch_manifest_hash(model_rows, shared_config)
+    if is_resume:
+        job = _db.get_batch_job(batch_id, user_id=None if get_current_role() == 'admin' else current_uid, batch_type='eval')
+        if job is None:
+            remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, upload_id)
+            return jsonify({'error': 'Batch not found'}), 404
+        claim = _db.claim_batch_resume(
+            batch_id,
+            user_id=None if get_current_role() == 'admin' else current_uid,
+            batch_type='eval',
+            manifest_hash=manifest_hash,
+        )
+        if claim != 'claimed':
+            remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, upload_id)
+            messages = {
+                'manifest_mismatch': '重新上传的 CSV 或评估配置与原批次不一致',
+                'running': 'Batch already running',
+                'not_resumable': 'Batch is not resumable',
+            }
+            code = 404 if claim == 'not_found' else 409
+            return jsonify({'error': messages.get(claim, 'Batch not found')}), code
+        run_indexes = resumable_row_indexes(job['items'])
+        state = {
+            'batch_id': batch_id,
+            'user_id': current_uid,
+            'status': 'running',
+            'total': job['total'],
+            'completed': job['completed'],
+            'errors': job['errors'],
+            'current_model': '',
+            'current_task_id': '',
+            'results': job['results'],
+            'error_details': job['error_details'],
+            'cancel_requested': False,
+        }
+    else:
+        run_indexes = set(range(total))
+        try:
+            _db.create_batch_job(
+                batch_id,
+                'eval',
+                current_uid,
+                manifest_hash,
+                [
+                    {'row_index': index, 'model': (row.get('model') or '').strip()}
+                    for index, row in enumerate(model_rows)
+                ],
+            )
+        except Exception:
+            remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, upload_id)
+            logger.exception(f'[eval-batch:{batch_id}] Failed to create checkpoint')
+            return jsonify({'error': 'Failed to create batch checkpoint'}), 500
+        state = {
+            'batch_id': batch_id,
+            'user_id': current_uid,
+            'status': 'running',
+            'total': total,
+            'completed': 0,
+            'errors': 0,
+            'current_model': '',
+            'current_task_id': '',
+            'results': [],
+            'error_details': [],
+            'cancel_requested': False,
+        }
+    _eval_batch_state[batch_id] = state
+    # Credentials now live only in this request's in-memory rows.
+    remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, upload_id)
+
     # Capture Flask app for pushing context in background thread
     app = current_app._get_current_object()
 
@@ -1573,9 +1638,12 @@ def launch_eval_batch():
         if not s:
             return
         try:
-            for row in model_rows:
+            for row_index, row in enumerate(model_rows):
+                if row_index not in run_indexes:
+                    continue
                 if s['cancel_requested']:
                     s['status'] = 'cancelled'
+                    _db.update_batch_job(batch_id, status='cancelled')
                     break
 
                 model_name = (row.get('model') or '').strip()
@@ -1586,6 +1654,15 @@ def launch_eval_batch():
                 import time, secrets
                 task_id = f'eval_{int(time.time() * 1000)}_{secrets.token_hex(3)}'
                 s['current_task_id'] = task_id
+                _db.update_batch_item(
+                    batch_id,
+                    row_index,
+                    status='running',
+                    task_id=task_id,
+                    error='',
+                    started_at=utc_now_iso(),
+                    finished_at=None,
+                )
                 eval_backend = shared_config.get('eval_backend', '')
 
                 reservation = try_reserve_new_slot(task_id, 'eval', model=model_name, user_id=current_uid)
@@ -1593,6 +1670,19 @@ def launch_eval_batch():
                     s['errors'] += 1
                     error = '任务 ID 冲突' if reservation == 'conflict' else '并发已满'
                     s['error_details'].append({'name': model_name, 'model': model_name, 'error': error})
+                    _db.update_batch_item(
+                        batch_id,
+                        row_index,
+                        status='failed',
+                        task_id=task_id,
+                        error=error,
+                        finished_at=utc_now_iso(),
+                    )
+                    _db.update_batch_job(
+                        batch_id,
+                        errors=s['errors'],
+                        errors_json=s['error_details'],
+                    )
                     continue
 
                 logger.info(f'[eval-batch:{batch_id}] Running {eval_backend} for {model_name}')
@@ -1671,9 +1761,33 @@ def launch_eval_batch():
                         'eval_backend': eval_backend,
                         'status': 'completed',
                     })
+                    _db.update_batch_item(
+                        batch_id,
+                        row_index,
+                        status='completed',
+                        task_id=task_id,
+                        finished_at=utc_now_iso(),
+                    )
+                    _db.update_batch_job(
+                        batch_id,
+                        completed=s['completed'],
+                        results_json=s['results'],
+                    )
                     logger.info(f'[eval-batch:{batch_id}] [{task_id}] {model_name} completed ({s["completed"]}/{total})')
 
                 except Exception as e:
+                    if s['cancel_requested']:
+                        s['status'] = 'cancelled'
+                        _db.update_batch_item(
+                            batch_id,
+                            row_index,
+                            status='interrupted',
+                            task_id=task_id,
+                            error='',
+                            finished_at=utc_now_iso(),
+                        )
+                        _db.update_batch_job(batch_id, status='cancelled')
+                        break
                     error_id = uuid.uuid4().hex[:8]
                     logger.error(f'[eval-batch:{batch_id}] [{task_id}] {model_name} failed: {e}', exc_info=True)
                     s['errors'] += 1
@@ -1682,6 +1796,19 @@ def launch_eval_batch():
                         'model': model_name,
                         'error': str(e),
                     })
+                    _db.update_batch_item(
+                        batch_id,
+                        row_index,
+                        status='failed',
+                        task_id=task_id,
+                        error=str(e),
+                        finished_at=utc_now_iso(),
+                    )
+                    _db.update_batch_job(
+                        batch_id,
+                        errors=s['errors'],
+                        errors_json=s['error_details'],
+                    )
                 finally:
                     unregister_process(task_id)
                     s['current_model'] = ''
@@ -1689,7 +1816,7 @@ def launch_eval_batch():
 
             if s['status'] == 'running':
                 s['status'] = 'completed'
-            remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, batch_id)
+                _db.update_batch_job(batch_id, status='completed')
         except Exception as e:
             s['status'] = 'error'
             remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, batch_id)
@@ -1706,7 +1833,22 @@ def get_eval_batch_status(batch_id: str):
     """Get the current status of a running eval batch."""
     s = _eval_batch_state.get(batch_id)
     if not s:
-        return jsonify({'error': 'Batch not found'}), 404
+        from .auth import get_current_user_id
+        job = _db.get_batch_job(batch_id, user_id=get_current_user_id(), batch_type='eval')
+        if not job:
+            return jsonify({'error': 'Batch not found'}), 404
+        return jsonify({
+            'batch_id': batch_id,
+            'status': job['status'],
+            'total': job['total'],
+            'completed': job['completed'],
+            'errors': job['errors'],
+            'current_model': '',
+            'current_task_id': '',
+            'results': job['results'],
+            'error_details': job['error_details'],
+            'resumable': job['status'] == 'cancelled' and bool(resumable_row_indexes(job['items'])),
+        }), 200
     from .auth import get_current_role, get_current_user_id
     if get_current_role() != 'admin' and int(s.get('user_id', 0)) != int(get_current_user_id()):
         return jsonify({'error': 'Batch not found'}), 404
@@ -1720,6 +1862,7 @@ def get_eval_batch_status(batch_id: str):
         'current_task_id': s.get('current_task_id', ''),
         'results': s.get('results', []),
         'error_details': s.get('error_details', []),
+        'resumable': s['status'] == 'cancelled',
     }), 200
 
 
@@ -1733,6 +1876,8 @@ def stop_eval_batch(batch_id: str):
     if get_current_role() != 'admin' and int(s.get('user_id', 0)) != int(get_current_user_id()):
         return jsonify({'error': 'Batch not found'}), 404
     s['cancel_requested'] = True
+    s['status'] = 'cancelling'
+    _db.update_batch_job(batch_id, status='cancelling')
 
     # Kill the currently running subprocess for immediate stop
     current_task_id = s.get('current_task_id', '')

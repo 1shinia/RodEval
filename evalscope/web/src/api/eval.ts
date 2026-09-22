@@ -108,6 +108,7 @@ export interface EvalBatchStatus {
   current_task_id: string
   results: { task_id: string; name: string; model: string; eval_backend: string; status: string; error?: string }[]
   error_details: { name: string; model: string; error: string }[]
+  resumable: boolean
 }
 
 export function getEvalTemplateDownloadUrl(): string {
@@ -131,6 +132,16 @@ export async function launchEvalBatch(
 ): Promise<{ batch_id: string; total: number; status: string }> {
   return apiPost<{ batch_id: string; total: number; status: string }>(
     '/api/v1/eval/batch/launch', { batch_id: batchId, ...sharedConfig },
+  )
+}
+
+export async function resumeEvalBatch(
+  batchId: string,
+  uploadId: string,
+  sharedConfig: Record<string, unknown>,
+): Promise<{ batch_id: string; total: number; status: string }> {
+  return apiPost<{ batch_id: string; total: number; status: string }>(
+    '/api/v1/eval/batch/resume', { batch_id: batchId, upload_id: uploadId, ...sharedConfig },
   )
 }
 

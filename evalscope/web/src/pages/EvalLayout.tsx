@@ -5,7 +5,7 @@ import { useQueryParams } from '@/hooks/useQueryParams'
 import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask,
-  launchEvalBatch, getEvalBatchStatus, stopEvalBatch, uploadEvalBatchCsv, launchEvalTask } from '@/api/eval'
+  launchEvalBatch, resumeEvalBatch, getEvalBatchStatus, stopEvalBatch, uploadEvalBatchCsv, launchEvalTask } from '@/api/eval'
 import type { EvalBatchStatus } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
 
@@ -27,6 +27,7 @@ export interface EvalTabContext {
   selectedTaskId: string
   onSelectTask: (taskId: string) => void
   onBatchSubmit: (batchId: string, sharedConfig: Record<string, unknown>) => void
+  onBatchResume: (file: File, sharedConfig: Record<string, unknown>) => Promise<void>
   onBatchStop: () => void
   onBatchUpload: (file: File) => Promise<void>
   setBatchMode: (v: boolean) => void
@@ -43,7 +44,7 @@ export default function EvalLayout() {
   const { t } = useLocale()
   const location = useLocation()
   const queryParams = useQueryParams()
-  const initialDataset = queryParams.get('dataset')
+  const initialDataset = queryParams.get('dataset') ?? null
   const apiKeyRef = useRef('')
 
   const segments = location.pathname.split('/')
@@ -70,6 +71,7 @@ export default function EvalLayout() {
   const {
     running,
     progress,
+    progressError,
     result,
     logText,
     reportUrl,
@@ -78,7 +80,6 @@ export default function EvalLayout() {
     handleSubmit,
     handleStop,
     handleResume: rawResume,
-    copyLog,
     sseState,
   } = useTaskRunner({ api, taskPrefix: 'eval' })
 
@@ -96,6 +97,7 @@ export default function EvalLayout() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastLogTaskIdRef = useRef<string>('')
   const batchFileRef = useRef<File | null>(null)
+  const batchConfigRef = useRef<Record<string, unknown>>({})
   const [batchInfo, setBatchInfo] = useState<{ batch_id: string; model_count: number; models: string[] } | null>(null)
   const [batchError, setBatchError] = useState('')
   const [batchUploading, setBatchUploading] = useState(false)
@@ -149,6 +151,42 @@ export default function EvalLayout() {
     }
   }, [])
 
+  const monitorBatch = useCallback((batchId: string) => {
+    clearBatchPoll()
+    const poll = async () => {
+      try {
+        const st = await getEvalBatchStatus(batchId)
+        setBatchState(st)
+        const active = st.status === 'running' || st.status === 'cancelling'
+        setBatchRunning(active)
+        if (st.current_task_id) {
+          lastLogTaskIdRef.current = st.current_task_id
+          try { const log = await getEvalLog(st.current_task_id); setBatchLogText(log.text || '') } catch { /* */ }
+        }
+        if (!active) {
+          clearBatchPoll()
+          const results = st.results || []
+          if (results.length > 0) {
+            setSelectedTaskId(results[results.length - 1].task_id)
+            fetchTaskLog(results[results.length - 1].task_id)
+          }
+          if (st.status === 'completed') {
+            sessionStorage.removeItem('evalBatchId')
+            if (st.errors > 0) toast.warning(`批量评估完成：${st.completed} 成功，${st.errors} 失败`)
+            else toast.success(`批量评估完成：${st.completed} 个模型全部成功`)
+          } else if (st.status === 'cancelled') {
+            toast.info(`批量评估已停止：${st.completed} 完成，可从断点继续`)
+          }
+        }
+      } catch {
+        clearBatchPoll(); setBatchRunning(false)
+        toast.warning('批量状态暂不可用，请稍后重试')
+      }
+    }
+    void poll()
+    pollRef.current = setInterval(poll, 3000)
+  }, [clearBatchPoll, fetchTaskLog])
+
   const onBatchSubmit = useCallback(async (batchId: string, sharedConfig: Record<string, unknown>) => {
     setBatchRunning(true)
     setBatchState(null)
@@ -156,43 +194,45 @@ export default function EvalLayout() {
     setSelectedTaskId('')
     setSelectedTaskLog('')
     batchIdRef.current = batchId
-    clearBatchPoll()
+    batchConfigRef.current = sharedConfig
+    sessionStorage.setItem('evalBatchId', batchId)
 
     try {
       const launched = await launchEvalBatch(batchId, sharedConfig)
       toast.info(`批量评估已启动，共 ${launched.total} 个模型`)
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const st = await getEvalBatchStatus(batchId)
-          setBatchState(st)
-          if (st.current_task_id && st.current_task_id !== lastLogTaskIdRef.current) {
-            lastLogTaskIdRef.current = st.current_task_id
-          }
-          if (st.current_task_id) {
-            try { const log = await getEvalLog(st.current_task_id); setBatchLogText(log.text || '') } catch { /* */ }
-          }
-          if (st.status !== 'running') {
-            clearBatchPoll(); setBatchRunning(false)
-            const results = st.results || []
-            if (results.length > 0) {
-              setSelectedTaskId(results[results.length - 1].task_id)
-              fetchTaskLog(results[results.length - 1].task_id)
-            }
-            if (st.status === 'completed') {
-              if (st.errors > 0) toast.warning(`批量评估完成：${st.completed} 成功，${st.errors} 失败`)
-              else toast.success(`批量评估完成：${st.completed} 个模型全部成功`)
-            } else if (st.status === 'cancelled') toast.info(`批量评估已取消：${st.completed} 完成`)
-          }
-        } catch (e) {
-          clearBatchPoll(); setBatchRunning(false)
-          toast.warning('批量状态丢失（服务可能已重启）')
-        }
-      }, 3000)
+      monitorBatch(batchId)
     } catch (e) {
       toast.error(String(e)); setBatchRunning(false)
     }
-  }, [clearBatchPoll, fetchTaskLog])
+  }, [monitorBatch])
+
+  const onBatchResume = useCallback(async (file: File, sharedConfig: Record<string, unknown>) => {
+    const batchId = batchIdRef.current
+    if (!batchId) return
+    setBatchUploading(true)
+    setBatchError('')
+    try {
+      const uploaded = await uploadEvalBatchCsv(file)
+      await resumeEvalBatch(batchId, uploaded.batch_id, sharedConfig)
+      batchFileRef.current = file
+      batchConfigRef.current = sharedConfig
+      setBatchRunning(true)
+      toast.info('批量评估已从断点继续')
+      monitorBatch(batchId)
+    } catch (e) {
+      setBatchError(String(e)); toast.error(String(e))
+    } finally {
+      setBatchUploading(false)
+    }
+  }, [monitorBatch])
+
+  useEffect(() => {
+    const batchId = sessionStorage.getItem('evalBatchId')
+    if (!batchId) return
+    batchIdRef.current = batchId
+    setIsBatch(true)
+    monitorBatch(batchId)
+  }, [monitorBatch])
 
   const handleSelectTask = useCallback((tid: string) => {
     setSelectedTaskId(tid)
@@ -237,6 +277,7 @@ export default function EvalLayout() {
     selectedTaskId,
     onSelectTask: handleSelectTask,
     onBatchSubmit,
+    onBatchResume,
     onBatchStop,
     onBatchUpload: handleBatchUpload,
     setBatchMode,
@@ -250,6 +291,7 @@ export default function EvalLayout() {
       readyLabel={t('eval.ready')}
       running={running || batchRunning}
       progress={running ? progress : 0}
+      progressError={running ? progressError : null}
       result={result}
       logText={running ? logText : (batchRunning ? batchLogText : (selectedTaskId ? selectedTaskLog : logText))}
       reportUrl={reportUrl}

@@ -12,6 +12,7 @@ interface Props {
   readyLabel: string
   running: boolean
   progress: number
+  progressError?: string | null
   result: EvalInvokeResponse | null
   logText: string
   reportUrl: string | null
@@ -26,7 +27,7 @@ interface Props {
 
 export default function TaskPageLayout({
   title, configTitle, statusTitle, readyLabel,
-  running, progress, result, logText, reportUrl,
+  running, progress, progressError, result, logText, reportUrl,
   copied, onCopy, onStop, onResume, taskId, sseState, children,
 }: Props) {
   const { t } = useLocale()
@@ -48,6 +49,7 @@ export default function TaskPageLayout({
           <TaskMonitor
             running={running}
             progress={progress}
+            progressError={progressError}
             logText={logText}
             result={result}
             reportUrl={reportUrl}

@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 import uuid
 from flask import Blueprint, current_app, jsonify, request, send_file
 from tabulate import tabulate
@@ -9,6 +10,8 @@ from evalscope.perf.utils.benchmark_util import Metrics
 from evalscope.perf.utils.rich_display import EmbeddingResultAnalyzer, LLMResultAnalyzer
 from evalscope.utils.logger import get_logger
 from ..time_utils import epoch_to_utc_iso, utc_now_iso
+from .. import db as _db
+from ..batch_resume import batch_manifest_hash, resumable_row_indexes
 from ..utils import (
     OUTPUT_DIR,
     count_running_tasks,
@@ -268,6 +271,7 @@ def upload_batch_csv():
 
 
 @bp_perf.route('/batch/launch', methods=['POST'])
+@bp_perf.route('/batch/resume', methods=['POST'])
 def launch_batch_perf():
     """Launch batch performance tests in background.
 
@@ -275,22 +279,29 @@ def launch_batch_perf():
     Returns immediately with batch_id.  Use /batch/status/<batch_id> to poll.
     """
     import csv as csv_mod
-    import threading
 
     data = request.get_json()
     if not data or not data.get('batch_id'):
         return jsonify({'error': 'batch_id is required'}), 400
 
     batch_id = data['batch_id']
+    is_resume = request.path.endswith('/resume')
+    upload_id = data.get('upload_id') if is_resume else batch_id
+    if is_resume and not upload_id:
+        return jsonify({'error': 'upload_id is required'}), 400
     try:
         validate_task_id(batch_id)
+        validate_task_id(upload_id)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
     from .auth import get_current_user_id, get_current_role
     current_uid = get_current_user_id()
 
-    csv_path = os.path.join(BATCH_UPLOAD_DIR, f'{batch_id}.csv')
+    if is_resume and batch_id in _batch_state and _batch_state[batch_id].get('status') == 'running':
+        return jsonify({'error': 'Batch already running'}), 409
+
+    csv_path = os.path.join(BATCH_UPLOAD_DIR, f'{upload_id}.csv')
     if not os.path.isfile(csv_path):
         return jsonify({'error': f'Batch file not found: {batch_id}. Please re-upload.'}), 404
 
@@ -315,20 +326,6 @@ def launch_batch_perf():
     total = sum(1 for r in model_rows
                 if (r.get('model') or '').strip()
                 and (r.get('enabled', 'TRUE') or 'TRUE').strip().upper() != 'FALSE')
-
-    state = {
-        'batch_id': batch_id,
-        'user_id': current_uid,
-        'status': 'running',
-        'total': total,
-        'completed': 0,
-        'errors': 0,
-        'current_model': '',
-        'results': [],
-        'error_details': [],
-        'cancel_requested': False,
-    }
-    _batch_state[batch_id] = state
 
     # Capture user_id for the background thread
     shared_config = {
@@ -357,14 +354,91 @@ def launch_batch_perf():
         'sla_number_multiplier': data.get('sla_number_multiplier'),
     }
 
+    enabled_rows = [
+        row for row in model_rows
+        if (row.get('model') or '').strip()
+        and (row.get('enabled', 'TRUE') or 'TRUE').strip().upper() != 'FALSE'
+    ]
+    manifest_hash = batch_manifest_hash(enabled_rows, shared_config)
+    if is_resume:
+        job = _db.get_batch_job(batch_id, user_id=None if get_current_role() == 'admin' else current_uid, batch_type='perf')
+        if job is None:
+            remove_batch_upload(BATCH_UPLOAD_DIR, upload_id)
+            return jsonify({'error': 'Batch not found'}), 404
+        claim = _db.claim_batch_resume(
+            batch_id,
+            user_id=None if get_current_role() == 'admin' else current_uid,
+            batch_type='perf',
+            manifest_hash=manifest_hash,
+        )
+        if claim != 'claimed':
+            remove_batch_upload(BATCH_UPLOAD_DIR, upload_id)
+            messages = {
+                'manifest_mismatch': '重新上传的 CSV 或压测配置与原批次不一致',
+                'running': 'Batch already running',
+                'not_resumable': 'Batch is not resumable',
+            }
+            code = 404 if claim == 'not_found' else 409
+            return jsonify({'error': messages.get(claim, 'Batch not found')}), code
+        run_indexes = resumable_row_indexes(job['items'])
+        state = {
+            'batch_id': batch_id,
+            'user_id': current_uid,
+            'status': 'running',
+            'total': job['total'],
+            'completed': job['completed'],
+            'errors': job['errors'],
+            'current_model': '',
+            'current_task_id': '',
+            'results': job['results'],
+            'error_details': job['error_details'],
+            'cancel_requested': False,
+        }
+    else:
+        run_indexes = set(range(total))
+        try:
+            _db.create_batch_job(
+                batch_id,
+                'perf',
+                current_uid,
+                manifest_hash,
+                [
+                    {'row_index': index, 'model': (row.get('model') or '').strip()}
+                    for index, row in enumerate(enabled_rows)
+                ],
+            )
+        except Exception:
+            remove_batch_upload(BATCH_UPLOAD_DIR, upload_id)
+            logger.exception(f'[batch:{batch_id}] Failed to create checkpoint')
+            return jsonify({'error': 'Failed to create batch checkpoint'}), 500
+        state = {
+            'batch_id': batch_id,
+            'user_id': current_uid,
+            'status': 'running',
+            'total': total,
+            'completed': 0,
+            'errors': 0,
+            'current_model': '',
+            'current_task_id': '',
+            'results': [],
+            'error_details': [],
+            'cancel_requested': False,
+        }
+    _batch_state[batch_id] = state
+    model_rows = enabled_rows
+    remove_batch_upload(BATCH_UPLOAD_DIR, upload_id)
+
     def _run_batch():
         state = _batch_state.get(batch_id)
         if not state:
             return
         try:
-            for row in model_rows:
+            for row_index, row in enumerate(model_rows):
+                if row_index not in run_indexes:
+                    continue
                 if state['cancel_requested']:
                     state['status'] = 'cancelled'
+                    _db.update_batch_job(batch_id, status='cancelled')
                     logger.info(f'[batch:{batch_id}] Cancelled by user')
                     break
 
@@ -379,6 +453,15 @@ def launch_batch_perf():
                 import time, secrets
                 task_id = f'perf_{int(time.time() * 1000)}_{secrets.token_hex(3)}'
                 state['current_task_id'] = task_id
+                _db.update_batch_item(
+                    batch_id,
+                    row_index,
+                    status='running',
+                    task_id=task_id,
+                    error='',
+                    started_at=utc_now_iso(),
+                    finished_at=None,
+                )
 
                 # Parse CSV concurrency: comma-separated like "1,2,4"
                 csv_concurrency = (row.get('concurrency') or '').strip()
@@ -470,6 +553,19 @@ def launch_batch_perf():
                     state['errors'] += 1
                     error = '任务 ID 冲突' if reservation == 'conflict' else '并发已满'
                     state['error_details'].append({'name': model_name, 'model': model_name, 'error': error})
+                    _db.update_batch_item(
+                        batch_id,
+                        row_index,
+                        status='failed',
+                        task_id=task_id,
+                        error=error,
+                        finished_at=utc_now_iso(),
+                    )
+                    _db.update_batch_job(
+                        batch_id,
+                        errors=state['errors'],
+                        errors_json=state['error_details'],
+                    )
                     continue
 
                 logger.info(f'[batch:{batch_id}] Running perf for {model_name}')
@@ -542,12 +638,26 @@ def launch_batch_perf():
                             'model': model_name,
                             'error': perf_error_msg,
                         })
+                        _db.update_batch_item(
+                            batch_id,
+                            row_index,
+                            status='failed',
+                            task_id=task_id,
+                            error=perf_error_msg,
+                            finished_at=utc_now_iso(),
+                        )
+                        _db.update_batch_job(
+                            batch_id,
+                            completed=state['completed'],
+                            errors=state['errors'],
+                            results_json=state['results'],
+                            errors_json=state['error_details'],
+                        )
                         logger.warning(f'[batch:{batch_id}] [{task_id}] {model_name} 压测失败: {perf_error_msg}')
                     else:
 
                         # Write to SQLite
                         try:
-                            from .. import db as _db
                             perf_dir = os.path.join(OUTPUT_DIR, task_id, 'perf')
                             has_report = (
                             os.path.exists(os.path.join(perf_dir, 'perf_report.html'))
@@ -573,13 +683,50 @@ def launch_batch_perf():
                         _mark_perf_completed(task_id)
                         state['completed'] += 1
                         state['results'].append({'task_id': task_id, 'name': model_name, 'model': model_name, 'status': 'completed'})
+                        _db.update_batch_item(
+                            batch_id,
+                            row_index,
+                            status='completed',
+                            task_id=task_id,
+                            finished_at=utc_now_iso(),
+                        )
+                        _db.update_batch_job(
+                            batch_id,
+                            completed=state['completed'],
+                            results_json=state['results'],
+                        )
                         logger.info(f'[batch:{batch_id}] [{task_id}] {model_name} completed ({state["completed"]}/{total})')
 
                 except Exception as e:
+                    if state['cancel_requested']:
+                        state['status'] = 'cancelled'
+                        _db.update_batch_item(
+                            batch_id,
+                            row_index,
+                            status='interrupted',
+                            task_id=task_id,
+                            error='',
+                            finished_at=utc_now_iso(),
+                        )
+                        _db.update_batch_job(batch_id, status='cancelled')
+                        break
                     error_id = uuid.uuid4().hex[:8]
                     logger.error(f'[batch:{batch_id}] [{task_id}] {model_name} failed: {e}', exc_info=True)
                     state['errors'] += 1
                     state['error_details'].append({'name': model_name, 'model': model_name, 'error': str(e)})
+                    _db.update_batch_item(
+                        batch_id,
+                        row_index,
+                        status='failed',
+                        task_id=task_id,
+                        error=str(e),
+                        finished_at=utc_now_iso(),
+                    )
+                    _db.update_batch_job(
+                        batch_id,
+                        errors=state['errors'],
+                        errors_json=state['error_details'],
+                    )
                 finally:
                     unregister_process(task_id)
                     state['current_model'] = ''
@@ -587,10 +734,10 @@ def launch_batch_perf():
 
             if state['status'] == 'running':
                 state['status'] = 'completed'
-            remove_batch_upload(BATCH_UPLOAD_DIR, batch_id)
+                _db.update_batch_job(batch_id, status='completed')
         except Exception as e:
             state['status'] = 'error'
-            remove_batch_upload(BATCH_UPLOAD_DIR, batch_id)
+            _db.update_batch_job(batch_id, status='error')
             logger.error(f'[batch:{batch_id}] Fatal error: {e}', exc_info=True)
 
     thread = threading.Thread(target=_run_batch, daemon=True)
@@ -604,7 +751,22 @@ def get_batch_status(batch_id: str):
     """Get the current status of a running batch test."""
     state = _batch_state.get(batch_id)
     if not state:
-        return jsonify({'error': 'Batch not found'}), 404
+        from .auth import get_current_user_id
+        job = _db.get_batch_job(batch_id, user_id=get_current_user_id(), batch_type='perf')
+        if not job:
+            return jsonify({'error': 'Batch not found'}), 404
+        return jsonify({
+            'batch_id': batch_id,
+            'status': job['status'],
+            'total': job['total'],
+            'completed': job['completed'],
+            'errors': job['errors'],
+            'current_model': '',
+            'current_task_id': '',
+            'results': job['results'],
+            'error_details': job['error_details'],
+            'resumable': job['status'] == 'cancelled' and bool(resumable_row_indexes(job['items'])),
+        }), 200
     from .auth import get_current_role, get_current_user_id
     if get_current_role() != 'admin' and int(state.get('user_id', 0)) != int(get_current_user_id()):
         return jsonify({'error': 'Batch not found'}), 404
@@ -618,6 +780,7 @@ def get_batch_status(batch_id: str):
         'current_task_id': state.get('current_task_id', ''),
         'results': state.get('results', []),
         'error_details': state.get('error_details', []),
+        'resumable': state['status'] == 'cancelled',
     }), 200
 
 
@@ -633,6 +796,8 @@ def stop_batch_perf(batch_id: str):
     if state['status'] != 'running':
         return jsonify({'error': f'Batch is not running (status: {state["status"]})'}), 400
     state['cancel_requested'] = True
+    state['status'] = 'cancelling'
+    _db.update_batch_job(batch_id, status='cancelling')
 
     # Kill the currently running subprocess for immediate stop
     current_task_id = state.get('current_task_id', '')

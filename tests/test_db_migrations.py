@@ -329,6 +329,40 @@ RELEASED: list[tuple[int, str, str]] = [
             ON password_reset_tokens(user_id);
     '''
     ),
+    (
+        20, 'add resumable batch job checkpoints', '''
+        CREATE TABLE IF NOT EXISTS batch_jobs (
+            batch_id       TEXT PRIMARY KEY,
+            batch_type     TEXT NOT NULL CHECK(batch_type IN ('eval', 'perf')),
+            user_id        INTEGER NOT NULL,
+            status         TEXT NOT NULL,
+            manifest_hash  TEXT NOT NULL,
+            total          INTEGER NOT NULL DEFAULT 0,
+            completed      INTEGER NOT NULL DEFAULT 0,
+            errors         INTEGER NOT NULL DEFAULT 0,
+            results_json   TEXT NOT NULL DEFAULT '[]',
+            errors_json    TEXT NOT NULL DEFAULT '[]',
+            created_at     TEXT NOT NULL,
+            updated_at     TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS batch_items (
+            batch_id       TEXT NOT NULL,
+            row_index      INTEGER NOT NULL,
+            model          TEXT NOT NULL DEFAULT '',
+            status         TEXT NOT NULL DEFAULT 'pending',
+            task_id        TEXT NOT NULL DEFAULT '',
+            error          TEXT NOT NULL DEFAULT '',
+            started_at     TEXT,
+            finished_at    TEXT,
+            PRIMARY KEY (batch_id, row_index),
+            FOREIGN KEY (batch_id) REFERENCES batch_jobs(batch_id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_batch_jobs_user_type_updated
+            ON batch_jobs(user_id, batch_type, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_batch_items_batch_status
+            ON batch_items(batch_id, status, row_index);
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -414,9 +448,9 @@ def test_released_migrations_immutable():
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 19
+    assert len(RELEASED) == 20
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 19
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 20
 
 
 def test_fresh_db_converges(tmp_path):
@@ -431,6 +465,8 @@ def test_fresh_db_converges(tmp_path):
         assert 'deleted_at' in _columns(conn, 'users')
         assert {'task_id', 'task_kind', 'user_id', 'created_at'} <= set(_columns(conn, 'task_registry'))
         assert {'task_id', 'dataset_name', 'score', 'position'} <= set(_columns(conn, 'eval_report_datasets'))
+        assert {'batch_id', 'batch_type', 'user_id', 'manifest_hash'} <= set(_columns(conn, 'batch_jobs'))
+        assert {'batch_id', 'row_index', 'status', 'task_id'} <= set(_columns(conn, 'batch_items'))
         idx = {r[1] for r in conn.execute("PRAGMA index_list('eval_reports')").fetchall()}
         assert 'idx_eval_reports_user_timestamp' in idx
         assert 'idx_eval_reports_user_backend_timestamp' in idx

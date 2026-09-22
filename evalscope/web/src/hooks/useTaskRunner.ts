@@ -4,6 +4,7 @@ import { useSSE } from '@/hooks/useSSE'
 import { toast } from '@/components/common/Toast'
 import { createTaskId } from '@/utils/taskId'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/types'
+import { classifyProgress, progressRetryDelay } from './taskLifecycle'
 
 export interface TaskApi {
   submit: (config: Record<string, unknown>, taskId: string) => Promise<EvalInvokeResponse>
@@ -29,9 +30,10 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   const [result, setResult] = useState<EvalInvokeResponse | null>(null)
   const [logText, setLogText] = useState('')
   const [progress, setProgress] = useState(0)
+  const [progressError, setProgressError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const resumedRef = useRef(false)
-  const launchPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const suppressProgressPollRef = useRef(false)
 
   // --- localStorage persistence: survive page refresh ---
   const STORAGE_KEY = `evalscope_last_${taskPrefix}`
@@ -50,8 +52,11 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
-        setTaskId(saved)
-        // kick off monitoring – same logic as ?task= URL param
+        queueMicrotask(() => {
+          setTaskId(saved)
+          setProgressError(null)
+          setRunning(true)
+        })
         window.history.replaceState(null, '', `?task=${saved}`)
       }
     } catch { /* ignore */ }
@@ -64,99 +69,36 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       setTaskId(urlTaskId)
 
       const resume = async () => {
-        let logAcc = ''
-        let nextLine = 0
-
-        // Check completion first so we know whether to fetch full log or tail
-        let done = false
         try {
-          const p = await api.getProgress(urlTaskId)
-          setProgress(p.percent ?? 0)
-          // Also treat error/stopped tasks as done to prevent SSE log re-streaming
-          const status = typeof p.status === 'string' ? p.status : ''
-          if ((p.percent ?? 0) >= 100 || status === 'error' || status === 'stopped') {
-            done = true
-          }
-        } catch { done = true }
-
-        if (done) {
-          // Completed/error/stopped: fetch full log from beginning
-          try {
-            const d = await api.getLog(urlTaskId, 0)
-            if (d.text) { logAcc = d.text; nextLine = d.tail_line }
-          } catch { /* ignore */ }
-          // Fetch all remaining pages
-          try {
-            let safety = 0
-            while (nextLine > 0 && safety < 50) {
-              const more = await api.getLog(urlTaskId, nextLine)
-              if (!more.text || more.tail_line <= nextLine) break
-              logAcc += more.text
-              nextLine = more.tail_line
-              if (nextLine >= more.total_lines) break
-              safety++
-            }
-          } catch { /* ignore */ }
-          setLogText(logAcc)
-          // Keep running=false – prevents SSE from connecting and duplicating log content
-          setResult({ status: 'ok', task_id: urlTaskId })
-        } else {
-          // Running: fetch tail, then enable SSE for real-time streaming
-          try {
-            const d = await api.getLog(urlTaskId)
-            if (d.text) { logAcc = d.text; nextLine = d.tail_line }
-          } catch { /* ignore */ }
-          setLogText(logAcc)
-          setRunning(true)  // Only now enable SSE – task is confirmed running
-        }
+          const d = await api.getLog(urlTaskId)
+          if (d.text) setLogText(d.text)
+        } catch { /* Progress polling remains the source of task status. */ }
+        setRunning(true)
       }
       resume()
     }
   }, [urlTaskId, api])
 
   const handleSubmit = async (config: Record<string, unknown>) => {
+    suppressProgressPollRef.current = false
     const id = createTaskId(taskPrefix)
     saveTaskId(id)
     setTaskId(id)
     setLogText('')
     setProgress(0)
+    setProgressError(null)
     setResult(null)
     setCopied(false)
 
     // Use non-blocking /launch if available, otherwise blocking /invoke
     const launchFn = api.launch || api.submit
 
+    setRunning(true)
     try {
       const res = await launchFn(config, id)
       // For blocking /invoke, res is the full result (eval completed).
-      // For non-blocking /launch, res is {task_id, status: 'launched'}.
-      if (res && (res as { status: string }).status === 'launched') {
-        // Non-blocking: start monitoring
-        setRunning(true)
-        // Clear any stale launch poll from a previous evaluation
-        if (launchPollRef.current) { clearInterval(launchPollRef.current); launchPollRef.current = null }
-        // Poll progress every 3 seconds until done
-        const poll = setInterval(async () => {
-          try {
-            const p = await api.getProgress(id)
-            setProgress(p.percent ?? 0)
-            if (p.status === 'completed' || p.status === 'error' || p.status === 'stopped') {
-              clearInterval(poll)
-              if (launchPollRef.current === poll) launchPollRef.current = null
-              setRunning(false)
-              clearTaskId()
-              // Fetch final log
-              try {
-                const finalLog = await api.getLog(id, 0, 999999)
-                if (finalLog.text) setLogText(finalLog.text)
-              } catch { /* ignore */ }
-              setResult({ status: p.status === 'error' ? 'error' : 'ok', task_id: id } as EvalInvokeResponse)
-            }
-          } catch { /* ignore poll errors */ }
-        }, 3000)
-        launchPollRef.current = poll
-      } else {
-        // Blocking mode: eval completed, res is the full result
+      // For non-blocking /launch, the shared lifecycle poll handles status.
+      if (!res || (res as { status: string }).status !== 'launched') {
         setResult(res as EvalInvokeResponse)
         setRunning(false)
         clearTaskId()
@@ -178,19 +120,23 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
 
   const handleStop = async () => {
     if (!taskId) return
-    // Clear launch poll interval so no more progress updates fire
-    if (launchPollRef.current) { clearInterval(launchPollRef.current); launchPollRef.current = null }
     try { await api.stop(taskId) } catch { toast.warning('Stop request failed') }
     clearTaskId()
     setRunning(false)
+    suppressProgressPollRef.current = false
+    setProgressError(null)
     setResult({ status: 'stopped', task_id: taskId })
   }
 
   const handleResume = async (existingTaskId: string, apiKey?: string) => {
+    // /resume/invoke is blocking. Its old progress file can still contain the
+    // previous terminal status during startup, so do not classify it mid-run.
+    suppressProgressPollRef.current = true
     setTaskId(existingTaskId)
     setRunning(true)
     setLogText('')
     setProgress(0)
+    setProgressError(null)
     setResult(null)
     setCopied(false)
     try {
@@ -201,6 +147,8 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       toast.error(String(e))
     } finally {
       setRunning(false)
+      suppressProgressPollRef.current = false
+      clearTaskId()
       // Fetch complete final log + progress
       try {
         const finalLog = await api.getLog(existingTaskId, 0, 999999)
@@ -219,27 +167,51 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
     return `/api/v1/${taskPrefix}/log/stream?task_id=${taskId}`
   }, [taskId, taskPrefix])
 
-  // Progress via HTTP polling (3s) instead of SSE to save browser connections.
-  // Browser limits 6 concurrent connections per domain; with 2 tasks running
-  // we'd have 2 POST + 4 SSE = 6, blocking the /tasks/running poll.
+  // Single lifecycle poll for launch and URL restore.  Transport failures do
+  // not become business success; they preserve state and retry with backoff.
   useEffect(() => {
-    if (!running || !taskId) return
+    if (!running || !taskId || suppressProgressPollRef.current) return
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let failures = 0
+
+    const schedule = (delay: number) => {
+      if (!cancelled) timer = setTimeout(poll, delay)
+    }
+
     const poll = async () => {
       try {
         const d = await api.getProgress(taskId)
         if (cancelled) return
-        if ((d.percent ?? 0) >= 100 && d.status === 'completed') {
+        failures = 0
+        setProgressError(null)
+        setProgress(d.percent ?? 0)
+        const outcome = classifyProgress(d)
+        if (outcome) {
           setRunning(false)
           clearTaskId()
-          setResult((prev) => prev ?? { status: 'ok', task_id: taskId! })
+          setResult({ ...outcome, task_id: taskId })
+          try {
+            const finalLog = await api.getLog(taskId, 0, 999999)
+            if (!cancelled && finalLog.text) setLogText(finalLog.text)
+          } catch { /* Status remains authoritative if the final log is unavailable. */ }
+          return
         }
-      } catch { /* ignore */ }
+        schedule(3000)
+      } catch {
+        if (cancelled) return
+        failures += 1
+        setProgressError('任务状态暂不可用，正在重试')
+        schedule(progressRetryDelay(failures))
+      }
     }
+
     poll()
-    const interval = setInterval(poll, 3000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [running, taskId, api])
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [running, taskId, api, clearTaskId])
 
   const logSSE = useSSE<LogResponse>({
     url: logStreamUrl,
@@ -261,7 +233,7 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   }, [logText, result?.error])
 
   return {
-    running, progress, result, logText, reportUrl, copied, taskId,
+    running, progress, progressError, result, logText, reportUrl, copied, taskId,
     handleSubmit, handleStop, handleResume, copyLog,
     sseState: logSSE.connectionState,
   }

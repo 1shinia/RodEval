@@ -83,7 +83,7 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 19  # Bump when adding migrations below
+SCHEMA_VERSION = 20  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -397,6 +397,40 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
             ON password_reset_tokens(user_id);
     '''
     ),
+    (
+        20, 'add resumable batch job checkpoints', '''
+        CREATE TABLE IF NOT EXISTS batch_jobs (
+            batch_id       TEXT PRIMARY KEY,
+            batch_type     TEXT NOT NULL CHECK(batch_type IN ('eval', 'perf')),
+            user_id        INTEGER NOT NULL,
+            status         TEXT NOT NULL,
+            manifest_hash  TEXT NOT NULL,
+            total          INTEGER NOT NULL DEFAULT 0,
+            completed      INTEGER NOT NULL DEFAULT 0,
+            errors         INTEGER NOT NULL DEFAULT 0,
+            results_json   TEXT NOT NULL DEFAULT '[]',
+            errors_json    TEXT NOT NULL DEFAULT '[]',
+            created_at     TEXT NOT NULL,
+            updated_at     TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS batch_items (
+            batch_id       TEXT NOT NULL,
+            row_index      INTEGER NOT NULL,
+            model          TEXT NOT NULL DEFAULT '',
+            status         TEXT NOT NULL DEFAULT 'pending',
+            task_id        TEXT NOT NULL DEFAULT '',
+            error          TEXT NOT NULL DEFAULT '',
+            started_at     TEXT,
+            finished_at    TEXT,
+            PRIMARY KEY (batch_id, row_index),
+            FOREIGN KEY (batch_id) REFERENCES batch_jobs(batch_id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_batch_jobs_user_type_updated
+            ON batch_jobs(user_id, batch_type, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_batch_items_batch_status
+            ON batch_items(batch_id, status, row_index);
+    '''
+    ),
 ]
 
 
@@ -625,6 +659,12 @@ def _migrate(conn: sqlite3.Connection, pre_migration_backup=None) -> None:
     upgrading an existing database. Fresh databases do not need a rollback
     snapshot because they contain no user data yet.
     """
+    # Migration can run concurrently during service startup. The caller may have
+    # opened this connection with SQLite's short default timeout; explicitly
+    # extend the busy window so the second migrator waits for the first one to
+    # commit instead of failing with ``database is locked``.
+    conn.execute('PRAGMA busy_timeout=30000')
+
     conn.execute(
         '''
         CREATE TABLE IF NOT EXISTS schema_version (
@@ -725,6 +765,8 @@ def _verify_schema(*, strict: bool = False) -> None:
             required_tables.add('task_registry')
         if current_version >= 17:
             required_tables.add('eval_report_datasets')
+        if current_version >= 20:
+            required_tables.update({'batch_jobs', 'batch_items'})
         existing_tables = {
             r[0] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -750,6 +792,16 @@ def _verify_schema(*, strict: bool = False) -> None:
             required_columns['task_registry'] = {'task_id', 'task_kind', 'user_id', 'created_at'}
         if current_version >= 17:
             required_columns['eval_report_datasets'] = {'task_id', 'user_id', 'dataset_name', 'score', 'position'}
+        if current_version >= 20:
+            required_columns['batch_jobs'] = {
+                'batch_id', 'batch_type', 'user_id', 'status', 'manifest_hash',
+                'total', 'completed', 'errors', 'results_json', 'errors_json',
+                'created_at', 'updated_at',
+            }
+            required_columns['batch_items'] = {
+                'batch_id', 'row_index', 'model', 'status', 'task_id',
+                'error', 'started_at', 'finished_at',
+            }
         for table, expected in required_columns.items():
             if table not in existing_tables:
                 continue
@@ -1810,6 +1862,179 @@ def delete_perf_task(task_id: str, user_id: int | None = None) -> None:
             conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id,))
 
     _write(_op)
+
+
+# ---------------------------------------------------------------------------
+# Resumable batch checkpoints
+# ---------------------------------------------------------------------------
+
+
+def create_batch_job(
+    batch_id: str,
+    batch_type: str,
+    user_id: int,
+    manifest_hash: str,
+    items: list[dict[str, Any]],
+) -> None:
+    """Create a credential-free batch checkpoint and its ordered row items."""
+    if batch_type not in ('eval', 'perf'):
+        raise ValueError(f'Unsupported batch type: {batch_type}')
+    now = utc_now_iso()
+
+    def _op(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            '''INSERT INTO batch_jobs (
+                   batch_id, batch_type, user_id, status, manifest_hash,
+                   total, completed, errors, results_json, errors_json,
+                   created_at, updated_at
+               ) VALUES (?, ?, ?, 'running', ?, ?, 0, 0, '[]', '[]', ?, ?)''',
+            (batch_id, batch_type, int(user_id), manifest_hash, len(items), now, now),
+        )
+        conn.executemany(
+            '''INSERT INTO batch_items (batch_id, row_index, model, status)
+               VALUES (?, ?, ?, 'pending')''',
+            [(batch_id, int(item['row_index']), str(item.get('model', ''))) for item in items],
+        )
+
+    _write(_op)
+
+
+def update_batch_job(batch_id: str, **fields: Any) -> None:
+    """Update non-sensitive aggregate batch state."""
+    allowed = {'status', 'completed', 'errors', 'results_json', 'errors_json'}
+    values = {key: value for key, value in fields.items() if key in allowed}
+    if not values:
+        return
+    for key in ('results_json', 'errors_json'):
+        if key in values and not isinstance(values[key], str):
+            values[key] = json.dumps(values[key], ensure_ascii=False)
+    values['updated_at'] = utc_now_iso()
+    assignments = ', '.join(f'{key} = ?' for key in values)
+    params = [*values.values(), batch_id]
+    _write(lambda conn: conn.execute(
+        f'UPDATE batch_jobs SET {assignments} WHERE batch_id = ?', params
+    ))
+
+
+def update_batch_item(batch_id: str, row_index: int, **fields: Any) -> None:
+    """Update one batch row, identified by its stable CSV row index."""
+    allowed = {'status', 'task_id', 'error', 'started_at', 'finished_at'}
+    values = {key: value for key, value in fields.items() if key in allowed}
+    if not values:
+        return
+    assignments = ', '.join(f'{key} = ?' for key in values)
+    params = [*values.values(), batch_id, int(row_index)]
+    _write(lambda conn: conn.execute(
+        f'UPDATE batch_items SET {assignments} WHERE batch_id = ? AND row_index = ?', params
+    ))
+
+
+def get_batch_job(
+    batch_id: str,
+    *,
+    user_id: int | None,
+    batch_type: str,
+) -> dict[str, Any] | None:
+    """Return an owned batch checkpoint with ordered items, or ``None``.
+
+    ``user_id=None`` is reserved for an already-authenticated administrator.
+    """
+    conn = _get_conn()
+    if user_id is None:
+        row = conn.execute(
+            'SELECT * FROM batch_jobs WHERE batch_id = ? AND batch_type = ?',
+            (batch_id, batch_type),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            '''SELECT * FROM batch_jobs
+               WHERE batch_id = ? AND user_id = ? AND batch_type = ?''',
+            (batch_id, int(user_id), batch_type),
+        ).fetchone()
+    if row is None:
+        return None
+    job = dict(row)
+    job['results'] = json.loads(job.pop('results_json') or '[]')
+    job['error_details'] = json.loads(job.pop('errors_json') or '[]')
+    job['items'] = [
+        dict(item) for item in conn.execute(
+            'SELECT * FROM batch_items WHERE batch_id = ? ORDER BY row_index',
+            (batch_id,),
+        ).fetchall()
+    ]
+    return job
+
+
+def claim_batch_resume(
+    batch_id: str,
+    *,
+    user_id: int | None,
+    batch_type: str,
+    manifest_hash: str,
+) -> str:
+    """Atomically claim a cancelled batch for resume.
+
+    Returns ``claimed``, ``running``, ``manifest_mismatch``, ``not_resumable``
+    or ``not_found``.  The conditional update is the concurrency arbiter.
+    """
+    def _op(conn: sqlite3.Connection) -> str:
+        if user_id is None:
+            row = conn.execute(
+                '''SELECT status, manifest_hash FROM batch_jobs
+                   WHERE batch_id = ? AND batch_type = ?''',
+                (batch_id, batch_type),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                '''SELECT status, manifest_hash FROM batch_jobs
+                   WHERE batch_id = ? AND user_id = ? AND batch_type = ?''',
+                (batch_id, int(user_id), batch_type),
+            ).fetchone()
+        if row is None:
+            return 'not_found'
+        if row['manifest_hash'] != manifest_hash:
+            return 'manifest_mismatch'
+        if row['status'] in ('running', 'cancelling'):
+            return 'running'
+        if row['status'] != 'cancelled':
+            return 'not_resumable'
+        cursor = conn.execute(
+            '''UPDATE batch_jobs SET status = 'running', updated_at = ?
+               WHERE batch_id = ? AND status = 'cancelled' ''',
+            (utc_now_iso(), batch_id),
+        )
+        return 'claimed' if cursor.rowcount else 'running'
+
+    return str(_write(_op))
+
+
+def recover_interrupted_batches() -> int:
+    """Convert batches left active by a service restart into resumable state."""
+    now = utc_now_iso()
+
+    def _op(conn: sqlite3.Connection) -> int:
+        batch_ids = [
+            row['batch_id'] for row in conn.execute(
+                "SELECT batch_id FROM batch_jobs WHERE status IN ('running', 'cancelling')"
+            ).fetchall()
+        ]
+        if not batch_ids:
+            return 0
+        placeholders = ','.join('?' for _ in batch_ids)
+        conn.execute(
+            f'''UPDATE batch_items
+                SET status = 'interrupted', finished_at = ?
+                WHERE batch_id IN ({placeholders}) AND status = 'running' ''',
+            (now, *batch_ids),
+        )
+        conn.execute(
+            f'''UPDATE batch_jobs SET status = 'cancelled', updated_at = ?
+                WHERE batch_id IN ({placeholders})''',
+            (now, *batch_ids),
+        )
+        return len(batch_ids)
+
+    return int(_write(_op))
 
 
 # ---------------------------------------------------------------------------

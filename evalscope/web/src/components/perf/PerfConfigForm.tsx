@@ -12,6 +12,8 @@ interface Props {
   disabled?: boolean
   onApiKeyChange?: (key: string) => void
   onBatchSubmit?: (batchId: string, sharedConfig: Record<string, unknown>) => Promise<void>
+  onBatchResume?: (file: File, sharedConfig: Record<string, unknown>) => Promise<void>
+  batchResumable?: boolean
   onModeChange?: (mode: 'single' | 'batch') => void
 }
 
@@ -48,7 +50,7 @@ const EXTRA_ARGS_FORBIDDEN = ['model', 'messages', 'prompt', 'stream']
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit, onModeChange }: Props) {
+export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onBatchSubmit, onBatchResume, batchResumable, onModeChange }: Props) {
   const { t } = useLocale()
   const [testMode, setTestMode] = useState<'single' | 'batch'>('single')
   const isBatch = testMode === 'batch'
@@ -83,6 +85,22 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   const [batchUploading, setBatchUploading] = useState(false)
   const [batchError, setBatchError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const resumeConfigRef = useRef<Record<string, unknown> | null>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setBatchFile(file)
+      setBatchInfo(null)
+      setBatchError('')
+      if (resumeConfigRef.current && onBatchResume) {
+        const config = resumeConfigRef.current
+        resumeConfigRef.current = null
+        void onBatchResume(file, config)
+      }
+    }
+    e.target.value = ''
+  }
 
   // Reset dataset when switching between LLM and embedding/reranker APIs
   useEffect(() => {
@@ -97,17 +115,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     }
   }, [api]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (f) {
-      setBatchFile(f)
-      setBatchInfo(null)
-      setBatchError('')
-    }
-    // Reset so same file can be re-selected
-    e.target.value = ''
-  }
-
   const handleBatchUpload = async () => {
     if (!batchFile) return
     setBatchUploading(true)
@@ -120,7 +127,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       setBatchInfo(null)
     } finally {
       setBatchUploading(false)
-      // Reset file input so re-upload works for same file
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
@@ -168,9 +174,9 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     e.preventDefault()
 
     if (isBatch) {
-      // Batch mode: validate CSV uploaded, then submit via onBatchSubmit
       setBatchError('')
-      if (!batchInfo?.batch_id) {
+      const resumable = batchResumable
+      if (!resumable && !batchInfo?.batch_id) {
         setBatchError(t('perf.errCsvRequired'))
         return
       }
@@ -182,7 +188,19 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         return
       }
       const sharedConfig = buildSharedConfig()
-      onBatchSubmit?.(batchInfo.batch_id, sharedConfig)
+      if (batchResumable && onBatchResume) {
+        if (batchFile) void onBatchResume(batchFile, sharedConfig)
+        else {
+          resumeConfigRef.current = sharedConfig
+          fileInputRef.current?.click()
+        }
+      } else {
+        if (!batchInfo?.batch_id) {
+          setBatchError(t('perf.errCsvRequired'))
+          return
+        }
+        onBatchSubmit?.(batchInfo!.batch_id, sharedConfig)
+      }
       return
     }
 
@@ -511,8 +529,8 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         </div>
       </Collapsible>
 
-      <Button type="submit" variant="primary" disabled={disabled} className="btn-glow">
-        {isBatch ? t('perf.startBatch') : t('perf.startPerf')}
+      <Button type="submit" variant="primary" disabled={disabled || batchUploading} className="btn-glow">
+        {isBatch ? (batchResumable ? '继续批量测试' : t('perf.startBatch')) : t('perf.startPerf')}
       </Button>
     </form>
   )

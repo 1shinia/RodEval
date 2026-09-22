@@ -8,6 +8,7 @@ import { ExternalLink, CheckCircle2, XCircle, Loader2, Square, OctagonX, PlayCir
 interface Props {
   running: boolean
   progress: number
+  progressError?: string | null
   logText: string
   result: EvalInvokeResponse | null
   reportUrl: string | null
@@ -18,7 +19,10 @@ interface Props {
   sseState?: { status: string; message: string }
 }
 
-export default function TaskMonitor({ running, progress, logText, result, reportUrl, readyLabel, onStop, onResume, taskId, sseState }: Props) {
+export default function TaskMonitor({
+  running, progress, progressError, logText, result, reportUrl, readyLabel,
+  onStop, onResume, taskId, sseState,
+}: Props) {
   const { t } = useLocale()
   const isReconnecting = sseState?.status === 'reconnecting'
 
@@ -59,6 +63,12 @@ export default function TaskMonitor({ running, progress, logText, result, report
           <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded bg-[var(--warning-bg)] text-[var(--warning-color)] text-xs">
             <WifiOff size={12} />
             <span>{sseState!.message}</span>
+          </div>
+        )}
+        {running && progressError && (
+          <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded bg-[var(--warning-bg)] text-[var(--warning-color)] text-xs">
+            <WifiOff size={12} />
+            <span>{progressError}</span>
           </div>
         )}
       </div>

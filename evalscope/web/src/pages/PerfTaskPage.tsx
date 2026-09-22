@@ -3,7 +3,8 @@ import { useLocale } from '@/contexts/LocaleContext'
 import PerfConfigForm from '@/components/perf/PerfConfigForm'
 import TaskPageLayout from '@/components/eval/TaskPageLayout'
 import { useTaskRunner } from '@/hooks/useTaskRunner'
-import { submitPerfTask, launchPerfTask, stopPerfTask, getPerfProgress, getPerfLog, getPerfReportUrl, resumePerfTask, launchBatchPerf, getBatchStatus, stopBatchPerf } from '@/api/perf'
+import { submitPerfTask, launchPerfTask, stopPerfTask, getPerfProgress, getPerfLog, getPerfReportUrl, resumePerfTask,
+  launchBatchPerf, resumeBatchPerf, getBatchStatus, stopBatchPerf, uploadBatchCsv } from '@/api/perf'
 import type { BatchStatus } from '@/api/perf'
 import { toast } from '@/components/common/Toast'
 
@@ -22,8 +23,8 @@ export default function PerfTaskPage() {
   const apiKeyRef = useRef('')
 
   const api = useMemo(() => perfApi, [])
-  const { running, progress, result, logText, reportUrl, copied, taskId,
-    handleSubmit, handleStop, handleResume: rawResume, copyLog } = useTaskRunner({ api, taskPrefix: 'perf' })
+  const { running, progress, progressError, result, logText, reportUrl, copied, taskId,
+    handleSubmit, handleStop, handleResume: rawResume } = useTaskRunner({ api, taskPrefix: 'perf' })
 
   const onApiKeyChange = useCallback((key: string) => { apiKeyRef.current = key }, [])
   const handleResume = useCallback((id: string) => { rawResume(id, apiKeyRef.current || undefined) }, [rawResume])
@@ -35,6 +36,8 @@ export default function PerfTaskPage() {
   const [selectedTaskId, setSelectedTaskId] = useState('')
   const [selectedTaskLog, setSelectedTaskLog] = useState('')
   const batchIdRef = useRef<string | null>(null)
+  const batchFileRef = useRef<File | null>(null)
+  const batchConfigRef = useRef<Record<string, unknown>>({})
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastLogTaskIdRef = useRef<string>('')
 
@@ -108,6 +111,49 @@ export default function PerfTaskPage() {
     }
   }, [])
 
+  const monitorBatch = useCallback((batchId: string) => {
+    clearBatchPoll()
+    const poll = async () => {
+      try {
+        const st = await getBatchStatus(batchId)
+        setBatchState(st)
+        const active = st.status === 'running' || st.status === 'cancelling'
+        setBatchRunning(active)
+        if (st.current_task_id) {
+          lastLogTaskIdRef.current = st.current_task_id
+          try { const log = await getPerfLog(st.current_task_id); setBatchLogText(log.text || '') } catch { /* */ }
+        }
+        if (!active) {
+          clearBatchPoll()
+          const results = st.results || []
+          if (results.length > 0) {
+            const last = results[results.length - 1]
+            setSelectedTaskId(last.task_id)
+            fetchTaskLog(last.task_id)
+          }
+          if (st.status === 'completed') {
+            sessionStorage.removeItem('perfBatchId')
+            toast[st.errors > 0 ? 'warning' : 'success'](`批量测试完成：${st.completed} 成功${st.errors > 0 ? `，${st.errors} 失败` : ''}`)
+          } else if (st.status === 'cancelled') {
+            toast.info(`批量测试已停止：${st.completed} 完成，可从断点继续`)
+          }
+        }
+      } catch {
+        clearBatchPoll(); setBatchRunning(false)
+        toast.warning('批量状态暂不可用，请稍后重试')
+      }
+    }
+    void poll()
+    pollRef.current = setInterval(poll, 3000)
+  }, [clearBatchPoll, fetchTaskLog])
+
+  useEffect(() => {
+    const batchId = sessionStorage.getItem('perfBatchId')
+    if (!batchId) return
+    batchIdRef.current = batchId
+    monitorBatch(batchId)
+  }, [monitorBatch])
+
   const handleBatchSubmit = useCallback(async (batchId: string, sharedConfig: Record<string, unknown>) => {
     setBatchRunning(true)
     setBatchState(null)
@@ -115,62 +161,35 @@ export default function PerfTaskPage() {
     setSelectedTaskId('')
     setSelectedTaskLog('')
     batchIdRef.current = batchId
+    batchConfigRef.current = sharedConfig
+    sessionStorage.setItem('perfBatchId', batchId)
     clearBatchPoll()
 
     try {
       const launched = await launchBatchPerf(batchId, sharedConfig)
       toast.info(`批量测试已启动，共 ${launched.total} 个模型`)
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const st = await getBatchStatus(batchId)
-          setBatchState(st)
-
-          // Fetch log for current task (only during running)
-          if (st.current_task_id && st.current_task_id !== lastLogTaskIdRef.current) {
-            lastLogTaskIdRef.current = st.current_task_id
-          }
-          if (st.current_task_id) {
-            try {
-              const log = await getPerfLog(st.current_task_id)
-              setBatchLogText(log.text || '')
-            } catch { /* ignore */ }
-          }
-
-          if (st.status !== 'running') {
-            clearBatchPoll()
-            setBatchRunning(false)
-
-            // Auto-select last result and load its log
-            const results = st.results || []
-            if (results.length > 0) {
-              const last = results[results.length - 1]
-              setSelectedTaskId(last.task_id)
-              fetchTaskLog(last.task_id)
-            }
-
-            if (st.status === 'completed') {
-              if (st.errors > 0) {
-                toast.warning(`批量测试完成：${st.completed} 成功，${st.errors} 失败`)
-              } else {
-                toast.success(`批量测试完成：${st.completed} 个模型全部成功`)
-              }
-            } else if (st.status === 'cancelled') {
-              toast.info(`批量测试已取消：${st.completed} 完成`)
-            }
-          }
-        } catch (e) {
-          // Batch state lost (e.g. server restart) or network error
-          clearBatchPoll()
-          setBatchRunning(false)
-          toast.warning('批量状态丢失（服务可能已重启）')
-        }
-      }, 3000)
+      monitorBatch(batchId)
     } catch (e) {
       toast.error(String(e))
       setBatchRunning(false)
     }
-  }, [clearBatchPoll, fetchTaskLog])
+  }, [clearBatchPoll, monitorBatch])
+
+  const handleBatchResume = useCallback(async (file: File, sharedConfig: Record<string, unknown>) => {
+    const batchId = batchIdRef.current
+    if (!batchId) return
+    try {
+      const uploaded = await uploadBatchCsv(file)
+      await resumeBatchPerf(batchId, uploaded.batch_id, sharedConfig)
+      batchFileRef.current = file
+      batchConfigRef.current = sharedConfig
+      setBatchRunning(true)
+      toast.info('批量测试已从断点继续')
+      monitorBatch(batchId)
+    } catch (e) {
+      toast.error(String(e))
+    }
+  }, [monitorBatch])
 
   useEffect(() => {
     return () => clearBatchPoll()
@@ -184,6 +203,7 @@ export default function PerfTaskPage() {
       readyLabel={t('perf.ready')}
       running={running || batchRunning}
       progress={running ? progress : 0}
+      progressError={running ? progressError : null}
       result={result}
       logText={running ? logText : (batchRunning ? batchLogText : (selectedTaskId ? selectedTaskLog : logText))}
       reportUrl={reportUrl}
@@ -198,6 +218,8 @@ export default function PerfTaskPage() {
         disabled={running || batchRunning}
         onApiKeyChange={onApiKeyChange}
         onBatchSubmit={handleBatchSubmit}
+        onBatchResume={handleBatchResume}
+        batchResumable={Boolean(batchState?.status === 'cancelled' && batchState.resumable)}
         onModeChange={handleModeChange}
       />
 
@@ -233,7 +255,7 @@ export default function PerfTaskPage() {
       )}
 
       {/* Batch result summary */}
-      {batchState && batchState.status !== 'running' && (
+      {batchState && batchState.status !== 'running' && batchState.status !== 'cancelling' && (
         <div className="mt-4 p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
           <h3 className="text-sm font-medium mb-2">
             {batchState.status === 'completed' ? '批量测试完成' : '批量测试已取消'}：

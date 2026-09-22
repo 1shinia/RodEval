@@ -15,6 +15,7 @@ import os
 import pytest
 
 import evalscope.service.blueprints.eval as svc_eval
+import evalscope.service.db as svc_db
 import evalscope.service.utils as svc_utils
 import evalscope.service.utils.log as svc_log
 
@@ -138,3 +139,68 @@ def test_upload_preview_hides_api_key_and_secures_temporary_csv(clients):
     saved = os.path.join(svc_eval.EVAL_BATCH_UPLOAD_DIR, f'{batch_id}.csv')
     assert os.path.isfile(saved)
     assert oct(os.stat(saved).st_mode & 0o777) == '0o600'
+
+
+class _DormantThread:
+    def __init__(self, *, target, daemon):
+        self.target = target
+
+    def start(self):
+        pass
+
+
+def test_launch_persists_checkpoint_and_removes_credential_file(clients, monkeypatch):
+    client_a, _, uid_a, _ = clients
+    batch_id = _upload_csv(client_a)
+    monkeypatch.setattr(svc_eval.threading, 'Thread', _DormantThread)
+
+    resp = client_a.post('/api/v1/eval/batch/launch', json={
+        'batch_id': batch_id,
+        'eval_backend': 'Native',
+        'datasets': ['gsm8k'],
+    })
+
+    assert resp.status_code == 200, resp.data
+    assert not os.path.exists(os.path.join(svc_eval.EVAL_BATCH_UPLOAD_DIR, f'{batch_id}.csv'))
+    job = svc_db.get_batch_job(batch_id, user_id=uid_a, batch_type='eval')
+    assert job is not None
+    assert job['status'] == 'running'
+    assert [item['status'] for item in job['items']] == ['pending']
+
+
+def test_status_uses_durable_cancelled_checkpoint(clients):
+    client_a, _, uid_a, _ = clients
+    svc_db.create_batch_job('durable_eval', 'eval', uid_a, 'manifest', [{'row_index': 0, 'model': 'm1'}])
+    svc_db.update_batch_job('durable_eval', status='cancelled')
+
+    resp = client_a.get('/api/v1/eval/batch/status/durable_eval')
+
+    assert resp.status_code == 200
+    assert resp.get_json()['status'] == 'cancelled'
+    assert resp.get_json()['resumable'] is True
+
+
+def test_resume_reuses_original_batch_id_and_rejects_second_claim(clients, monkeypatch):
+    client_a, _, _, _ = clients
+    original = _upload_csv(client_a)
+    monkeypatch.setattr(svc_eval.threading, 'Thread', _DormantThread)
+    launch = client_a.post('/api/v1/eval/batch/launch', json={
+        'batch_id': original, 'eval_backend': 'Native', 'datasets': ['gsm8k'],
+    })
+    assert launch.status_code == 200
+    svc_db.update_batch_job(original, status='cancelled')
+    svc_eval._eval_batch_state.clear()
+
+    upload_id = _upload_csv(client_a)
+    payload = {
+        'batch_id': original,
+        'upload_id': upload_id,
+        'eval_backend': 'Native',
+        'datasets': ['gsm8k'],
+    }
+    resumed = client_a.post('/api/v1/eval/batch/resume', json=payload)
+    duplicate = client_a.post('/api/v1/eval/batch/resume', json=payload)
+
+    assert resumed.status_code == 200, resumed.data
+    assert resumed.get_json()['batch_id'] == original
+    assert duplicate.status_code == 409

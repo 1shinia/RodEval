@@ -217,6 +217,16 @@ export async function launchBatchPerf(
   )
 }
 
+export async function resumeBatchPerf(
+  batchId: string,
+  uploadId: string,
+  sharedConfig: Record<string, unknown>,
+): Promise<{ batch_id: string; total: number; status: string }> {
+  return apiPost<{ batch_id: string; total: number; status: string }>(
+    '/api/v1/perf/batch/resume', { batch_id: batchId, upload_id: uploadId, ...sharedConfig },
+  )
+}
+
 export interface BatchStatus {
   batch_id: string
   status: string          // 'running' | 'completed' | 'cancelled' | 'error'
@@ -227,6 +237,7 @@ export interface BatchStatus {
   current_task_id: string
   results: BatchRunResult[]
   error_details: { name: string; model: string; error: string }[]
+  resumable: boolean
 }
 
 export async function getBatchStatus(batchId: string): Promise<BatchStatus> {

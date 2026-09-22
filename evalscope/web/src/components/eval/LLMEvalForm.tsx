@@ -29,15 +29,23 @@ export default function LLMEvalForm({ context }: Props) {
   const { t } = useLocale()
   const { onSubmit, disabled, initialDataset, onApiKeyChange, isBatch, batchRunning, batchState,
     batchInfo, batchError, batchUploading, selectedTaskId, onSelectTask,
-    onBatchSubmit, onBatchStop, onBatchUpload, setBatchMode } = context
+    onBatchSubmit, onBatchResume, onBatchStop, onBatchUpload, setBatchMode } = context
 
   // Batch file state
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const resumeConfigRef = useRef<Record<string, unknown> | null>(null)
   const [batchFile, setBatchFile] = useState<File | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (f) { setBatchFile(f) }
+    const file = e.target.files?.[0]
+    if (file) {
+      setBatchFile(file)
+      if (resumeConfigRef.current) {
+        const config = resumeConfigRef.current
+        resumeConfigRef.current = null
+        void onBatchResume(file, config)
+      }
+    }
     e.target.value = ''
   }
 
@@ -199,7 +207,8 @@ export default function LLMEvalForm({ context }: Props) {
 
     // Batch mode: delegate to onBatchSubmit
     if (isBatch) {
-      if (!batchInfo?.batch_id) { toast.error('请先上传模型列表文件'); return }
+      const resumable = batchState?.status === 'cancelled' && batchState.resumable
+      if (!resumable && !batchInfo?.batch_id) { toast.error('请先上传模型列表文件'); return }
       const dsList = datasets.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
       if (!dsList.length) { toast.error('请先填写测试数据集'); return }
       // 本地数据集：批量路径此前不带 hub / path（shared 与后端合并白名单里都没有这两个键），
@@ -260,7 +269,16 @@ export default function LLMEvalForm({ context }: Props) {
         generation_config: Object.keys(genConfig).length ? genConfig : undefined,
         judge_model_args: Object.keys(judgeArgs).length ? judgeArgs : undefined,
       }
-      onBatchSubmit(batchInfo.batch_id, shared)
+      if (batchState?.status === 'cancelled' && batchState.resumable) {
+        if (batchFile) void onBatchResume(batchFile, shared)
+        else {
+          resumeConfigRef.current = shared
+          fileInputRef.current?.click()
+        }
+      } else {
+        if (!batchInfo?.batch_id) { toast.error('请先上传模型列表文件'); return }
+        onBatchSubmit(batchInfo.batch_id, shared)
+      }
       return
     }
 
@@ -709,8 +727,10 @@ export default function LLMEvalForm({ context }: Props) {
         </Card>
       )}
 
-      <Button type="submit" variant="primary" disabled={disabled} className="btn-glow">
-        {isBatch ? '开始批量评估' : t('eval.startEval')}
+      <Button type="submit" variant="primary" disabled={disabled || batchUploading} className="btn-glow">
+        {isBatch
+          ? (batchState?.status === 'cancelled' && batchState.resumable ? '继续批量评估' : '开始批量评估')
+          : t('eval.startEval')}
       </Button>
 
       {/* ── Batch progress (during running) ── */}
@@ -730,7 +750,7 @@ export default function LLMEvalForm({ context }: Props) {
       )}
 
       {/* ── Batch result (after completion) ── */}
-      {batchState && batchState.status !== 'running' && (
+      {batchState && batchState.status !== 'running' && batchState.status !== 'cancelling' && (
         <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
           <h3 className="text-sm font-medium mb-2">
             {batchState.status === 'completed' ? '批量评估完成' : '已取消'}：
