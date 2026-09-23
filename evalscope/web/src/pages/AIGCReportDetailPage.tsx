@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { useLocale } from '@/contexts/LocaleContext'
 import { getAIGCReport } from '@/api/reports'
 import { toast } from '@/components/common/Toast'
@@ -10,7 +10,6 @@ import Lightbox from '@/components/aigc/Lightbox'
 
 export default function AIGCReportDetailPage() {
   const { taskId } = useParams<{ taskId: string }>()
-  const [searchParams] = useSearchParams()
   const { t } = useLocale()
 
   const [data, setData] = useState<AIGCReportResponse | null>(null)
@@ -22,6 +21,7 @@ export default function AIGCReportDetailPage() {
   useEffect(() => {
     if (!taskId) return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     setError('')
 
@@ -44,7 +44,7 @@ export default function AIGCReportDetailPage() {
   const samples = data?.per_sample ?? []
 
   // Aggregate metrics display
-  const metricsSummary = useMemo(() => {
+  const metricsSummary = useMemo<Array<{ label: string; value: string }>>(() => {
     if (!data?.metrics) return []
     return Object.entries(data.metrics).map(([key, value]) => ({
       label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),

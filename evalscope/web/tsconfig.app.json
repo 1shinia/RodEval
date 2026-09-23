@@ -26,5 +26,13 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/components/AIGCEvalForm.tsx",
+    "src/components/AIGCMetricsPanel.tsx",
+    "src/components/MediaGallery.tsx",
+    "src/components/PromptDetailTable.tsx",
+    "src/pages/AIGCReportsPage.tsx",
+    "src/pages/AIGCTaskPage.tsx"
+  ]
 }

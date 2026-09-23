@@ -95,7 +95,6 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
   const [ragTwoStage, setRagTwoStage] = useState(false)
   const [ragEncoderModel, setRagEncoderModel] = useState('')
   const [ragPrompt, setRagPrompt] = useState('')
-  const [ragHub, setRagHub] = useState('modelscope')
   const [ragDataHub, setRagDataHub] = useState('modelscope')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -219,7 +218,7 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
     const modelConfig: Record<string, unknown> = {
       is_cross_encoder: ragTool === 'reranker',
     }
-    if (!isApi) modelConfig.hub = ragHub
+    if (!isApi) modelConfig.hub = 'modelscope'
     if (ragPrompt.trim()) modelConfig.prompt = ragPrompt.trim()
     if (isApi) {
       modelConfig.model_name = ragModelPath.trim()

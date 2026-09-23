@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Mic, Volume2 } from 'lucide-react'
-import { useLocale } from '@/contexts/LocaleContext'
+import { ArrowLeft } from 'lucide-react'
 import { api } from '@/api/client'
-import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 
 interface ASRSample {
@@ -29,6 +27,7 @@ interface TTSSample {
 interface AudioReport {
   tool: string
   model: string
+  asr_model?: string
   metrics?: Record<string, number>
   per_sample?: ASRSample | ASRSample[] | TTSSample[]
   elapsed_seconds?: number
@@ -36,10 +35,24 @@ interface AudioReport {
   total_elapsed_seconds?: number
 }
 
+interface AudioSample {
+  index?: number
+  reference?: string
+  hypothesis?: string
+  wer?: number
+  cer?: number
+  language?: string
+  elapsed_seconds?: number
+  audio_url?: string
+  prompt?: string
+  error?: string
+  duration_seconds?: number
+  asr_elapsed_seconds?: number
+}
+
 export default function AudioReportDetailPage() {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
-  const { t } = useLocale()
 
   const [report, setReport] = useState<AudioReport | null>(null)
   const [loading, setLoading] = useState(true)
@@ -50,7 +63,7 @@ export default function AudioReportDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await api<any>(`/api/v1/audio/report/${encodeURIComponent(taskId)}`)
+      const data = await api<AudioReport>(`/api/v1/audio/report/${encodeURIComponent(taskId)}`)
       setReport(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load report')
@@ -60,6 +73,8 @@ export default function AudioReportDetailPage() {
   }, [taskId])
 
   useEffect(() => {
+    // The callback performs the asynchronous fetch and updates loading/error state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchReport()
   }, [fetchReport])
 
@@ -86,7 +101,7 @@ export default function AudioReportDetailPage() {
   }
 
   const isASR = report.tool === 'asr'
-  const samples: any[] = report.per_sample
+  const samples: AudioSample[] = report.per_sample
     ? (Array.isArray(report.per_sample) ? report.per_sample : [report.per_sample])
     : []
 
@@ -231,7 +246,7 @@ export default function AudioReportDetailPage() {
               ) : (
                 <>
                   <div className="flex items-start gap-3">
-                    <span className="text-xs text-[var(--text-dim)] font-mono mt-1">#{sample.index + 1}</span>
+                    <span className="text-xs text-[var(--text-dim)] font-mono mt-1">#{(sample.index ?? i) + 1}</span>
                     <div className="flex-1 min-w-0">
                       {sample.error ? (
                         <div className="text-sm text-[var(--danger)]">错误: {sample.error}</div>

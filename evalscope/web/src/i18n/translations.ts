@@ -195,7 +195,6 @@ const en: Dict = {
     ragCriticLLM: 'Critic LLM',
     ragModelName: 'Model Name',
     ragApiBase: 'API Base URL',
-    ragApiKey: 'API Key',
     ragEmbeddingModel: 'Embedding Model',
     ragModelPath: 'Model Path / Name',
     ragProvider: 'Provider',
@@ -203,7 +202,6 @@ const en: Dict = {
     ragApiKeyOptional: 'API Key (optional)',
     ragMetrics: 'Metrics',
     ragLanguage: 'Language',
-    ragStartEval: 'Start RAGAS Evaluation',
   },
   perf: {
     title: 'Performance Testing',
@@ -832,7 +830,6 @@ const zh: Dict = {
     ragCriticLLM: '评判 LLM',
     ragModelName: '模型名称',
     ragApiBase: 'API 地址',
-    ragApiKey: 'API Key',
     ragEmbeddingModel: 'Embedding 模型',
     ragModelPath: '模型路径 / 名称',
     ragProvider: '提供商',
@@ -840,7 +837,6 @@ const zh: Dict = {
     ragApiKeyOptional: 'API Key（可选）',
     ragMetrics: '评估指标',
     ragLanguage: '语言',
-    ragStartEval: '开始 RAGAS 评估',
   },
   perf: {
     title: '性能测试',

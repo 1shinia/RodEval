@@ -1,5 +1,5 @@
 import { useState, type SyntheticEvent } from 'react'
-import { useLocale } from '@/contexts/LocaleContext'
+
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from '@/components/ui/formStyles'
@@ -57,8 +57,6 @@ const METRICS_OPTIONS = [
 ]
 
 export default function AudioEvalForm({ onSubmit, disabled }: Props) {
-  const { t } = useLocale()
-
   const [tool, setTool] = useState<AudioTool>('asr')
 
   const handleToolChange = (newTool: AudioTool) => {

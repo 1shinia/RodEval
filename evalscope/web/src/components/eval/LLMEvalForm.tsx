@@ -77,7 +77,6 @@ export default function LLMEvalForm({ context }: Props) {
   const [datasetHub, setDatasetHub] = useState('modelscope')
   const [datasets, setDatasets] = useState(initialDataset ?? '')
   const [datasetPath, setDatasetPath] = useState('')
-  const [datasetLocalType, setDatasetLocalType] = useState('general_qa')
   const [datasetDir, setDatasetDir] = useState('')
   const isLocalDataset = datasetHub === 'local'
   // Anthropic 的思考走 thinking.budget_tokens（后端从 generation_config.reasoning_tokens 映射），
@@ -120,7 +119,11 @@ export default function LLMEvalForm({ context }: Props) {
   const datasetInputRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (initialDataset) setDatasets(initialDataset)
+    if (initialDataset) {
+      // Intentionally mirror a changing route/query parameter into form state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDatasets(initialDataset)
+    }
   }, [initialDataset])
 
   useEffect(() => {
@@ -175,11 +178,13 @@ export default function LLMEvalForm({ context }: Props) {
     const selected = datasets.split(/[,，]/).map(s => s.trim()).filter(Boolean)
     const needsSandbox = selected.some(ds => sandboxDatasets.has(ds))
     if (needsSandbox && !useSandbox) {
+      // Intentionally derive the sandbox toggle from selected datasets.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUseSandbox(true)
     } else if (!needsSandbox && useSandbox) {
       setUseSandbox(false)
     }
-  }, [datasets, sandboxDatasets])
+  }, [datasets, sandboxDatasets, useSandbox])
 
   const selectSuggestion = (name: string) => {
     if (ALL_LOCAL_TYPES.includes(name)) {

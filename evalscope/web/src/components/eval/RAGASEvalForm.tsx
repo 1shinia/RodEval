@@ -1,5 +1,5 @@
 import { useState, type SyntheticEvent } from 'react'
-import { useLocale } from '@/contexts/LocaleContext'
+
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
 import { FORM_INPUT_CLASS, inputClass } from '@/components/ui/formStyles'
@@ -15,7 +15,6 @@ interface Props {
 }
 
 export default function RAGASEvalForm({ onSubmit, disabled }: Props) {
-  const { t } = useLocale()
   const [testsetFile, setTestsetFile] = useState('')
   const [llmModel, setLlmModel] = useState('')
   const [llmApiBase, setLlmApiBase] = useState('')
