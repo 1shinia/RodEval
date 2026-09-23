@@ -1,3 +1,5 @@
+import { createInFlightDeduper } from './requestDeduper'
+
 const DEFAULT_TIMEOUT = 30_000 // 30 seconds
 
 export function getAuthHeaders(): Record<string, string> {
@@ -37,12 +39,10 @@ function createAbortSignal(timeoutMs: number = DEFAULT_TIMEOUT): {
   const controller = new AbortController()
   let timedOut = false
   if (timeoutMs > 0) {
-    const timer = setTimeout(() => {
+    setTimeout(() => {
       timedOut = true
       controller.abort()
     }, timeoutMs)
-    // Allow the timer to not block process exit (browser: no-op, but safe)
-    if (typeof (timer as any).unref === 'function') (timer as any).unref()
   }
   return { signal: controller.signal, didTimeout: () => timedOut }
 }
@@ -74,6 +74,20 @@ async function fetchWithTimeout(
   }
 }
 
+interface GetRequest {
+  url: string
+  timeoutMs?: number
+  label: string
+  token: string | null
+}
+
+const deduplicatedGet = createInFlightDeduper(async (key: string) => {
+  const { url, timeoutMs, label, token } = JSON.parse(key) as GetRequest
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+  const res = await fetchWithTimeout(url, { cache: 'no-store', headers }, timeoutMs, label)
+  return handleResponse<unknown>(res)
+})
+
 export async function api<T = unknown>(
   path: string,
   params?: Record<string, unknown>,
@@ -85,13 +99,8 @@ export async function api<T = unknown>(
       if (v !== undefined && v !== '') url.searchParams.set(k, String(v))
     }
   }
-  const res = await fetchWithTimeout(
-    url.toString(),
-    { cache: 'no-store', headers: getAuthHeaders() },
-    timeoutMs,
-    path,
-  )
-  return handleResponse<T>(res)
+  const token = localStorage.getItem('evalscope_token')
+  return deduplicatedGet(JSON.stringify({ url: url.toString(), timeoutMs, label: path, token })) as Promise<T>
 }
 
 export async function apiPost<T = unknown>(

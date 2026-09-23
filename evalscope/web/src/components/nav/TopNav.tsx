@@ -6,6 +6,7 @@ import { toast } from '@/components/common/Toast'
 import LocaleToggle from './LocaleToggle'
 import ThemeToggle from './ThemeToggle'
 import RunningTasksIndicator from './RunningTasksIndicator'
+import { preloadDefaultReportsRoute } from '@/routes/preload'
 import { LayoutDashboard, Sparkles, ClipboardCheck, GitCompareArrows, Activity, BarChart4, Medal, Menu, X, User, Users, LogOut, KeyRound, Trophy } from 'lucide-react'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -64,7 +65,7 @@ export default function TopNav() {
   const navItems = [
     { to: '/dashboard', icon: <LayoutDashboard size={18} />, label: t('nav.dashboard') },
     { to: '/eval', icon: <Sparkles size={18} />, label: t('nav.eval') },
-    { to: '/reports', icon: <ClipboardCheck size={18} />, label: t('nav.evalReports') },
+    { to: '/reports', icon: <ClipboardCheck size={18} />, label: t('nav.evalReports'), preload: preloadDefaultReportsRoute },
     { to: '/perf', icon: <Activity size={18} />, label: t('nav.perf') },
     { to: '/perf-reports', icon: <BarChart4 size={18} />, label: t('nav.perfReports') },
     { to: '/compare', icon: <GitCompareArrows size={18} />, label: '模型对比' },
@@ -82,14 +83,16 @@ export default function TopNav() {
           </div>
           <nav className="hidden lg:flex items-center gap-0.5">
             {navItems.map((item) => (
-              <NavLink key={item.to} to={item.to} className={linkClass}>
+              <NavLink key={item.to} to={item.to} className={linkClass}
+                onMouseEnter={item.preload} onFocus={item.preload} onTouchStart={item.preload}>
                 {item.icon} {item.label}
               </NavLink>
             ))}
           </nav>
           <nav className="hidden md:flex lg:hidden items-center gap-0.5">
             {navItems.map((item) => (
-              <NavLink key={item.to} to={item.to} className={iconLinkClass} title={item.label}>
+              <NavLink key={item.to} to={item.to} className={iconLinkClass} title={item.label}
+                onMouseEnter={item.preload} onFocus={item.preload} onTouchStart={item.preload}>
                 {item.icon}
               </NavLink>
             ))}
@@ -161,7 +164,8 @@ export default function TopNav() {
       <div className={`md:hidden overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${mobileOpen ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'}`}>
         <nav className="border-t border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 flex flex-col gap-0.5">
           {navItems.map((item) => (
-            <NavLink key={item.to} to={item.to} className={mobileLinkClass} onClick={() => setMobileOpen(false)}>
+            <NavLink key={item.to} to={item.to} className={mobileLinkClass} onClick={() => setMobileOpen(false)}
+              onFocus={item.preload} onTouchStart={item.preload}>
               {item.icon} {item.label}
             </NavLink>
           ))}

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
+import { useReports } from '@/contexts/ReportsContext'
 import { listPerfTasks, deletePerfTask, getPerfReportUrl, getPerfSlaData, type PerfTaskMeta, type SlaSummaryResponse } from '@/api/perf'
 import { toast } from '@/components/common/Toast'
-import { api } from '@/api/client'
 import Breadcrumb from '@/components/ui/Breadcrumb'
 import Card from '@/components/ui/Card'
 import ServerBadge from '@/components/ui/ServerBadge'
@@ -15,10 +15,11 @@ const PAGE_SIZE = 20
 
 export default function PerfReportsPage() {
   const { t } = useLocale()
+  const { serverAddress } = useReports()
   const [history, setHistory] = useState<PerfTaskMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [rootPath, setRootPath] = useState('')
-  const [serverAddress, setServerAddress] = useState('')
+
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -49,14 +50,6 @@ export default function PerfReportsPage() {
     return () => clearTimeout(searchTimer.current)
   }, [search])
 
-  // Fetch server address from config
-  useEffect(() => {
-    api<{ server_address?: string }>('/api/v1/config')
-      .then((cfg) => {
-        if (cfg.server_address) setServerAddress(cfg.server_address)
-      })
-      .catch(() => {/* ignore */})
-  }, [])
 
   const loadHistory = useCallback(async (p: number) => {
     setLoading(true)
@@ -82,11 +75,15 @@ export default function PerfReportsPage() {
       toast.error(t('common.loadFailed'))
     }
     finally { setLoading(false) }
-  }, [rootPath, debouncedSearch, filterModel, filterDataset, sortOrder])
+  }, [rootPath, debouncedSearch, filterModel, filterDataset, sortOrder, t])
 
+  // Data loading belongs in an effect; the state updates occur asynchronously in loadHistory.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadHistory(page) }, [loadHistory, page])
 
   // Reset page when filters change
+  // Filter changes intentionally reset pagination before the next history request.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(1) }, [filterModel, filterDataset, sortOrder, debouncedSearch])
 
   const handleViewReport = async (tid: string) => {
@@ -113,7 +110,8 @@ export default function PerfReportsPage() {
   const toggleSelect = useCallback((taskId: string) => {
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(taskId) ? next.delete(taskId) : next.add(taskId)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
       return next
     })
   }, [])

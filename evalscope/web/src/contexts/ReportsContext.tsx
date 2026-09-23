@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react'
 import type { LoadReportResponse, ReportData } from '@/api/types'
 import * as reportsApi from '@/api/reports'
-import { api } from '@/api/client'
+import { loadAppConfig } from '@/api/config'
 
 // ------------------------------------------------------------------ //
 // State                                                               //
@@ -114,7 +114,7 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   // Fetch the server-side default outputs_root from /api/v1/config on mount
   useEffect(() => {
     let cancelled = false
-    api<{ outputs_root: string; server_address?: string }>('/api/v1/config')
+    loadAppConfig()
       .then((cfg) => {
         if (!cancelled) {
           if (cfg.outputs_root && !userSetRootRef.current) {
@@ -127,7 +127,6 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {/* ignore; keep default */})
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const userSetRootRef = useRef(false)
@@ -135,6 +134,8 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   useEffect(() => { stateRef.current = state }, [state])
 
   const setRootPath = useCallback((p: string) => {
+    // This ref records an explicit user action before the async config response can arrive.
+    // eslint-disable-next-line react-hooks/immutability
     userSetRootRef.current = true
     dispatch({ type: 'SET_ROOT', rootPath: p })
     dispatch({ type: 'CLEAR_CACHE' })
@@ -227,6 +228,8 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   return <ReportsContext.Provider value={value}>{children}</ReportsContext.Provider>
 }
 
+// Context hook is intentionally exported beside its provider for the public context API.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useReports() {
   return useContext(ReportsContext)
 }

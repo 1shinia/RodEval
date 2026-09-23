@@ -10,6 +10,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/node_modules/katex/')) return 'katex'
+          if (id.includes('/node_modules/react-syntax-highlighter/') || id.includes('/node_modules/refractor/') || id.includes('/node_modules/prismjs/')) {
+            return 'syntax-highlighter'
+          }
+          return undefined
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     host: '0.0.0.0',

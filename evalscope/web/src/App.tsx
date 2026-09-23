@@ -11,10 +11,11 @@ import ToastContainer from '@/components/common/Toast'
 import { lazy, Suspense } from 'react'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import type { ReactNode } from 'react'
+import { loadLLMReportsTab, loadReportsLayout } from '@/routes/preload'
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
-const ReportsLayout = lazy(() => import('@/pages/ReportsLayout'))
-const LLMReportsTab = lazy(() => import('@/pages/LLMReportsTab'))
+const ReportsLayout = lazy(loadReportsLayout)
+const LLMReportsTab = lazy(loadLLMReportsTab)
 const RAGReportsTab = lazy(() => import('@/pages/RAGReportsTab'))
 const AIGCReportsTab = lazy(() => import('@/pages/AIGCReportsTab'))
 const AudioReportsTab = lazy(() => import('@/pages/AudioReportsTab'))

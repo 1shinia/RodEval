@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { loadAppConfig } from '@/api/config'
 
 interface User {
   id: number
@@ -46,11 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/v1/config')
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Failed to load registration policy')
-        return response.json()
-      })
+    loadAppConfig()
       .then((config) => {
         if (cancelled) return
         const mode = config.registration_mode

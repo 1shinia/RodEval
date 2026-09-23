@@ -5,7 +5,17 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { Components } from 'react-markdown'
 import { useTheme } from '@/contexts/ThemeContext'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
+import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp'
+import java from 'react-syntax-highlighter/dist/esm/languages/prism/java'
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown'
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python'
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import ImageLightbox from './ImageLightbox'
 
@@ -15,6 +25,35 @@ interface Props {
 
 const INLINE_IMG_STYLE = { maxHeight: 200, maxWidth: 320, display: 'inline-block', verticalAlign: 'top' as const }
 
+SyntaxHighlighter.registerLanguage('bash', bash)
+SyntaxHighlighter.registerLanguage('cpp', cpp)
+SyntaxHighlighter.registerLanguage('java', java)
+SyntaxHighlighter.registerLanguage('javascript', javascript)
+SyntaxHighlighter.registerLanguage('json', json)
+SyntaxHighlighter.registerLanguage('markdown', markdown)
+SyntaxHighlighter.registerLanguage('python', python)
+SyntaxHighlighter.registerLanguage('sql', sql)
+SyntaxHighlighter.registerLanguage('typescript', typescript)
+SyntaxHighlighter.registerLanguage('yaml', yaml)
+
+const LANGUAGE_ALIASES: Record<string, string> = {
+  c: 'cpp',
+  'c++': 'cpp',
+  js: 'javascript',
+  jsx: 'javascript',
+  md: 'markdown',
+  py: 'python',
+  sh: 'bash',
+  shell: 'bash',
+  ts: 'typescript',
+  tsx: 'typescript',
+  yml: 'yaml',
+}
+
+const SUPPORTED_LANGUAGES = new Set([
+  'bash', 'cpp', 'java', 'javascript', 'json', 'markdown', 'python', 'sql', 'typescript', 'yaml',
+])
+
 function MarkdownRenderer({ content }: Props) {
   const { theme } = useTheme()
 
@@ -22,11 +61,12 @@ function MarkdownRenderer({ content }: Props) {
     img: ({ src, alt }) => <ImageLightbox src={src ?? ''} alt={alt} style={INLINE_IMG_STYLE} />,
     code: ({ className, children }) => {
       const match = /language-(\w+)/.exec(className || '')
-      if (match) {
-        return (
-          <SyntaxHighlighter
-            language={match[1]}
-            style={(theme === 'dark' ? vscDarkPlus : oneLight) as any}
+      const language = match ? (LANGUAGE_ALIASES[match[1].toLowerCase()] ?? match[1].toLowerCase()) : ''
+      if (language && SUPPORTED_LANGUAGES.has(language)) {
+          return (
+            <SyntaxHighlighter
+            language={language}
+            style={theme === 'dark' ? vscDarkPlus : oneLight}
             PreTag="div"
             customStyle={{
               margin: 0,
@@ -41,10 +81,12 @@ function MarkdownRenderer({ content }: Props) {
           </SyntaxHighlighter>
         )
       }
-      return (
-        <code className="bg-[var(--bg-card)] px-1.5 py-0.5 rounded text-[0.85em] font-mono">
-          {children}
-        </code>
+      return match ? (
+        <pre className="bg-[var(--bg-card)] p-4 rounded-lg overflow-x-auto text-[0.8125rem] leading-relaxed">
+          <code className="font-mono">{children}</code>
+        </pre>
+      ) : (
+        <code className="bg-[var(--bg-card)] px-1.5 py-0.5 rounded text-[0.85em] font-mono">{children}</code>
       )
     },
     pre: ({ children }) => <div className="not-prose my-3">{children}</div>,
