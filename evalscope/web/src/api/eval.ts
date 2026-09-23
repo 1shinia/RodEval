@@ -1,4 +1,7 @@
 import { apiPost, api, getAuthHeaders } from './client'
+import { TASK_STATUSES, normalizeTaskStatus } from '@/hooks/taskLifecycle'
+import type { TaskStatus } from '@/hooks/taskLifecycle'
+
 import type { BenchmarkEntry, BenchmarksResponse, EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
 
 export interface RunningTask {
@@ -100,13 +103,13 @@ export interface EvalBatchUploadResponse {
 
 export interface EvalBatchStatus {
   batch_id: string
-  status: string
+  status: TaskStatus
   total: number
   completed: number
   errors: number
   current_model: string
   current_task_id: string
-  results: { task_id: string; name: string; model: string; eval_backend: string; status: string; error?: string }[]
+  results: { task_id: string; name: string; model: string; eval_backend: string; status: TaskStatus; error?: string }[]
   error_details: { name: string; model: string; error: string }[]
   resumable: boolean
 }
@@ -146,7 +149,15 @@ export async function resumeEvalBatch(
 }
 
 export async function getEvalBatchStatus(batchId: string): Promise<EvalBatchStatus> {
-  return api<EvalBatchStatus>(`/api/v1/eval/batch/status/${batchId}`)
+  const payload = await api<EvalBatchStatus>(`/api/v1/eval/batch/status/${batchId}`)
+  return {
+    ...payload,
+    status: normalizeTaskStatus(payload.status) ?? TASK_STATUSES.FAILED,
+    results: (payload.results || []).map((result) => ({
+      ...result,
+      status: normalizeTaskStatus(result.status) ?? TASK_STATUSES.FAILED,
+    })),
+  }
 }
 
 export async function stopEvalBatch(batchId: string): Promise<{ batch_id: string; status: string }> {

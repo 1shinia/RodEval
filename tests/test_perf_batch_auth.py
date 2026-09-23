@@ -10,6 +10,7 @@ perf module chain. Run this module under the hermes env
 (``/root/anaconda3/envs/hermes/bin/python -m pytest``).
 """
 import io
+import json
 import os
 
 import pytest
@@ -75,6 +76,44 @@ def _seed_batch_state(batch_id: str, user_id: int) -> None:
         'error_details': [],
         'cancel_requested': False,
     }
+
+
+def test_owner_can_save_llm_compare_with_report_identifiers(clients):
+    client_a, _, uid_a, _ = clients
+    for task_id, model in (('eval_a', 'model-a'), ('eval_b', 'model-b')):
+        svc_db.upsert_eval_report(
+            task_id=task_id,
+            model_name=model,
+            dataset_name='gsm8k',
+            score=0.5,
+            num_samples=5,
+            timestamp='2026-09-23T00:00:00+00:00',
+            user_id=uid_a,
+        )
+
+    report_ids = ['eval_a@@model-a::gsm8k', 'eval_b@@model-b::gsm8k']
+    resp = client_a.post('/api/v1/perf/compare/save', json={
+        'name': 'LLM comparison',
+        'task_ids': report_ids,
+        'backend': 'LLM',
+        'root_path': './outputs',
+    })
+
+    assert resp.status_code == 201, resp.data
+    saved = svc_db.list_compare_reports(user_id=uid_a)
+    assert json.loads(saved[0]['task_ids']) == report_ids
+
+
+def test_llm_compare_rejects_path_traversal_in_report_identifier(clients):
+    client_a, *_ = clients
+    resp = client_a.post('/api/v1/perf/compare/save', json={
+        'name': 'invalid',
+        'task_ids': ['../../etc/passwd@@model::gsm8k', 'eval_b@@model::gsm8k'],
+        'backend': 'LLM',
+    })
+
+    assert resp.status_code == 400
+    assert resp.get_json()['error'] == 'Invalid task_id'
 
 
 def test_launch_rejects_path_traversal(clients):
@@ -172,7 +211,7 @@ def test_status_uses_durable_cancelled_checkpoint(clients):
     resp = client_a.get('/api/v1/perf/batch/status/durable_perf')
 
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'cancelled'
+    assert resp.get_json()['status'] == 'stopped'
     assert resp.get_json()['resumable'] is True
 
 

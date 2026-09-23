@@ -7,6 +7,7 @@ import { useTaskRunner } from '@/hooks/useTaskRunner'
 import { submitEvalTask, stopEvalTask, getEvalProgress, getEvalLog, getEvalReportUrl, resumeEvalTask,
   launchEvalBatch, resumeEvalBatch, getEvalBatchStatus, stopEvalBatch, uploadEvalBatchCsv, launchEvalTask } from '@/api/eval'
 import type { EvalBatchStatus } from '@/api/eval'
+import { isActiveTaskStatus, normalizeTaskStatus, TASK_STATUSES } from '@/hooks/taskLifecycle'
 import { toast } from '@/components/common/Toast'
 
 type EvalMode = 'llm' | 'rag' | 'aigc' | 'audio'
@@ -87,14 +88,16 @@ export default function EvalLayout() {
   const handleResume = useCallback((id: string) => { rawResume(id, apiKeyRef.current || undefined) }, [rawResume])
 
   // ── Batch state ──
-  const [isBatch, setIsBatch] = useState(false)
+  const [isBatch, setIsBatch] = useState(() => Boolean(sessionStorage.getItem('evalBatchId')))
   const [batchRunning, setBatchRunning] = useState(false)
   const [batchState, setBatchState] = useState<EvalBatchStatus | null>(null)
   const [batchLogText, setBatchLogText] = useState('')
   const [selectedTaskId, setSelectedTaskId] = useState('')
   const [selectedTaskLog, setSelectedTaskLog] = useState('')
   const batchIdRef = useRef<string | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollGenerationRef = useRef(0)
+  const logGenerationRef = useRef(0)
   const lastLogTaskIdRef = useRef<string>('')
   const batchFileRef = useRef<File | null>(null)
   const batchConfigRef = useRef<Record<string, unknown>>({})
@@ -103,16 +106,25 @@ export default function EvalLayout() {
   const [batchUploading, setBatchUploading] = useState(false)
 
   const clearBatchPoll = useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+    pollGenerationRef.current += 1
+    if (pollRef.current) {
+      clearTimeout(pollRef.current)
+      pollRef.current = null
+    }
   }, [])
 
-  useEffect(() => () => clearBatchPoll(), [clearBatchPoll])
-
   const fetchTaskLog = useCallback(async (tid: string) => {
+    const generation = ++logGenerationRef.current
     try {
       const log = await getEvalLog(tid)
-      setSelectedTaskLog(log.text || '')
-    } catch { setSelectedTaskLog('') }
+      if (generation === logGenerationRef.current) {
+        setSelectedTaskLog(log.text || '')
+      }
+    } catch {
+      if (generation === logGenerationRef.current) {
+        setSelectedTaskLog('')
+      }
+    }
   }, [])
 
   const getDisplayLog = useCallback(() => {
@@ -129,11 +141,18 @@ export default function EvalLayout() {
         await navigator.clipboard.writeText(text)
       } else {
         const ta = document.createElement('textarea')
-        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
-        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+        ta.value = text
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
       }
       toast.success('日志已复制')
-    } catch { toast.error('复制失败') }
+    } catch {
+      toast.error('复制失败')
+    }
   }, [getDisplayLog])
 
   const handleBatchUpload = useCallback(async (file: File) => {
@@ -153,38 +172,64 @@ export default function EvalLayout() {
 
   const monitorBatch = useCallback((batchId: string) => {
     clearBatchPoll()
+    const generation = pollGenerationRef.current
+    const isCurrent = () => generation === pollGenerationRef.current
+
     const poll = async () => {
       try {
-        const st = await getEvalBatchStatus(batchId)
-        setBatchState(st)
-        const active = st.status === 'running' || st.status === 'cancelling'
+        const state = await getEvalBatchStatus(batchId)
+        if (!isCurrent()) return
+
+        const status = normalizeTaskStatus(state.status)
+        const active = isActiveTaskStatus(status)
+        setBatchState(state)
         setBatchRunning(active)
-        if (st.current_task_id) {
-          lastLogTaskIdRef.current = st.current_task_id
-          try { const log = await getEvalLog(st.current_task_id); setBatchLogText(log.text || '') } catch { /* */ }
+
+        if (state.current_task_id) {
+          lastLogTaskIdRef.current = state.current_task_id
+          try {
+            const log = await getEvalLog(state.current_task_id)
+            if (!isCurrent()) return
+            setBatchLogText(log.text || '')
+          } catch {
+            // The batch status is authoritative; a transient log failure must not stop polling.
+          }
         }
-        if (!active) {
-          clearBatchPoll()
-          const results = st.results || []
-          if (results.length > 0) {
-            setSelectedTaskId(results[results.length - 1].task_id)
-            fetchTaskLog(results[results.length - 1].task_id)
-          }
-          if (st.status === 'completed') {
-            sessionStorage.removeItem('evalBatchId')
-            if (st.errors > 0) toast.warning(`批量评估完成：${st.completed} 成功，${st.errors} 失败`)
-            else toast.success(`批量评估完成：${st.completed} 个模型全部成功`)
-          } else if (st.status === 'cancelled') {
-            toast.info(`批量评估已停止：${st.completed} 完成，可从断点继续`)
-          }
+
+        if (!isCurrent()) return
+        if (active) {
+          pollRef.current = setTimeout(poll, 3000)
+          return
+        }
+
+        clearBatchPoll()
+        const results = state.results || []
+        if (results.length > 0) {
+          const lastTaskId = results[results.length - 1].task_id
+          setSelectedTaskId(lastTaskId)
+          void fetchTaskLog(lastTaskId)
+        }
+
+        if (status === TASK_STATUSES.COMPLETED) {
+          sessionStorage.removeItem('evalBatchId')
+          toast.success(`批量评估完成：${state.completed} 个模型全部成功`)
+        } else if (status === TASK_STATUSES.PARTIAL_SUCCESS) {
+          sessionStorage.removeItem('evalBatchId')
+          toast.warning(`批量评估部分完成：${state.completed} 成功，${state.errors} 失败`)
+        } else if (status === TASK_STATUSES.FAILED || status === TASK_STATUSES.ORPHANED) {
+          toast.error('批量评估失败，请查看错误详情')
+        } else if (status === TASK_STATUSES.STOPPED) {
+          toast.info(`批量评估已停止：${state.completed} 完成，可从断点继续`)
         }
       } catch {
-        clearBatchPoll(); setBatchRunning(false)
-        toast.warning('批量状态暂不可用，请稍后重试')
+        if (isCurrent()) {
+          toast.warning('批量状态暂不可用，正在重试')
+          pollRef.current = setTimeout(poll, 5000)
+        }
       }
     }
+
     void poll()
-    pollRef.current = setInterval(poll, 3000)
   }, [clearBatchPoll, fetchTaskLog])
 
   const onBatchSubmit = useCallback(async (batchId: string, sharedConfig: Record<string, unknown>) => {
@@ -202,7 +247,8 @@ export default function EvalLayout() {
       toast.info(`批量评估已启动，共 ${launched.total} 个模型`)
       monitorBatch(batchId)
     } catch (e) {
-      toast.error(String(e)); setBatchRunning(false)
+      toast.error(String(e))
+      setBatchRunning(false)
     }
   }, [monitorBatch])
 
@@ -220,7 +266,8 @@ export default function EvalLayout() {
       toast.info('批量评估已从断点继续')
       monitorBatch(batchId)
     } catch (e) {
-      setBatchError(String(e)); toast.error(String(e))
+      setBatchError(String(e))
+      toast.error(String(e))
     } finally {
       setBatchUploading(false)
     }
@@ -230,25 +277,33 @@ export default function EvalLayout() {
     const batchId = sessionStorage.getItem('evalBatchId')
     if (!batchId) return
     batchIdRef.current = batchId
-    setIsBatch(true)
     monitorBatch(batchId)
   }, [monitorBatch])
 
+  useEffect(() => () => {
+    logGenerationRef.current += 1
+    clearBatchPoll()
+  }, [clearBatchPoll])
+
   const handleSelectTask = useCallback((tid: string) => {
     setSelectedTaskId(tid)
-    fetchTaskLog(tid)
+    void fetchTaskLog(tid)
   }, [fetchTaskLog])
 
   const onBatchStop = useCallback(async () => {
-    const bid = batchIdRef.current
-    if (!bid) return
-    try { await stopEvalBatch(bid); toast.info('正在停止批量评估...') } catch (e) { toast.error(String(e)) }
+    const batchId = batchIdRef.current
+    if (!batchId) return
+    try {
+      await stopEvalBatch(batchId)
+      toast.info('正在停止批量评估...')
+    } catch (e) {
+      toast.error(String(e))
+    }
   }, [])
 
-  const setBatchMode = useCallback((v: boolean) => {
-    setIsBatch(v)
-    if (!v) {
-      // Switching to single-model: clear stale batch state
+  const setBatchMode = useCallback((value: boolean) => {
+    setIsBatch(value)
+    if (!value) {
       setBatchInfo(null)
       setBatchError('')
       setBatchLogText('')

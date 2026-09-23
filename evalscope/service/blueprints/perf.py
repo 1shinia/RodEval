@@ -9,6 +9,8 @@ from evalscope.perf.arguments import Arguments as PerfArguments
 from evalscope.perf.utils.benchmark_util import Metrics
 from evalscope.perf.utils.rich_display import EmbeddingResultAnalyzer, LLMResultAnalyzer
 from evalscope.utils.logger import get_logger
+from ..progress_state import write_terminal_progress
+from ..task_status import TERMINAL_STATES, aggregate_batch_status
 from ..time_utils import epoch_to_utc_iso, utc_now_iso
 from .. import db as _db
 from ..batch_resume import batch_manifest_hash, resumable_row_indexes
@@ -33,7 +35,7 @@ from ..utils import (
 
 logger = get_logger()
 
-_TERMINAL_PROGRESS_STATUSES = {'completed', 'error', 'stopped', 'cancelled', 'failed'}
+_TERMINAL_PROGRESS_STATUSES = set(TERMINAL_STATES) | {'error', 'cancelled'}
 
 
 def _resume_safe_perf_config(data: dict) -> dict:
@@ -141,49 +143,31 @@ def _metadata_task_id(task_ref: str) -> str:
     return str(task_ref).split('@@', 1)[0]
 
 
+def _perf_report_exists(task_id: str) -> bool:
+    return (
+        os.path.isfile(os.path.join(OUTPUT_DIR, task_id, 'perf', 'perf_report.html'))
+        or os.path.isfile(os.path.join(OUTPUT_DIR, task_id, 'sla_summary.json'))
+    )
+
+
+def _require_perf_report(task_id: str) -> None:
+    if not _perf_report_exists(task_id):
+        raise RuntimeError('Performance run finished without generating a report')
+
+
 def _mark_perf_completed(task_id: str) -> None:
-    """Persist terminal completion for both perf progress and retention.
+    """Persist terminal completion for both perf progress and retention."""
+    live_pj = os.path.join(OUTPUT_DIR, task_id, 'perf', 'progress.json')
+    retention_pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+    write_terminal_progress(live_pj, 'completed', pipeline='perf')
+    write_terminal_progress(retention_pj, 'completed', pipeline='perf')
 
-    The live perf tracker writes ``<task>/perf/progress.json`` while startup
-    retention checks ``<task>/progress.json``.  Update the canonical live file
-    without discarding its counters, and also write a lightweight root marker
-    so completed perf tasks are not later treated as incomplete log folders.
-    """
 
-    try:
-        updated_at = utc_now_iso()
-        live_pj = os.path.join(OUTPUT_DIR, task_id, 'perf', 'progress.json')
-        os.makedirs(os.path.dirname(live_pj), exist_ok=True)
-        live_data = {}
-        if os.path.isfile(live_pj):
-            try:
-                with open(live_pj, encoding='utf-8') as f:
-                    live_data = json.load(f)
-            except (OSError, ValueError, json.JSONDecodeError):
-                live_data = {}
-        live_data.update({
-            'status': 'completed',
-            'phase': 'completed',
-            'pipeline': 'perf',
-            'updated_at': updated_at,
-        })
-        tmp = f'{live_pj}.tmp'
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(live_data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, live_pj)
-
-        retention_pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
-        tmp = f'{retention_pj}.tmp'
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump({
-                'status': 'completed',
-                'phase': 'completed',
-                'pipeline': 'perf',
-                'updated_at': updated_at,
-            }, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, retention_pj)
-    except Exception as e:
-        logger.warning(f'[{task_id}] Failed to write perf completion marker: {e}')
+def _mark_perf_failed(task_id: str, error: str) -> None:
+    live_pj = os.path.join(OUTPUT_DIR, task_id, 'perf', 'progress.json')
+    retention_pj = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
+    write_terminal_progress(live_pj, 'failed', pipeline='perf', error=error)
+    write_terminal_progress(retention_pj, 'failed', pipeline='perf', error=error)
 
 
 @bp_perf.route('/template', methods=['GET'])
@@ -437,8 +421,8 @@ def launch_batch_perf():
                 if row_index not in run_indexes:
                     continue
                 if state['cancel_requested']:
-                    state['status'] = 'cancelled'
-                    _db.update_batch_job(batch_id, status='cancelled')
+                    state['status'] = 'stopped'
+                    _db.update_batch_job(batch_id, status='stopped')
                     logger.info(f'[batch:{batch_id}] Cancelled by user')
                     break
 
@@ -625,12 +609,12 @@ def launch_batch_perf():
 
                     if not perf_success:
                         state['errors'] += 1
-                        state['completed'] += 1
+                        _mark_perf_failed(task_id, perf_error_msg)
                         state['results'].append({
                             'task_id': task_id,
                             'name': model_name,
                             'model': model_name,
-                            'status': 'error',
+                            'status': 'failed',
                             'error': perf_error_msg,
                         })
                         state['error_details'].append({
@@ -655,6 +639,7 @@ def launch_batch_perf():
                         )
                         logger.warning(f'[batch:{batch_id}] [{task_id}] {model_name} 压测失败: {perf_error_msg}')
                     else:
+                        _require_perf_report(task_id)
 
                         # Write to SQLite
                         try:
@@ -699,7 +684,7 @@ def launch_batch_perf():
 
                 except Exception as e:
                     if state['cancel_requested']:
-                        state['status'] = 'cancelled'
+                        state['status'] = 'stopped'
                         _db.update_batch_item(
                             batch_id,
                             row_index,
@@ -708,10 +693,11 @@ def launch_batch_perf():
                             error='',
                             finished_at=utc_now_iso(),
                         )
-                        _db.update_batch_job(batch_id, status='cancelled')
+                        _db.update_batch_job(batch_id, status='stopped')
                         break
                     error_id = uuid.uuid4().hex[:8]
                     logger.error(f'[batch:{batch_id}] [{task_id}] {model_name} failed: {e}', exc_info=True)
+                    _mark_perf_failed(task_id, str(e))
                     state['errors'] += 1
                     state['error_details'].append({'name': model_name, 'model': model_name, 'error': str(e)})
                     _db.update_batch_item(
@@ -733,11 +719,15 @@ def launch_batch_perf():
                     state['current_task_id'] = ''
 
             if state['status'] == 'running':
-                state['status'] = 'completed'
-                _db.update_batch_job(batch_id, status='completed')
+                state['status'] = aggregate_batch_status(
+                    total=total,
+                    completed=state['completed'],
+                    errors=state['errors'],
+                )
+                _db.update_batch_job(batch_id, status=state['status'])
         except Exception as e:
-            state['status'] = 'error'
-            _db.update_batch_job(batch_id, status='error')
+            state['status'] = 'failed'
+            _db.update_batch_job(batch_id, status='failed')
             logger.error(f'[batch:{batch_id}] Fatal error: {e}', exc_info=True)
 
     thread = threading.Thread(target=_run_batch, daemon=True)
@@ -765,7 +755,7 @@ def get_batch_status(batch_id: str):
             'current_task_id': '',
             'results': job['results'],
             'error_details': job['error_details'],
-            'resumable': job['status'] == 'cancelled' and bool(resumable_row_indexes(job['items'])),
+            'resumable': job['status'] == 'stopped' and bool(resumable_row_indexes(job['items'])),
         }), 200
     from .auth import get_current_role, get_current_user_id
     if get_current_role() != 'admin' and int(state.get('user_id', 0)) != int(get_current_user_id()):
@@ -780,7 +770,7 @@ def get_batch_status(batch_id: str):
         'current_task_id': state.get('current_task_id', ''),
         'results': state.get('results', []),
         'error_details': state.get('error_details', []),
-        'resumable': state['status'] == 'cancelled',
+        'resumable': state['status'] == 'stopped',
     }), 200
 
 
@@ -1080,6 +1070,7 @@ def run_performance_test():
             )
             table_str = _build_perf_table(result, api_type=perf_args.api)
             logger.info(f'[{task_id}] Task completed successfully')
+            _require_perf_report(task_id)
             _mark_perf_completed(task_id)
 
             # Write to SQLite
@@ -1120,7 +1111,8 @@ def run_performance_test():
         except Exception as e:
             error_id = uuid.uuid4().hex[:8]
             logger.error(f'[{error_id}] [{task_id}] Task failed: {e}', exc_info=True)
-            return jsonify({'status': 'error', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
+            _mark_perf_failed(task_id, str(e))
+            return jsonify({'status': 'failed', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
     finally:
         # Clean up the placeholder if the subprocess was never registered
         unregister_process(task_id)
@@ -1213,6 +1205,7 @@ def launch_performance_test():
                     )
                     table_str = _build_perf_table(result, api_type=perf_args.api)
                     logger.info(f'[{task_id}] Task completed successfully')
+                    _require_perf_report(task_id)
                     _mark_perf_completed(task_id)
 
                     try:
@@ -1240,6 +1233,10 @@ def launch_performance_test():
                         logger.error(f'[{task_id}] Failed to write perf to SQLite (data remains on disk, will backfill on restart): {e}')
             except Exception as e:
                 logger.error(f'[{task_id}] Background perf failed: {e}', exc_info=True)
+                try:
+                    _mark_perf_failed(task_id, str(e))
+                except Exception as marker_error:
+                    logger.error(f'[{task_id}] Failed to persist terminal failure: {marker_error}', exc_info=True)
             finally:
                 # Idempotent with run_in_subprocess and covers setup failures
                 # that happen inside the background thread before spawning.
@@ -1286,6 +1283,16 @@ def stop_performance_test():
 
     stopped = stop_process(task_id)
     if stopped:
+        write_terminal_progress(
+            os.path.join(OUTPUT_DIR, task_id, 'perf', 'progress.json'),
+            'stopped',
+            pipeline='perf',
+        )
+        write_terminal_progress(
+            os.path.join(OUTPUT_DIR, task_id, 'progress.json'),
+            'stopped',
+            pipeline='perf',
+        )
         return jsonify({'status': 'stopped', 'task_id': task_id}), 200
     else:
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
@@ -1407,6 +1414,7 @@ def resume_performance_test():
             )
             table_str = _build_perf_table(result, api_type=perf_args.api)
             logger.info(f'[{task_id}] Task completed successfully')
+            _require_perf_report(task_id)
             _mark_perf_completed(task_id)
 
             # Update SQLite
@@ -1447,7 +1455,8 @@ def resume_performance_test():
         except Exception as e:
             error_id = uuid.uuid4().hex[:8]
             logger.error(f'[{error_id}] [{task_id}] Task failed: {e}', exc_info=True)
-            return jsonify({'status': 'error', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
+            _mark_perf_failed(task_id, str(e))
+            return jsonify({'status': 'failed', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
     finally:
         unregister_process(task_id)
 
@@ -1938,9 +1947,13 @@ def save_compare_report():
         return jsonify({'error': 'task_ids must be a list of at least 2'}), 400
     if backend_type not in ('Perf', 'LLM'):
         return jsonify({'error': 'backend must be Perf or LLM'}), 400
+    ownership_ids = (
+        [_metadata_task_id(str(t)) for t in task_ids]
+        if backend_type == 'LLM' else [str(t) for t in task_ids]
+    )
     try:
-        for tid in task_ids:
-            validate_task_id(str(tid))
+        for task_id in ownership_ids:
+            validate_task_id(task_id)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
@@ -1952,10 +1965,6 @@ def save_compare_report():
         from .auth import get_current_user_id
         uid = get_current_user_id()
         task_table = 'eval_reports' if backend_type == 'LLM' else 'perf_tasks'
-        ownership_ids = (
-            [_metadata_task_id(str(t)) for t in task_ids]
-            if backend_type == 'LLM' else [str(t) for t in task_ids]
-        )
         if not _db.task_ids_owned_by(task_table, ownership_ids, uid):
             return jsonify({'error': 'One or more tasks were not found'}), 404
         report_id = _db.save_compare_report(

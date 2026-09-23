@@ -15,6 +15,7 @@ from typing import Any
 
 from evalscope.utils.logger import get_logger
 
+from .task_status import normalize_persisted_task_status
 from .time_utils import (epoch_to_utc_iso, legacy_datetime_to_utc_iso, normalize_persisted_timestamp, utc_now_iso)
 
 logger = get_logger()
@@ -1954,6 +1955,10 @@ def get_batch_job(
     if row is None:
         return None
     job = dict(row)
+    if job['status'] == 'cancelled':
+        job['status'] = 'stopped'
+    elif job['status'] == 'error':
+        job['status'] = 'failed'
     job['results'] = json.loads(job.pop('results_json') or '[]')
     job['error_details'] = json.loads(job.pop('errors_json') or '[]')
     job['items'] = [
@@ -1996,11 +2001,11 @@ def claim_batch_resume(
             return 'manifest_mismatch'
         if row['status'] in ('running', 'cancelling'):
             return 'running'
-        if row['status'] != 'cancelled':
+        if row['status'] not in ('cancelled', 'stopped'):
             return 'not_resumable'
         cursor = conn.execute(
             '''UPDATE batch_jobs SET status = 'running', updated_at = ?
-               WHERE batch_id = ? AND status = 'cancelled' ''',
+               WHERE batch_id = ? AND status IN ('cancelled', 'stopped') ''',
             (utc_now_iso(), batch_id),
         )
         return 'claimed' if cursor.rowcount else 'running'
@@ -2028,7 +2033,7 @@ def recover_interrupted_batches() -> int:
             (now, *batch_ids),
         )
         conn.execute(
-            f'''UPDATE batch_jobs SET status = 'cancelled', updated_at = ?
+            f'''UPDATE batch_jobs SET status = 'stopped', updated_at = ?
                 WHERE batch_id IN ({placeholders})''',
             (now, *batch_ids),
         )
@@ -2052,8 +2057,10 @@ def upsert_task_state(
 ) -> None:
     """Insert or update a task's runtime state.
 
-    Status values: 'running', 'completed', 'failed', 'stopped', 'orphaned'.
+    Status values use :mod:`task_status`; legacy values are normalized at this
+    boundary so persistence never stores ``ok``/``error``/``cancelled``.
     """
+    status = normalize_persisted_task_status(status)
 
     def _op(conn: sqlite3.Connection) -> None:
         now = utc_now_iso()

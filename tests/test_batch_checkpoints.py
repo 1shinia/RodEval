@@ -73,5 +73,5 @@ def test_recover_interrupted_batches_after_service_restart():
     assert db.recover_interrupted_batches() == 1
     job = db.get_batch_job('batch_e', user_id=12, batch_type='eval')
 
-    assert job['status'] == 'cancelled'
+    assert job['status'] == 'stopped'
     assert [item['status'] for item in job['items']] == ['completed', 'interrupted', 'pending']

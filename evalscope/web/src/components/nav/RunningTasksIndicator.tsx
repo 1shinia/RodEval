@@ -9,19 +9,30 @@ export default function RunningTasksIndicator() {
   const [tasks, setTasks] = useState<RunningTask[]>([])
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const mountedRef = useRef(true)
   const navigate = useNavigate()
 
   const fetch = useCallback(async () => {
     try {
       const res = await listRunningTasks()
-      setTasks(res.tasks || [])
+      if (mountedRef.current) setTasks(res.tasks || [])
     } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
-    fetch()
-    const interval = setInterval(fetch, 5000)
-    return () => clearInterval(interval)
+    mountedRef.current = true
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const poll = async () => {
+      await fetch()
+      if (!cancelled) timer = setTimeout(poll, 5000)
+    }
+    void poll()
+    return () => {
+      mountedRef.current = false
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
   }, [fetch])
 
   useEffect(() => {

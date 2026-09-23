@@ -176,7 +176,7 @@ def test_status_uses_durable_cancelled_checkpoint(clients):
     resp = client_a.get('/api/v1/eval/batch/status/durable_eval')
 
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'cancelled'
+    assert resp.get_json()['status'] == 'stopped'
     assert resp.get_json()['resumable'] is True
 
 

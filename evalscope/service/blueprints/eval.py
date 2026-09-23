@@ -13,6 +13,8 @@ from evalscope.utils.logger import get_logger
 from ..time_utils import utc_now_iso
 from ..model_launcher import LaunchResult, LocalBackend, ModelSource, is_direct_eval_type, launch
 from ..model_launcher import stop as launcher_stop
+from ..progress_state import write_terminal_progress
+from ..task_status import TERMINAL_STATES, aggregate_batch_status
 from ..utils import (
     DEFAULT_MULTIMODAL_BENCHMARKS,
     DEFAULT_RAG_BENCHMARKS,
@@ -39,7 +41,7 @@ logger = get_logger()
 
 bp_eval = Blueprint('eval', __name__, url_prefix='/api/v1/eval')
 
-_TERMINAL_PROGRESS_STATUSES = {'completed', 'error', 'stopped', 'cancelled', 'failed'}
+_TERMINAL_PROGRESS_STATUSES = set(TERMINAL_STATES) | {'error', 'cancelled'}
 
 #: Accepted values for the ``description`` query param on the benchmark list
 #: endpoint.  See ``build_benchmark_entry`` for the payload each mode produces.
@@ -439,7 +441,13 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
                 'Check the evaluation log for details.'
             )
             logger.error(f'[{task_id}] {label} produced empty results: {error_msg}')
-            return jsonify({'status': 'error', 'task_id': task_id, 'error': error_msg}), 500
+            write_terminal_progress(
+                os.path.join(task_config.work_dir, 'progress.json'),
+                'failed',
+                pipeline='eval',
+                error=error_msg,
+            )
+            return jsonify({'status': 'failed', 'task_id': task_id, 'error': error_msg}), 500
         logger.info(f'[{task_id}] {label} completed successfully')
 
         # Write to SQLite (with retry for WAL lock contention from subprocess)
@@ -533,16 +541,12 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
             # backends already wrote the real progress.json (true processed/total)
             # in their subprocess — overwriting it would mask the real progress.
             if task_config.eval_backend in (EvalBackend.RAG_EVAL, EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
-                try:
-                    _pj = os.path.join(task_config.work_dir, 'progress.json')
-                    with open(_pj, 'w') as _f:
-                        json.dump(
-                            {'status': 'completed', 'percent': 100.0, 'processed': 1, 'total': 1, 'pipeline': 'eval'},
-                            _f,
-                            ensure_ascii=False,
-                        )
-                except Exception:
-                    pass
+                write_terminal_progress(
+                    os.path.join(task_config.work_dir, 'progress.json'),
+                    'completed',
+                    pipeline='eval',
+                    extra={'processed': 1, 'total': 1},
+                )
         except Exception as e:
             # Data is safe on disk (reports/ + progress.json); it will be
             # picked up by the next startup backfill.  Log loudly so it is
@@ -558,7 +562,13 @@ def _execute_task(task_id: str, task_config: TaskConfig, label: str = 'Task', us
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] [{task_id}] {label} failed: {e}', exc_info=True)
-        return jsonify({'status': 'error', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
+        write_terminal_progress(
+            os.path.join(task_config.work_dir, 'progress.json'),
+            'failed',
+            pipeline='eval',
+            error='Task failed',
+        )
+        return jsonify({'status': 'failed', 'task_id': task_id, 'error': 'Task failed', 'error_id': error_id}), 500
 
 
 @bp_eval.route('/invoke', methods=['POST'])
@@ -1032,20 +1042,11 @@ def stop_evaluation():
 
     stopped = stop_process(task_id)
     if stopped:
-        # Mark progress as stopped so stale SSE/polling doesn't confuse the frontend
-        try:
-            progress_file = os.path.join(OUTPUT_DIR, task_id, 'progress.json')
-            if os.path.isfile(progress_file):
-                with open(progress_file) as f:
-                    data = json.load(f)
-                data['status'] = 'stopped'
-                data['percent'] = data.get('percent', 0)
-                tmp = f'{progress_file}.tmp'
-                with open(tmp, 'w') as f:
-                    json.dump(data, f)
-                os.replace(tmp, progress_file)
-        except Exception:
-            pass
+        write_terminal_progress(
+            os.path.join(OUTPUT_DIR, task_id, 'progress.json'),
+            'stopped',
+            pipeline='eval',
+        )
         return jsonify({'status': 'stopped', 'task_id': task_id}), 200
     else:
         return jsonify({'error': f'No running task found for task_id: {task_id}'}), 404
@@ -1642,8 +1643,8 @@ def launch_eval_batch():
                 if row_index not in run_indexes:
                     continue
                 if s['cancel_requested']:
-                    s['status'] = 'cancelled'
-                    _db.update_batch_job(batch_id, status='cancelled')
+                    s['status'] = 'stopped'
+                    _db.update_batch_job(batch_id, status='stopped')
                     break
 
                 model_name = (row.get('model') or '').strip()
@@ -1777,7 +1778,7 @@ def launch_eval_batch():
 
                 except Exception as e:
                     if s['cancel_requested']:
-                        s['status'] = 'cancelled'
+                        s['status'] = 'stopped'
                         _db.update_batch_item(
                             batch_id,
                             row_index,
@@ -1786,7 +1787,7 @@ def launch_eval_batch():
                             error='',
                             finished_at=utc_now_iso(),
                         )
-                        _db.update_batch_job(batch_id, status='cancelled')
+                        _db.update_batch_job(batch_id, status='stopped')
                         break
                     error_id = uuid.uuid4().hex[:8]
                     logger.error(f'[eval-batch:{batch_id}] [{task_id}] {model_name} failed: {e}', exc_info=True)
@@ -1815,11 +1816,15 @@ def launch_eval_batch():
                     s['current_task_id'] = ''
 
             if s['status'] == 'running':
-                s['status'] = 'completed'
-                _db.update_batch_job(batch_id, status='completed')
+                s['status'] = aggregate_batch_status(
+                    total=total,
+                    completed=s['completed'],
+                    errors=s['errors'],
+                )
+                _db.update_batch_job(batch_id, status=s['status'])
         except Exception as e:
-            s['status'] = 'error'
-            remove_batch_upload(EVAL_BATCH_UPLOAD_DIR, batch_id)
+            s['status'] = 'failed'
+            _db.update_batch_job(batch_id, status='failed')
             logger.error(f'[eval-batch:{batch_id}] Fatal: {e}', exc_info=True)
 
     thread = threading.Thread(target=_run_eval_batch, daemon=True)
@@ -1847,7 +1852,7 @@ def get_eval_batch_status(batch_id: str):
             'current_task_id': '',
             'results': job['results'],
             'error_details': job['error_details'],
-            'resumable': job['status'] == 'cancelled' and bool(resumable_row_indexes(job['items'])),
+            'resumable': job['status'] == 'stopped' and bool(resumable_row_indexes(job['items'])),
         }), 200
     from .auth import get_current_role, get_current_user_id
     if get_current_role() != 'admin' and int(s.get('user_id', 0)) != int(get_current_user_id()):
@@ -1862,7 +1867,7 @@ def get_eval_batch_status(batch_id: str):
         'current_task_id': s.get('current_task_id', ''),
         'results': s.get('results', []),
         'error_details': s.get('error_details', []),
-        'resumable': s['status'] == 'cancelled',
+        'resumable': s['status'] == 'stopped',
     }), 200
 
 

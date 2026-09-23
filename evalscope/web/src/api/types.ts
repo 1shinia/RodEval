@@ -259,7 +259,7 @@ export interface BenchmarksResponse {
   aigc?: BenchmarkEntry[]
 }
 
-export type InvokeStatus = 'ok' | 'error' | 'stopped'
+export type InvokeStatus = 'ok' | 'partial_success' | 'error' | 'stopped'
 
 export interface EvalInvokeResponse {
   status: InvokeStatus

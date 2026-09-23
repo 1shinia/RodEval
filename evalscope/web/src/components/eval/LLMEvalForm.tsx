@@ -8,6 +8,7 @@ import FormField from '@/components/ui/FormField'
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS, inputClass } from '@/components/ui/formStyles'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { EvalTabContext } from '@/pages/EvalLayout'
+import { TASK_STATUSES, isActiveTaskStatus, normalizeTaskStatus } from '@/hooks/taskLifecycle'
 
 interface Props {
   context: EvalTabContext
@@ -207,7 +208,7 @@ export default function LLMEvalForm({ context }: Props) {
 
     // Batch mode: delegate to onBatchSubmit
     if (isBatch) {
-      const resumable = batchState?.status === 'cancelled' && batchState.resumable
+      const resumable = batchState?.status === 'stopped' && batchState.resumable
       if (!resumable && !batchInfo?.batch_id) { toast.error('请先上传模型列表文件'); return }
       const dsList = datasets.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
       if (!dsList.length) { toast.error('请先填写测试数据集'); return }
@@ -269,7 +270,7 @@ export default function LLMEvalForm({ context }: Props) {
         generation_config: Object.keys(genConfig).length ? genConfig : undefined,
         judge_model_args: Object.keys(judgeArgs).length ? judgeArgs : undefined,
       }
-      if (batchState?.status === 'cancelled' && batchState.resumable) {
+      if (batchState?.status === 'stopped' && batchState.resumable) {
         if (batchFile) void onBatchResume(batchFile, shared)
         else {
           resumeConfigRef.current = shared
@@ -729,7 +730,7 @@ export default function LLMEvalForm({ context }: Props) {
 
       <Button type="submit" variant="primary" disabled={disabled || batchUploading} className="btn-glow">
         {isBatch
-          ? (batchState?.status === 'cancelled' && batchState.resumable ? '继续批量评估' : '开始批量评估')
+          ? (batchState?.status === 'stopped' && batchState.resumable ? '继续批量评估' : '开始批量评估')
           : t('eval.startEval')}
       </Button>
 
@@ -750,10 +751,16 @@ export default function LLMEvalForm({ context }: Props) {
       )}
 
       {/* ── Batch result (after completion) ── */}
-      {batchState && batchState.status !== 'running' && batchState.status !== 'cancelling' && (
+      {batchState && !isActiveTaskStatus(batchState.status) && (
         <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
           <h3 className="text-sm font-medium mb-2">
-            {batchState.status === 'completed' ? '批量评估完成' : '已取消'}：
+            {batchState.status === TASK_STATUSES.COMPLETED
+              ? '批量评估完成'
+              : batchState.status === TASK_STATUSES.PARTIAL_SUCCESS
+                ? '批量评估部分完成'
+                : batchState.status === TASK_STATUSES.FAILED
+                  ? '批量评估失败'
+                  : '批量评估已停止'}：
             {batchState.completed} 成功
             {batchState.errors > 0 && <span className="text-[var(--danger)]">，{batchState.errors} 失败</span>}
           </h3>
@@ -765,14 +772,14 @@ export default function LLMEvalForm({ context }: Props) {
                 className={`flex items-center gap-2 text-xs rounded px-1.5 py-0.5 -mx-1.5 cursor-pointer transition-colors ${
                   r.task_id === selectedTaskId ? 'bg-[var(--accent)]/10 ring-1 ring-[var(--accent-dim)]' : 'hover:bg-[var(--bg)]'
                 }`}>
-                {r.status === 'error' ? (
+                {normalizeTaskStatus(r.status) === TASK_STATUSES.FAILED ? (
                   <span className="text-[var(--danger)]">✗</span>
                 ) : (
                   <span className="text-[var(--green)]">✓</span>
                 )}
                 <span className="text-[var(--text)]">{r.name}</span>
                 <span className="text-[var(--text-muted)]">({r.model})</span>
-                {r.status === 'error' && r.error && (
+                {normalizeTaskStatus(r.status) === TASK_STATUSES.FAILED && r.error && (
                   <span className="text-[var(--danger)] truncate max-w-48" title={r.error}>{r.error}</span>
                 )}
                 <span className="text-[var(--text-dim)] ml-auto">{r.task_id}</span>

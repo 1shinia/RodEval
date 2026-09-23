@@ -1,4 +1,6 @@
 import { api, apiPost, apiDelete, getAuthHeaders } from './client'
+import { TASK_STATUSES, normalizeTaskStatus } from '@/hooks/taskLifecycle'
+import type { TaskStatus } from '@/hooks/taskLifecycle'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from './types'
 
 export interface PerfTaskMeta {
@@ -196,7 +198,7 @@ export interface BatchRunResult {
   task_id: string
   name: string
   model: string
-  status: string
+  status: TaskStatus
   error?: string
 }
 
@@ -229,7 +231,7 @@ export async function resumeBatchPerf(
 
 export interface BatchStatus {
   batch_id: string
-  status: string          // 'running' | 'completed' | 'cancelled' | 'error'
+  status: TaskStatus
   total: number
   completed: number
   errors: number
@@ -241,7 +243,15 @@ export interface BatchStatus {
 }
 
 export async function getBatchStatus(batchId: string): Promise<BatchStatus> {
-  return api<BatchStatus>(`/api/v1/perf/batch/status/${batchId}`)
+  const payload = await api<BatchStatus>(`/api/v1/perf/batch/status/${batchId}`)
+  return {
+    ...payload,
+    status: normalizeTaskStatus(payload.status) ?? TASK_STATUSES.FAILED,
+    results: (payload.results || []).map((result) => ({
+      ...result,
+      status: normalizeTaskStatus(result.status) ?? TASK_STATUSES.FAILED,
+    })),
+  }
 }
 
 export async function stopBatchPerf(batchId: string): Promise<{ batch_id: string; status: string }> {
