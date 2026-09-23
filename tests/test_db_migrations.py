@@ -363,6 +363,31 @@ RELEASED: list[tuple[int, str, str]] = [
             ON batch_items(batch_id, status, row_index);
     '''
     ),
+    (
+        21, 'add registration invite codes', '''
+        CREATE TABLE IF NOT EXISTS registration_invites (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            code_hash   TEXT NOT NULL UNIQUE,
+            max_uses    INTEGER NOT NULL CHECK(max_uses > 0),
+            used_count  INTEGER NOT NULL DEFAULT 0 CHECK(used_count >= 0),
+            expires_at  TEXT,
+            created_by  INTEGER NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_registration_invites_active
+            ON registration_invites(expires_at, used_count, max_uses);
+    '''
+    ),
+    (
+        22, 'add persistent system settings', '''
+        CREATE TABLE IF NOT EXISTS system_settings (
+            key         TEXT PRIMARY KEY,
+            value       TEXT NOT NULL,
+            updated_by  INTEGER,
+            updated_at  TEXT NOT NULL
+        );
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -448,9 +473,9 @@ def test_released_migrations_immutable():
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 20
+    assert len(RELEASED) == 22
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 20
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 22
 
 
 def test_fresh_db_converges(tmp_path):
@@ -467,6 +492,8 @@ def test_fresh_db_converges(tmp_path):
         assert {'task_id', 'dataset_name', 'score', 'position'} <= set(_columns(conn, 'eval_report_datasets'))
         assert {'batch_id', 'batch_type', 'user_id', 'manifest_hash'} <= set(_columns(conn, 'batch_jobs'))
         assert {'batch_id', 'row_index', 'status', 'task_id'} <= set(_columns(conn, 'batch_items'))
+        assert {'id', 'code_hash', 'max_uses', 'used_count', 'expires_at', 'created_by'} <= set(_columns(conn, 'registration_invites'))
+        assert {'key', 'value', 'updated_by', 'updated_at'} <= set(_columns(conn, 'system_settings'))
         idx = {r[1] for r in conn.execute("PRAGMA index_list('eval_reports')").fetchall()}
         assert 'idx_eval_reports_user_timestamp' in idx
         assert 'idx_eval_reports_user_backend_timestamp' in idx
@@ -480,6 +507,34 @@ def test_fresh_db_verify_schema_clean(tmp_path, caplog):
     """Startup self-check must pass without any drift warning/error."""
     db.init_db(str(tmp_path))
     assert not any('Schema drift' in r.message for r in caplog.records)
+
+
+def test_schema_check_requires_registration_settings_tables(tmp_path):
+    db.init_db(str(tmp_path))
+    db._get_conn().execute('DROP TABLE system_settings')
+    db._get_conn().commit()
+
+    with pytest.raises(RuntimeError, match=r'missing table\(s\): system_settings'):
+        db._verify_schema(strict=True)
+
+
+def test_schema_check_requires_registration_constraints(tmp_path):
+    db.init_db(str(tmp_path))
+    conn = db._get_conn()
+    conn.execute('DROP INDEX idx_registration_invites_active')
+    conn.execute('DROP TABLE system_settings')
+    conn.execute('''
+        CREATE TABLE system_settings (
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            updated_by INTEGER,
+            updated_at TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+
+    with pytest.raises(RuntimeError, match='registration_invites missing idx_registration_invites_active'):
+        db._verify_schema(strict=True)
 
 
 def test_historic_db_upgrade_v9(tmp_path):

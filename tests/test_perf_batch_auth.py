@@ -32,6 +32,7 @@ def clients(tmp_path, monkeypatch):
     # Fresh in-memory batch state per test (the real one is a module global).
     monkeypatch.setattr(svc_perf, '_batch_state', {})
 
+    monkeypatch.setenv('REGISTRATION_MODE', 'public')
     monkeypatch.setenv('EVALSCOPE_ADMIN_PASSWORD', 'testpass')
     from evalscope.service.app import create_app
     app = create_app(outputs=root)

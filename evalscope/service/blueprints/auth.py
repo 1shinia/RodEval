@@ -1,6 +1,7 @@
 """Authentication blueprint — register, login, JWT management."""
 
 import datetime
+import hashlib
 import os
 import secrets
 import sqlite3
@@ -13,6 +14,7 @@ from flask import Blueprint, current_app, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ..db import _get_conn, _write
+from ..rate_limit import get_client_ip
 
 logger = __import__('evalscope.utils.logger', fromlist=['get_logger']).get_logger()
 
@@ -20,6 +22,39 @@ bp_auth = Blueprint('auth', __name__, url_prefix='/api/v1/auth')
 
 # Default admin username (bootstrap only — see ensure_admin_user below)
 _DEFAULT_ADMIN = 'admin'
+_REGISTRATION_MODES = frozenset({'admin_only', 'invite', 'public'})
+
+
+def parse_env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off'}:
+        return False
+    raise RuntimeError(f'{name} must be a boolean')
+
+
+def get_registration_policy() -> tuple[str, bool]:
+    """Return the effective registration mode and deployment lock state."""
+    fallback = current_app.config.get('REGISTRATION_MODE_DEFAULT', 'admin_only')
+    locked = current_app.config.get('REGISTRATION_MODE_LOCKED', False)
+    if locked:
+        return fallback, True
+    try:
+        row = _get_conn().execute(
+            "SELECT value FROM system_settings WHERE key = 'registration_mode'"
+        ).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    mode = row['value'] if row else fallback
+    if row and mode not in _REGISTRATION_MODES:
+        logger.error('Invalid persisted registration mode; failing closed to admin_only')
+        mode = 'admin_only'
+    return mode if mode in _REGISTRATION_MODES else 'admin_only', False
+
 
 # JWT secret. Resolution order:
 #   1. JWT_SECRET env var (explicit deployment config)
@@ -254,8 +289,15 @@ def require_auth():
         return None
 
     # Only genuinely non-user-specific discovery/bootstrap endpoints are public.
+    public_auth_paths = {
+        '/api/v1/auth/login',
+        '/api/v1/auth/register',
+        '/api/v1/auth/reset-password',
+    }
+    if request.path in public_auth_paths:
+        return None
     for prefix in (
-        '/health', '/dashboard', '/api/v1/auth/', '/api/v1/config',
+        '/health', '/dashboard', '/api/v1/config',
         '/api/v1/benchmarks', '/api/v1/eval/benchmarks',
         '/api/v1/perf/template', '/api/v1/eval/batch/template',
         '/api/v1/perf/batch/template',
@@ -375,26 +417,9 @@ _login_guard = threading.Lock()
 _login_failures: dict[str, list[float]] = {}   # key -> failure timestamps
 _login_locks: dict[str, float] = {}            # key -> lock expiry (epoch)
 
-# Same trust rule as the access log in app.py: X-Forwarded-For is honoured
-# only when the direct peer is a known reverse proxy, so external clients
-# cannot spoof their rate-limit identity with a forged header.
-_LOGIN_TRUSTED_PROXIES = set(
-    p.strip() for p in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',') if p.strip()
-)
-
 # Pre-computed hash used to equalise response timing when the username does
 # not exist, so latency does not reveal whether an account is registered.
 _DUMMY_PASSWORD_HASH = generate_password_hash('brute-force-timing-dummy')
-
-
-def _login_client_ip() -> str:
-    remote = request.remote_addr or ''
-    if remote in _LOGIN_TRUSTED_PROXIES:
-        return (
-            request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-            or request.headers.get('X-Real-IP', '') or remote or '-'
-        )
-    return remote or '-'
 
 
 def _login_guard_key(ip: str, username: str) -> str:
@@ -447,15 +472,54 @@ def _clear_login_failures(ip: str, username: str) -> None:
         _login_locks.pop(key, None)
 
 
+def _invite_hash(code: str) -> str:
+    return hashlib.sha256(code.encode('utf-8')).hexdigest()
+
+
+@bp_auth.route('/invites', methods=['POST'])
+def create_invite():
+    admin = _require_admin()
+    if admin is None:
+        return jsonify({'error': 'Admin access required'}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        max_uses = int(data.get('max_uses', 1))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'max_uses must be a positive integer'}), 400
+    if not 1 <= max_uses <= 10000:
+        return jsonify({'error': 'max_uses must be between 1 and 10000'}), 400
+    expires_at = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)).isoformat()
+    if data.get('expires_in_hours') is not None:
+        try:
+            hours = float(data['expires_in_hours'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'expires_in_hours must be positive'}), 400
+        if not 0 < hours <= 8760:
+            return jsonify({'error': 'expires_in_hours must be positive'}), 400
+        expires_at = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=hours)).isoformat()
+    code = secrets.token_urlsafe(18)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    _write(lambda conn: conn.execute(
+        'INSERT INTO registration_invites '
+        '(code_hash, max_uses, expires_at, created_by, created_at) VALUES (?, ?, ?, ?, ?)',
+        (_invite_hash(code), max_uses, expires_at, int(admin['sub']), now),
+    ))
+    return jsonify({'code': code, 'expires_at': expires_at, 'max_uses': max_uses}), 201
+
+
 @bp_auth.route('/register', methods=['POST'])
 def register():
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Request body required'}), 400
+    registration_mode, _ = get_registration_policy()
+    if registration_mode == 'admin_only':
+        return jsonify({'error': '公开注册已关闭，请联系管理员创建账号'}), 403
 
+    data = request.get_json(silent=True) or {}
     username = (data.get('username') or '').strip()
     password = (data.get('password') or '').strip()
+    invite_code = (data.get('invite_code') or '').strip()
 
+    if registration_mode == 'invite' and not invite_code:
+        return jsonify({'error': '邀请码无效或已过期'}), 400
     if not username or not password:
         return jsonify({'error': 'username and password are required'}), 400
     if len(username) < 2 or len(username) > 32:
@@ -463,27 +527,43 @@ def register():
     if len(password) < 6:
         return jsonify({'error': 'password must be at least 6 characters'}), 400
 
-    conn = _get_conn()
-    existing = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
-    if existing:
-        return jsonify({'error': '用户名已存在'}), 409
-
     pw_hash = generate_password_hash(password)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    try:
-        _write(lambda conn: conn.execute(
-            'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
-            (username, pw_hash, 'user', now),
-        ))
-    except sqlite3.IntegrityError:
-        # The UNIQUE constraint is the cross-process authority.  A concurrent
-        # registration can pass the optimistic pre-check above, then lose the
-        # INSERT race; report that as a normal conflict instead of HTTP 500.
-        # Do not mask unrelated integrity failures.
-        if _user_by_username(username):
-            return jsonify({'error': '用户名已存在'}), 409
-        raise
+    invite_hash = _invite_hash(invite_code) if registration_mode == 'invite' else None
 
+    def _register(c):
+        invite = None
+        if invite_hash is not None:
+            invite = c.execute(
+                'SELECT id FROM registration_invites '
+                'WHERE code_hash = ? AND used_count < max_uses '
+                'AND (expires_at IS NULL OR expires_at > ?)',
+                (invite_hash, now),
+            ).fetchone()
+            if invite is None:
+                return None
+        try:
+            cursor = c.execute(
+                'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
+                (username, pw_hash, 'user', now),
+            )
+        except sqlite3.IntegrityError:
+            return 'duplicate'
+        if invite_hash is not None:
+            assert invite is not None
+            updated = c.execute(
+                'UPDATE registration_invites SET used_count = used_count + 1 '
+                'WHERE id = ? AND used_count < max_uses', (invite['id'],)
+            ).rowcount
+            if updated != 1:
+                raise sqlite3.IntegrityError('invite usage race')
+        return cursor.lastrowid
+
+    result = _write(_register)
+    if result is None:
+        return jsonify({'error': '邀请码无效或已过期'}), 400
+    if result == 'duplicate':
+        return jsonify({'error': '用户名已存在'}), 409
     user = _user_by_username(username)
     if not user:
         return jsonify({'error': 'Registration failed'}), 500
@@ -507,7 +587,7 @@ def login():
     if not username or not password:
         return jsonify({'error': 'username and password are required'}), 400
 
-    client_ip = _login_client_ip()
+    client_ip = get_client_ip()
 
     # Locked pairs are rejected outright — even with the correct password —
     # so a brute-force attempt cannot probe further until the lock expires.
@@ -601,6 +681,32 @@ def _require_admin() -> dict | None:
     payload['username'] = row['username']
     payload['role'] = row['role']
     return payload
+
+
+@bp_auth.route('/settings/registration', methods=['PUT'])
+def update_registration_mode():
+    """Update the persisted registration policy (admin only)."""
+    admin = _require_admin()
+    if admin is None:
+        return jsonify({'error': 'Admin access required'}), 403
+    _, locked = get_registration_policy()
+    if locked:
+        return jsonify({'error': '注册策略由服务器配置锁定，无法在网页修改'}), 403
+    data = request.get_json(silent=True) or {}
+    mode = (data.get('mode') or '').strip().lower()
+    if mode not in _REGISTRATION_MODES:
+        return jsonify({'error': 'mode must be one of: admin_only, invite, public'}), 400
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    _write(lambda conn: conn.execute(
+        '''INSERT INTO system_settings (key, value, updated_by, updated_at)
+           VALUES ('registration_mode', ?, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+               value = excluded.value,
+               updated_by = excluded.updated_by,
+               updated_at = excluded.updated_at''',
+        (mode, int(admin['sub']), now),
+    ))
+    return jsonify({'registration_mode': mode, 'registration_mode_locked': False}), 200
 
 
 @bp_auth.route('/users', methods=['GET'])

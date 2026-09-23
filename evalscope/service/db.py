@@ -84,7 +84,7 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 20  # Bump when adding migrations below
+SCHEMA_VERSION = 22  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -432,6 +432,31 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
             ON batch_items(batch_id, status, row_index);
     '''
     ),
+    (
+        21, 'add registration invite codes', '''
+        CREATE TABLE IF NOT EXISTS registration_invites (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            code_hash   TEXT NOT NULL UNIQUE,
+            max_uses    INTEGER NOT NULL CHECK(max_uses > 0),
+            used_count  INTEGER NOT NULL DEFAULT 0 CHECK(used_count >= 0),
+            expires_at  TEXT,
+            created_by  INTEGER NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_registration_invites_active
+            ON registration_invites(expires_at, used_count, max_uses);
+    '''
+    ),
+    (
+        22, 'add persistent system settings', '''
+        CREATE TABLE IF NOT EXISTS system_settings (
+            key         TEXT PRIMARY KEY,
+            value       TEXT NOT NULL,
+            updated_by  INTEGER,
+            updated_at  TEXT NOT NULL
+        );
+    '''
+    ),
 ]
 
 
@@ -768,6 +793,10 @@ def _verify_schema(*, strict: bool = False) -> None:
             required_tables.add('eval_report_datasets')
         if current_version >= 20:
             required_tables.update({'batch_jobs', 'batch_items'})
+        if current_version >= 21:
+            required_tables.add('registration_invites')
+        if current_version >= 22:
+            required_tables.add('system_settings')
         existing_tables = {
             r[0] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -803,6 +832,47 @@ def _verify_schema(*, strict: bool = False) -> None:
                 'batch_id', 'row_index', 'model', 'status', 'task_id',
                 'error', 'started_at', 'finished_at',
             }
+        if current_version >= 21:
+            required_columns['registration_invites'] = {
+                'id', 'code_hash', 'max_uses', 'used_count', 'expires_at',
+                'created_by', 'created_at',
+            }
+        if current_version >= 22:
+            required_columns['system_settings'] = {
+                'key', 'value', 'updated_by', 'updated_at',
+            }
+
+        if current_version >= 21 and 'registration_invites' in existing_tables:
+            invite_indexes = {
+                row['name'] for row in conn.execute("PRAGMA index_list('registration_invites')")
+            }
+            if 'idx_registration_invites_active' not in invite_indexes:
+                structural_errors.append(
+                    'registration_invites missing idx_registration_invites_active index'
+                )
+            invite_unique = {
+                row['name'] for row in conn.execute("PRAGMA index_list('registration_invites')")
+                if row['unique']
+            }
+            if not any(
+                'code_hash' in {
+                    info['name'] for info in conn.execute(
+                        f"PRAGMA index_info({index_name})"
+                    )
+                }
+                for index_name in invite_unique
+            ):
+                structural_errors.append(
+                    'registration_invites missing unique code_hash constraint'
+                )
+
+        if current_version >= 22 and 'system_settings' in existing_tables:
+            settings_columns = {
+                row['name']: row['pk']
+                for row in conn.execute('PRAGMA table_info(system_settings)')
+            }
+            if settings_columns.get('key') != 1:
+                structural_errors.append('system_settings key column is not the primary key')
         for table, expected in required_columns.items():
             if table not in existing_tables:
                 continue

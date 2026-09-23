@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button'
 import PasswordInput from '@/components/ui/PasswordInput'
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { login, registrationMode } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -56,10 +56,12 @@ export default function LoginPage() {
             {loading ? '登录中...' : '登录'}
           </Button>
         </form>
-        <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
-          还没有账号？{' '}
-          <Link to="/register" className="text-[var(--accent)] hover:underline">注册</Link>
-        </p>
+        {(registrationMode === 'public' || registrationMode === 'invite') && (
+          <p className="mt-4 text-center text-sm text-[var(--text-muted)]">
+            还没有账号？{' '}
+            <Link to="/register" className="text-[var(--accent)] hover:underline">注册</Link>
+          </p>
+        )}
       </div>
     </div>
   )

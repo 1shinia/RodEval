@@ -12,8 +12,9 @@ from . import db as _db
 from .blueprints import bp_eval, bp_perf, bp_reports
 from .blueprints.aigc import bp_aigc
 from .blueprints.audio import bp_audio
-from .blueprints.auth import bp_auth, require_auth
+from .blueprints.auth import bp_auth, get_registration_policy, parse_env_bool, require_auth
 from .blueprints.leaderboard import bp_leaderboard
+from .rate_limit import SlidingWindowLimiter, classify_submission_path, get_client_ip, get_rate_policy
 from .utils import OUTPUT_DIR as _DEFAULT_ROOT
 
 logger = get_logger()
@@ -52,6 +53,23 @@ def create_app(outputs: str = None):
             load_dotenv(_env_path, override=False)
     except ImportError:
         pass
+
+    # --- Deployment registration policy ---------------------------------
+    registration_mode = os.environ.get('REGISTRATION_MODE', 'admin_only').strip().lower()
+    if registration_mode not in {'admin_only', 'invite', 'public'}:
+        raise RuntimeError('REGISTRATION_MODE must be one of: admin_only, invite, public')
+    app.config['REGISTRATION_MODE_DEFAULT'] = registration_mode
+    try:
+        app.config['REGISTRATION_MODE_LOCKED'] = parse_env_bool('REGISTRATION_MODE_LOCKED')
+    except RuntimeError as exc:
+        raise RuntimeError(str(exc)) from exc
+    try:
+        app.config['RATE_LIMIT_POLICIES'] = {
+            bucket: get_rate_policy(bucket)
+            for bucket in ('register', 'eval', 'perf', 'aigc', 'batch')
+        }
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
     # --- CORS (restrict to known frontend origins) ----------------------
     try:
@@ -92,6 +110,11 @@ def create_app(outputs: str = None):
     # structurally broken schema is less safe than refusing to start.
     try:
         _db.init_db(outputs_root)
+        _db._write(lambda conn: conn.execute(
+            '''INSERT OR IGNORE INTO system_settings (key, value, updated_by, updated_at)
+               VALUES ('registration_mode', ?, NULL, ?)''',
+            (registration_mode, utc_now_iso()),
+        ))
     except Exception as e:
         logger.error(f'SQLite metadata store initialization failed: {e}')
         raise RuntimeError('SQLite metadata store initialization failed') from e
@@ -220,6 +243,43 @@ def create_app(outputs: str = None):
     # --- JWT authentication -----------------------------------------------
     app.before_request(require_auth)
 
+    # --- Registration and task-submission request-rate limits -------------
+    # This bounds request frequency; existing process slots still enforce
+    # concurrency. Authentication runs first, so task buckets use the trusted
+    # JWT user id. Registration is public and therefore keyed by client IP.
+    request_limiter = SlidingWindowLimiter()
+
+    @app.before_request
+    def _check_request_rate_limit():
+        if request.method == 'POST' and request.path == '/api/v1/auth/register':
+            registration_mode, _ = get_registration_policy()
+            if registration_mode == 'admin_only':
+                return None
+            bucket = 'register'
+            identity = get_client_ip()
+        else:
+            bucket = classify_submission_path(request.path, request.method)
+            if bucket is None:
+                return None
+            user = getattr(request, 'current_user', None)
+            if user is None:
+                return None  # require_auth has already produced the 401 response
+            identity = str(user['sub'])
+
+        limit, window = app.config['RATE_LIMIT_POLICIES'][bucket]
+        allowed, retry_after = request_limiter.consume(
+            f'{bucket}:{identity}', limit=limit, window_seconds=window,
+        )
+        if allowed:
+            return None
+        response = jsonify({
+            'error': '请求过于频繁，请稍后再试',
+            'bucket': bucket,
+            'retry_after': retry_after,
+        })
+        response.headers['Retry-After'] = str(retry_after)
+        return response, 429
+
     # Admin bootstrap now lives in the init block above (ensure_admin_user):
     # env-var or random password instead of a hardcoded default.
 
@@ -274,9 +334,12 @@ def create_app(outputs: str = None):
             host_part = server_address.split(':')[0]
             backend_port = request.environ.get('SERVER_PORT', '9000')
             server_address = f'{host_part}:{backend_port}'
+        registration_mode, registration_mode_locked = get_registration_policy()
         return jsonify({
             'outputs_root': outputs_root or _DEFAULT_ROOT,
             'server_address': server_address,
+            'registration_mode': registration_mode,
+            'registration_mode_locked': registration_mode_locked,
         })
 
     @app.route('/api/v1/tasks/slots', methods=['GET'])
@@ -377,11 +440,6 @@ def _setup_access_logging(app: Flask, outputs_root: str) -> None:
     access_log.addHandler(handler)
     access_log.setLevel(logging.INFO)
 
-    # Parse the trusted-proxy set once at setup time; it never changes per request.
-    trusted_proxies = set(
-        p.strip() for p in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',') if p.strip()
-    )
-
     @app.before_request
     def _capture_start():
         request._start_time = time.time()
@@ -392,16 +450,7 @@ def _setup_access_logging(app: Flask, outputs_root: str) -> None:
             return response
 
         elapsed = (time.time() - getattr(request, '_start_time', time.time())) * 1000
-        # Only trust X-Forwarded-For from known reverse proxy addresses (the set
-        # is parsed once at setup time — see above).
-        remote = request.remote_addr or ''
-        if remote in trusted_proxies:
-            client_ip = (
-                request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-                or request.headers.get('X-Real-IP', '') or remote
-            )
-        else:
-            client_ip = remote or '-'
+        client_ip = get_client_ip()
         access_log.info(
             '%s %s %s %d %.0fms',
             client_ip,

@@ -325,6 +325,48 @@ python -m evalscope.service.app
 - 单机多 GPU：`MAX_CONCURRENT_EVAL=GPU数量, MAX_CONCURRENT_PERF=2`
 - 纯 API 评测（无本地模型）：可适当提高并发数
 
+### 🛡️ 注册策略与提交限流
+
+Web 服务默认关闭公开注册。管理员可在“用户管理”页面实时选择注册策略，保存后立即生效并持久化到数据库，无需修改环境变量或重启服务：
+
+- `admin_only`（默认）：仅管理员创建账号
+- `public`：允许访问者在登录页自行注册
+- `invite`：仅持有效邀请码的访问者可注册
+
+部署方如需强制控制策略，可同时设置以下环境变量并重启服务；锁定后网页仅展示当前策略，不能修改：
+
+```bash
+export REGISTRATION_MODE=admin_only  # admin_only / public / invite
+export REGISTRATION_MODE_LOCKED=true
+```
+
+未启用锁定时，`REGISTRATION_MODE` 仅作为首次初始化和数据库值异常时的安全回退值，网页保存的策略优先且跨重启保留。
+
+注册和任务提交使用独立的滑动窗口限流，与上面的任务并发槽位互不替代。默认值及可调环境变量如下：
+
+```bash
+# 公开注册：每个客户端 IP 每小时 5 次
+export RATE_LIMIT_REGISTER_REQUESTS=5
+export RATE_LIMIT_REGISTER_WINDOW_SECONDS=3600
+
+# 单用户任务提交频率
+export RATE_LIMIT_EVAL_REQUESTS=30
+export RATE_LIMIT_EVAL_WINDOW_SECONDS=60
+export RATE_LIMIT_PERF_REQUESTS=30
+export RATE_LIMIT_PERF_WINDOW_SECONDS=60
+export RATE_LIMIT_AIGC_REQUESTS=10
+export RATE_LIMIT_AIGC_WINDOW_SECONDS=60
+export RATE_LIMIT_BATCH_REQUESTS=10
+export RATE_LIMIT_BATCH_WINDOW_SECONDS=60
+```
+
+- `invite` 模式下，管理员可在“用户管理”页生成邀请码；邀请码默认 24 小时有效，使用次数可设置为 1–10000。服务端只保存 SHA-256 哈希，明文只在创建响应中显示一次。
+- 将某个 `RATE_LIMIT_*_REQUESTS` 或对应窗口设为 `0` 可关闭该桶的频率限制。
+- 限流状态保存在服务进程内，服务重启后短窗口会清空；它不承担持久化成本配额职责。
+- 超限返回 HTTP `429`，并携带 `Retry-After` 响应头。
+- 反向代理部署时，只有直接来源属于 `TRUSTED_PROXIES` 的请求才会采用 `X-Forwarded-For`。默认仅信任 `127.0.0.1,::1`；远程代理必须显式加入该列表。
+- 配置值非法时服务拒绝启动，避免运行中才暴露错误。
+
 ### 🔐 API Key 认证
 
 默认情况下，Web 服务的所有 API 端点公开访问。如需启用认证，设置 `EVALSCOPE_API_KEY` 环境变量：

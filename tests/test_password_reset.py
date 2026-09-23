@@ -11,6 +11,7 @@ def clients(tmp_path, monkeypatch):
     root = str(tmp_path)
     for mod in (svc_log, svc_utils):
         monkeypatch.setattr(mod, 'OUTPUT_DIR', root)
+    monkeypatch.setenv('REGISTRATION_MODE', 'public')
     monkeypatch.setenv('EVALSCOPE_ADMIN_PASSWORD', 'adminpass')
 
     from evalscope.service.app import create_app

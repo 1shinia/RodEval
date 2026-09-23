@@ -5,11 +5,12 @@ import Button from '@/components/ui/Button'
 import PasswordInput from '@/components/ui/PasswordInput'
 
 export default function RegisterPage() {
-  const { register } = useAuth()
+  const { register, registrationMode, registrationPolicyLoaded } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -31,10 +32,14 @@ export default function RegisterPage() {
       setError('两次密码不一致')
       return
     }
+    if (registrationMode === 'invite' && !inviteCode.trim()) {
+      setError('请输入邀请码')
+      return
+    }
     setLoading(true)
     setError('')
     try {
-      await register(username, password)
+      await register(username, password, registrationMode === 'invite' ? inviteCode.trim() : undefined)
       navigate('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : '注册失败')
@@ -50,18 +55,27 @@ export default function RegisterPage() {
           <img src="/logo.svg" alt="EvalPerf" className="h-12 mx-auto mb-2" />
           <h1 className="text-xl font-semibold text-[var(--text)]">注册</h1>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {!registrationPolicyLoaded ? (
+          <p className="text-sm text-[var(--text-muted)] text-center">正在加载注册策略...</p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
           <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
             placeholder="用户名 (2-32 字符)" autoFocus
             className="w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" />
           <PasswordInput value={password} onChange={setPassword} placeholder="密码 (至少6位)" />
+          {registrationMode === 'invite' && (
+            <input type="text" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)}
+              placeholder="邀请码" autoComplete="off"
+              className="w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" />
+          )}
           <PasswordInput value={confirm} onChange={setConfirm} placeholder="确认密码" />
           {error && <p className="text-xs text-[var(--danger)]">{error}</p>}
           <Button type="submit" variant="primary" disabled={loading} className="w-full">
             {loading ? '注册中...' : '注册'}
           </Button>
-        </form>
-        <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
+          </form>
+        )}
+        <p className="mt-4 text-center text-sm text-[var(--text-muted)]">
           已有账号？{' '}
           <Link to="/login" className="text-[var(--accent)] hover:underline">登录</Link>
         </p>

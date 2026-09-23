@@ -43,6 +43,14 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+function RegistrationEnabledOnly({ children }: { children: ReactNode }) {
+  const { isAuthenticated, registrationMode, registrationPolicyLoaded } = useAuth()
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />
+  if (!registrationPolicyLoaded) return <LoadingSpinner />
+  if (registrationMode === 'admin_only') return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
 function GuestOnly({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
   if (isAuthenticated) return <Navigate to="/dashboard" replace />
@@ -61,7 +69,7 @@ function AppRoutes() {
       <Routes>
         {/* Auth pages — guest only */}
         <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
-        <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
+        <Route path="/register" element={<RegistrationEnabledOnly><RegisterPage /></RegistrationEnabledOnly>} />
         <Route path="/reset-password" element={<GuestOnly><ResetPasswordPage /></GuestOnly>} />
 
         {/* All other routes require auth */}
