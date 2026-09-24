@@ -1,0 +1,73 @@
+name: Quality Gates
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  frontend:
+    name: Frontend tests, types, and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evalscope/web
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: evalscope/web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend behavior tests
+        run: node --experimental-strip-types --test tests/*.test.ts
+
+      - name: Check frontend types
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+      - name: Build frontend
+        run: npm run build
+
+  backend:
+    name: Backend isolated regression tests
+    runs-on: ubuntu-latest
+    env:
+      CONDA_NO_PLUGINS: '1'
+      EVALSCOPE_ADMIN_PASSWORD: ci-test-password
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[service,dev]'
+
+      - name: Run isolated backend regression tests
+        run: >-
+          python -m pytest
+          tests/test_db_migrations.py
+          tests/test_task_terminal_state.py
+          tests/test_batch_checkpoints.py
+          tests/test_task_path_security.py
+          tests/test_task_access.py
+          tests/test_batch_auth.py
+          tests/test_perf_batch_auth.py
+          tests/test_deployment_rate_limits.py
+          tests/test_login_lockout.py
+          -p no:cacheprovider -q
