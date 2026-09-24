@@ -59,3 +59,30 @@ def test_sla_summary_is_a_valid_perf_report(monkeypatch, tmp_path):
     (tmp_path / task_id / 'sla_summary.json').write_text('{}', encoding='utf-8')
 
     perf._require_perf_report(task_id)
+
+
+def test_saved_perf_config_is_loaded_and_redacted_again(tmp_path):
+    config_file = tmp_path / 'task_config.json'
+    config_file.write_text(json.dumps({
+        'model': 'demo-model',
+        'parallel': [1, 4],
+        'extra_args': {
+            'headers': {'Authorization': 'Bearer stale-secret'},
+            'max_tokens': 128,
+        },
+    }), encoding='utf-8')
+
+    config = perf._load_saved_perf_config(str(config_file))
+
+    assert config['model'] == 'demo-model'
+    assert config['parallel'] == [1, 4]
+    assert 'Authorization' not in config['extra_args']['headers']
+    assert config['extra_args']['max_tokens'] == 128
+
+
+def test_saved_perf_config_must_be_an_object(tmp_path):
+    config_file = tmp_path / 'task_config.json'
+    config_file.write_text('[]', encoding='utf-8')
+
+    with pytest.raises(ValueError, match='JSON object'):
+        perf._load_saved_perf_config(str(config_file))

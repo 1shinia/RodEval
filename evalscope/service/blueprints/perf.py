@@ -85,6 +85,15 @@ def _resume_safe_perf_config(data: dict) -> dict:
     return _clean(dict(data))
 
 
+def _load_saved_perf_config(config_file: str) -> dict:
+    """Read a persisted config and redact again for safe display."""
+    with open(config_file, encoding='utf-8') as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict):
+        raise ValueError('Saved task config must be a JSON object')
+    return _resume_safe_perf_config(data)
+
+
 def _build_perf_table(result, api_type: str = None) -> str:
     """Build a Markdown pipe-table from perf benchmark results with Chinese headers.
 
@@ -1546,6 +1555,31 @@ def get_performance_report():
                          download_name=safe_name)
 
     return send_file(report_file, mimetype='text/html')
+
+
+@bp_perf.route('/config', methods=['GET'])
+def get_performance_config():
+    """Get the redacted configuration used to launch a perf task."""
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'task_id is required'}), 400
+
+    from .auth import check_task_artifact_access
+    if not check_task_artifact_access(task_id, ('task_registry', 'perf_tasks', 'task_state')):
+        return jsonify({'error': 'Task not found'}), 404
+
+    try:
+        validate_task_id(task_id)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    config_file = os.path.join(OUTPUT_DIR, task_id, 'task_config.json')
+    if not os.path.isfile(config_file):
+        return jsonify({'error': f'Config not found for task_id: {task_id}'}), 404
+    try:
+        return jsonify(_load_saved_perf_config(config_file)), 200
+    except (OSError, ValueError, json.JSONDecodeError):
+        return jsonify({'error': 'Failed to read task config'}), 500
 
 
 @bp_perf.route('/sla', methods=['GET'])

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
-import { listPerfTasks, deletePerfTask, getPerfReportUrl, getPerfSlaData, type PerfTaskMeta, type SlaSummaryResponse } from '@/api/perf'
+import { listPerfTasks, deletePerfTask, getPerfReportUrl, getPerfConfig, getPerfSlaData, type PerfTaskMeta, type SlaSummaryResponse } from '@/api/perf'
 import { toast } from '@/components/common/Toast'
 import Breadcrumb from '@/components/ui/Breadcrumb'
 import Card from '@/components/ui/Card'
@@ -41,6 +41,7 @@ export default function PerfReportsPage() {
 
   // SLA tuning result modal
   const [slaData, setSlaData] = useState<(SlaSummaryResponse & { taskId: string }) | null>(null)
+  const [configData, setConfigData] = useState<{ taskId: string; config: Record<string, unknown> } | null>(null)
 
   useEffect(() => {
     searchTimer.current = setTimeout(() => {
@@ -92,6 +93,15 @@ export default function PerfReportsPage() {
       setSlaData({ taskId: tid, ...sla })
     } catch {
       window.open(`/viewer?url=${encodeURIComponent(getPerfReportUrl(tid))}`, '_blank')
+    }
+  }
+
+  const handleViewConfig = async (tid: string) => {
+    try {
+      const config = await getPerfConfig(tid)
+      setConfigData({ taskId: tid, config })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('perf.configEmpty'))
     }
   }
 
@@ -257,6 +267,10 @@ export default function PerfReportsPage() {
                           <ExternalLink size={13} />{t('perf.report')}
                         </button>
                       )}
+                      <button onClick={() => handleViewConfig(item.task_id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 ml-1 text-xs rounded text-[var(--text-muted)] hover:bg-[var(--bg-card2)] transition-colors cursor-pointer">
+                        {t('perf.viewConfig')}
+                      </button>
                       <button onClick={() => handleDelete(item.task_id)}
                         className="inline-flex items-center gap-1 px-2 py-1 ml-1 text-xs rounded text-[var(--text-muted)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-colors cursor-pointer">
                         <Trash2 size={13} />
@@ -290,6 +304,29 @@ export default function PerfReportsPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {configData && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/40 overflow-y-auto"
+          onClick={() => setConfigData(null)}>
+          <div className="w-full max-w-2xl rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--shadow-lg)] mt-8"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)]">
+              <h3 className="text-base font-semibold text-[var(--text)]">{t('perf.configTitle')}</h3>
+              <button onClick={() => setConfigData(null)}
+                className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer">✕</button>
+            </div>
+            <div className="p-5">
+              {Object.keys(configData.config).length === 0 ? (
+                <p className="text-sm text-[var(--text-dim)]">{t('perf.configEmpty')}</p>
+              ) : (
+                <pre className="max-h-[60vh] overflow-auto rounded-[var(--radius-sm)] bg-[var(--bg-deep)] p-4 text-xs leading-5 text-[var(--text-muted)] whitespace-pre-wrap break-words">
+                  {JSON.stringify(configData.config, null, 2)}
+                </pre>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── SLA Tuning Result Modal ── */}

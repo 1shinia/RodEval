@@ -304,6 +304,9 @@ const en: Dict = {
     time: 'Time',
     actions: 'Actions',
     report: 'Report',
+    configTitle: 'Test Parameters',
+    configEmpty: 'No saved parameters',
+    viewConfig: 'Parameters',
     totalCount: '${n} records',
   },
   benchmarks: {
@@ -939,6 +942,9 @@ const zh: Dict = {
     time: '时间',
     actions: '操作',
     report: '报告',
+    configTitle: '压测参数',
+    configEmpty: '没有保存的参数',
+    viewConfig: '参数',
     totalCount: '共 ${n} 条',
   },
   benchmarks: {

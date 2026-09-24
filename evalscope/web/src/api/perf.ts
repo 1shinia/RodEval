@@ -60,6 +60,10 @@ export function getPerfReportUrl(taskId: string): string {
   return `/api/v1/perf/report?task_id=${encodeURIComponent(taskId)}`
 }
 
+export async function getPerfConfig(taskId: string): Promise<Record<string, unknown>> {
+  return api<Record<string, unknown>>('/api/v1/perf/config', { task_id: taskId })
+}
+
 export interface SlaResultRow {
   Criteria: string
   Variable: string
