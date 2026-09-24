@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { classifyProgress, progressRetryDelay } from '../src/hooks/taskLifecycle.ts'
+import { classifyProgress, progressRetryDelay, shouldShowProgressError } from '../src/hooks/taskLifecycle.ts'
 
 test('classifies every backend terminal status consistently', () => {
   assert.deepEqual(classifyProgress({ percent: 100, status: 'completed' }), { status: 'ok' })
@@ -21,6 +21,12 @@ test('keeps active and unknown states non-terminal', () => {
 
 test('preserves legacy status-less 100 percent completion', () => {
   assert.deepEqual(classifyProgress({ percent: 100 }), { status: 'ok' })
+})
+
+test('shows progress errors only after repeated polling failures', () => {
+  assert.equal(shouldShowProgressError(1), false)
+  assert.equal(shouldShowProgressError(2), true)
+  assert.equal(shouldShowProgressError(3), true)
 })
 
 test('backs off progress retries with a bounded delay', () => {

@@ -4,7 +4,7 @@ import { useSSE } from '@/hooks/useSSE'
 import { toast } from '@/components/common/Toast'
 import { createTaskId } from '@/utils/taskId'
 import type { EvalInvokeResponse, LogResponse, ProgressResponse } from '@/api/types'
-import { classifyProgress, progressRetryDelay } from './taskLifecycle'
+import { classifyProgress, progressRetryDelay, shouldShowProgressError } from './taskLifecycle'
 
 export interface TaskApi {
   submit: (config: Record<string, unknown>, taskId: string) => Promise<EvalInvokeResponse>
@@ -201,7 +201,9 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
       } catch {
         if (cancelled) return
         failures += 1
-        setProgressError('任务状态暂不可用，正在重试')
+        if (shouldShowProgressError(failures)) {
+          setProgressError('任务状态暂不可用，正在重试')
+        }
         schedule(progressRetryDelay(failures))
       }
     }

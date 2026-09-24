@@ -74,9 +74,16 @@ export function classifyProgress(progress: ProgressResponse): ProgressOutcome | 
   if (status === TASK_STATUSES.STOPPED) {
     return { status: 'stopped' }
   }
+  if (!progress.status && progress.percent >= 100) {
+    return { status: 'ok' }
+  }
   return null
 }
 
 export function progressRetryDelay(failures: number): number {
   return Math.min(3000 * (2 ** Math.max(0, failures - 1)), 30000)
+}
+
+export function shouldShowProgressError(failures: number): boolean {
+  return failures >= 2
 }
