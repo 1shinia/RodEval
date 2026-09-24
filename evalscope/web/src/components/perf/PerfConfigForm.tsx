@@ -106,7 +106,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   useEffect(() => {
     if (isEmbeddingOrRerank(api)) {
       if (![...EMBEDDING_DATASETS, ...RERANK_DATASETS].includes(dataset)) {
-        setDataset(EMBEDDING_APIS.includes(api) ? EMBEDDING_DATASETS[0] : RERANK_DATASETS[0])
+        setDataset(EMBEDDING_APIS.includes(api) ? EMBEDDING_DATASETS[0] : RERANK_DATASETS[0]) // eslint-disable-line react-hooks/set-state-in-effect
       }
     } else {
       if ([...EMBEDDING_DATASETS, ...RERANK_DATASETS].includes(dataset)) {
@@ -139,7 +139,12 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       number: number.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
     }
     if (rate) config.rate = Number(rate)
-    if (warmupRatio) config.warmup_num = Number(warmupRatio) / 100
+    if (warmupRatio) {
+      const value = warmupRatio.trim()
+      const isPercent = value.endsWith('%')
+      const numeric = Number(isPercent ? value.slice(0, -1).trim() : value)
+      config.warmup_num = isPercent ? numeric / 100 : numeric
+    }
     if (duration) config.duration = Number(duration)
     if (maxTokens) config.max_tokens = Number(maxTokens)
     if (minTokens) config.min_tokens = Number(minTokens)
@@ -170,6 +175,18 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
     }
   }
 
+  const checkWarmup = (): string | null => {
+    const value = warmupRatio.trim()
+    if (!value) return null
+    const isPercent = value.endsWith('%')
+    const numericText = isPercent ? value.slice(0, -1).trim() : value
+    const numeric = Number(numericText)
+    if (!numericText || !Number.isInteger(numeric) || numeric < 0 || (isPercent && numeric > 99)) {
+      return t('perf.errWarmupFormat')
+    }
+    return null
+  }
+
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
 
@@ -185,6 +202,11 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       const extraArgsErr = checkExtraArgs()
       if (extraArgsErr) {
         setBatchError(extraArgsErr)
+        return
+      }
+      const warmupErr = checkWarmup()
+      if (warmupErr) {
+        setBatchError(warmupErr)
         return
       }
       const sharedConfig = buildSharedConfig()
@@ -244,11 +266,8 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       if (isNaN(r) || r <= 0) newErrors.rate = t('perf.errRatePositive')
     }
 
-    // Warmup ratio: integer 1-99 (percent of total requests)
-    if (warmupRatio) {
-      const w = Number(warmupRatio)
-      if (!Number.isInteger(w) || w < 1 || w > 99) newErrors.warmupRatio = t('perf.errWarmupRange')
-    }
+    const warmupErr = checkWarmup()
+    if (warmupErr) newErrors.warmupRatio = warmupErr
 
     // Duration budget: positive integer seconds
     if (duration) {
@@ -455,9 +474,9 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         </FormField>
 
         <FormField label={t('perf.warmupRatio')} error={errors.warmupRatio} hint={t('perf.warmupHint')}>
-          <input type="number" value={warmupRatio}
-            onChange={(e) => { setWarmupRatio(e.target.value.replace(/[^0-9]/g, '')); if (errors.warmupRatio) setErrors((p) => ({ ...p, warmupRatio: '' })) }}
-            className={inputClass(errors.warmupRatio)} placeholder="10" />
+          <input type="text" inputMode="numeric" value={warmupRatio}
+            onChange={(e) => { setWarmupRatio(e.target.value); if (errors.warmupRatio) setErrors((p) => ({ ...p, warmupRatio: '' })) }}
+            className={inputClass(errors.warmupRatio)} placeholder={t('perf.warmupPlaceholder')} />
         </FormField>
 
         <FormField label={t('perf.durationBudget')} error={errors.duration} hint={t('perf.durationHint')}>

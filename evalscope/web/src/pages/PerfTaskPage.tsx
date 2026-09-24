@@ -81,11 +81,11 @@ export default function PerfTaskPage() {
         document.execCommand('copy')
         document.body.removeChild(ta)
       }
-      toast.success('日志已复制')
+      toast.success(t('perf.logCopied'))
     } catch {
-      toast.error('复制失败')
+      toast.error(t('perf.copyFailed'))
     }
-  }, [getDisplayLog])
+  }, [getDisplayLog, t])
 
   const handleSelectTask = useCallback((tid: string) => {
     setSelectedTaskId(tid)
@@ -109,11 +109,11 @@ export default function PerfTaskPage() {
     if (!bid) return
     try {
       await stopBatchPerf(bid)
-      toast.info('正在停止批量测试...')
+      toast.info(t('perf.batchStopping'))
     } catch (e) {
       toast.error(String(e))
     }
-  }, [])
+  }, [t])
 
   const monitorBatch = useCallback((batchId: string) => {
     clearBatchPoll()
@@ -146,34 +146,34 @@ export default function PerfTaskPage() {
           }
           if (st.status === TASK_STATUSES.COMPLETED) {
             sessionStorage.removeItem('perfBatchId')
-            toast.success(`批量测试完成：${st.completed} 个模型全部成功`)
+            toast.success(t('perf.batchCompleted', { n: st.completed }))
           } else if (st.status === TASK_STATUSES.PARTIAL_SUCCESS) {
             sessionStorage.removeItem('perfBatchId')
-            toast.warning(`批量测试部分完成：${st.completed} 成功，${st.errors} 失败`)
+            toast.warning(t('perf.batchPartial', { completed: st.completed, errors: st.errors }))
           } else if (st.status === TASK_STATUSES.FAILED) {
-            toast.error('批量测试失败，请查看错误详情')
+            toast.error(t('perf.batchFailed'))
           } else if (st.status === TASK_STATUSES.STOPPED) {
-            toast.info(`批量测试已停止：${st.completed} 完成，可从断点继续`)
+            toast.info(t('perf.batchStopped', { n: st.completed }))
           }
           return
         }
         schedule(3000)
       } catch {
         if (isCurrent()) {
-          toast.warning('批量状态暂不可用，正在重试')
+          toast.warning(t('perf.batchStatusRetry'))
           schedule(5000)
         }
       }
     }
     void poll()
-  }, [clearBatchPoll, fetchTaskLog])
+  }, [clearBatchPoll, fetchTaskLog, t])
 
   useEffect(() => {
     const batchId = sessionStorage.getItem('perfBatchId')
     if (!batchId) return
     batchIdRef.current = batchId
     monitorBatch(batchId)
-  }, [monitorBatch])
+  }, [monitorBatch, t])
 
   const handleBatchSubmit = useCallback(async (batchId: string, sharedConfig: Record<string, unknown>) => {
     setBatchRunning(true)
@@ -187,13 +187,13 @@ export default function PerfTaskPage() {
 
     try {
       const launched = await launchBatchPerf(batchId, sharedConfig)
-      toast.info(`批量测试已启动，共 ${launched.total} 个模型`)
+      toast.info(t('perf.batchStarted', { n: launched.total }))
       monitorBatch(batchId)
     } catch (e) {
       toast.error(String(e))
       setBatchRunning(false)
     }
-  }, [monitorBatch])
+  }, [monitorBatch, t])
 
   const handleBatchResume = useCallback(async (file: File, sharedConfig: Record<string, unknown>) => {
     const batchId = batchIdRef.current
@@ -204,12 +204,12 @@ export default function PerfTaskPage() {
       batchFileRef.current = file
       batchConfigRef.current = sharedConfig
       setBatchRunning(true)
-      toast.info('批量测试已从断点继续')
+      toast.info(t('perf.batchResumed'))
       monitorBatch(batchId)
     } catch (e) {
       toast.error(String(e))
     }
-  }, [monitorBatch])
+  }, [monitorBatch, t])
 
   useEffect(() => () => {
     logGenerationRef.current += 1
@@ -249,13 +249,13 @@ export default function PerfTaskPage() {
         <div className="mt-4 p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium">
-              批量测试中：{batchState.completed}/{batchState.total}
+              {t('perf.batchProgress', { completed: batchState.completed, total: batchState.total })}
             </h3>
             <button
               onClick={handleBatchStop}
               className="px-2 py-1 text-xs rounded border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors"
             >
-              停止
+              {t('perf.stop')}
             </button>
           </div>
           <div className="w-full bg-[var(--bg)] rounded-full h-2 mb-2">
@@ -266,11 +266,11 @@ export default function PerfTaskPage() {
           </div>
           {batchState.current_model && (
             <p className="text-xs text-[var(--text-muted)]">
-              当前: {batchState.current_model}
+              {t('perf.currentModel', { model: batchState.current_model })}
             </p>
           )}
           {batchState.errors > 0 && (
-            <p className="text-xs text-[var(--danger)] mt-1">{batchState.errors} 个失败</p>
+            <p className="text-xs text-[var(--danger)] mt-1">{t('perf.failureCount', { n: batchState.errors })}</p>
           )}
         </div>
       )}
@@ -280,16 +280,16 @@ export default function PerfTaskPage() {
         <div className="mt-4 p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
           <h3 className="text-sm font-medium mb-2">
             {batchState.status === TASK_STATUSES.COMPLETED
-              ? '批量测试完成'
+              ? t('perf.batchResultCompleted')
               : batchState.status === TASK_STATUSES.PARTIAL_SUCCESS
-                ? '批量测试部分完成'
+                ? t('perf.batchResultPartial')
                 : batchState.status === TASK_STATUSES.FAILED
-                  ? '批量测试失败'
-                  : '批量测试已停止'}：
-            {batchState.completed} 成功
-            {batchState.errors > 0 && <span className="text-[var(--danger)]">，{batchState.errors} 失败</span>}
+                  ? t('perf.batchResultFailed')
+                  : t('perf.batchResultStopped')}：
+            {t('perf.successCount', { n: batchState.completed })}
+            {batchState.errors > 0 && <span className="text-[var(--danger)]">，{t('perf.failureCount', { n: batchState.errors })}</span>}
           </h3>
-          <p className="text-xs text-[var(--text-muted)] mb-2">点击模型查看对应日志</p>
+          <p className="text-xs text-[var(--text-muted)] mb-2">{t('perf.clickModelLogs')}</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {batchState.results.map((r) => (
               <div
