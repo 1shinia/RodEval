@@ -2,7 +2,7 @@ import { useState, type SyntheticEvent } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from '@/components/ui/formStyles'
+import { FORM_INPUT_CLASS } from '@/components/ui/formStyles'
 
 interface Props {
   onSubmit: (config: Record<string, unknown>) => void
@@ -76,11 +76,7 @@ function resolveVideoSize(resolution: string, ratio: string): { width: number; h
 export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const { t } = useLocale()
 
-  // Model source: API or Local
-  const [modelSource, setModelSource] = useState<'api' | 'local'>('api')
-  const isLocal = modelSource === 'local'
-
-  // API provider (only when modelSource === 'api')
+  // API provider
   const [provider, setProvider] = useState<'openai' | 'custom' | 'dashscope'>('openai')
   const isCustomProvider = provider === 'custom'
   const currentProvider = PROVIDER_OPTIONS.find(p => p.value === provider) ?? PROVIDER_OPTIONS[0]
@@ -114,10 +110,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [apiBase, setApiBase] = useState('')
   const [apiKey, setApiKey] = useState('')
 
-  // Local model fields
-  const [modelPath, setModelPath] = useState('')
-  const [device, setDevice] = useState('cuda')
-  const [dtype, setDtype] = useState('float16')
 
   // Generation params
   const [width, setWidth] = useState('1024')
@@ -170,43 +162,33 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
 
-    if (isLocal) {
-      if (!modelPath.trim()) newErrors.modelPath = 'Required'
-    } else {
-      if (!model.trim()) newErrors.model = 'Required'
-      if (!apiBase.trim()) newErrors.apiBase = 'Required'
-      if (!apiKey.trim()) newErrors.apiKey = 'Required'
-    }
+    if (!model.trim()) newErrors.model = 'Required'
+    if (!apiBase.trim()) newErrors.apiBase = 'Required'
+    if (!apiKey.trim()) newErrors.apiKey = 'Required'
 
     if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return }
     setErrors({})
 
     const modelConfig: Record<string, unknown> = {
-      model_name_or_path: isLocal ? modelPath.trim() : model.trim(),
+      model_name_or_path: model.trim(),
       model_type: tool,
-      model_source: modelSource,
+      model_source: 'api',
+      api_base: apiBase.trim(),
+      provider,
     }
-
-    if (!isLocal) {
-      modelConfig.api_base = apiBase.trim()
-      if (apiKey.trim()) modelConfig.api_key = apiKey.trim()
-      modelConfig.provider = provider
-      if (provider === 'custom') {
-        if (endpointTemplate.trim()) modelConfig.endpoint_template = endpointTemplate.trim()
-        if (paramAliases.trim()) {
-          try {
-            modelConfig.param_aliases = JSON.parse(paramAliases.trim())
-          } catch {
-            newErrors.paramAliases = 'JSON 格式错误，请修正后再提交'
-          }
+    if (apiKey.trim()) modelConfig.api_key = apiKey.trim()
+    if (provider === 'custom') {
+      if (endpointTemplate.trim()) modelConfig.endpoint_template = endpointTemplate.trim()
+      if (paramAliases.trim()) {
+        try {
+          modelConfig.param_aliases = JSON.parse(paramAliases.trim())
+        } catch {
+          newErrors.paramAliases = 'JSON 格式错误，请修正后再提交'
         }
-        if (responsePath.trim()) modelConfig.response_path = responsePath.trim()
-        if (asyncPollUrl.trim()) modelConfig.async_poll_url = asyncPollUrl.trim()
-        if (asyncContentUrl.trim()) modelConfig.async_content_url = asyncContentUrl.trim()
       }
-    } else {
-      modelConfig.device = device
-      modelConfig.dtype = dtype
+      if (responsePath.trim()) modelConfig.response_path = responsePath.trim()
+      if (asyncPollUrl.trim()) modelConfig.async_poll_url = asyncPollUrl.trim()
+      if (asyncContentUrl.trim()) modelConfig.async_content_url = asyncContentUrl.trim()
     }
 
     const generateConfig: Record<string, unknown> = {
@@ -273,23 +255,8 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         </select>
       </div>
 
-      {/* Model Source */}
-      <div className="flex items-center gap-6">
-        <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="aigc_ms" value="api" checked={!isLocal}
-            onChange={() => setModelSource('api')} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">{t('eval.modelSourceOpenAI')}</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="aigc_ms" value="local" checked={isLocal}
-            onChange={() => setModelSource('local')} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">{t('eval.modelSourceLocal')}</span>
-        </label>
-      </div>
-
       {/* Advanced settings (for custom provider) */}
-      {!isLocal && isCustomProvider && (
+      {isCustomProvider && (
         <div className="border border-[var(--border-md)] rounded-lg p-4 space-y-3">
           <button type="button"
             className="flex items-center gap-2 text-sm font-medium text-[var(--text)] w-full"
@@ -348,8 +315,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       </h4>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
-        {/* API mode fields */}
-        {!isLocal && (<>
+        <>
           <FormField label="API 提供商">
             <select value={provider} onChange={e => setProvider(e.target.value as typeof provider)} className={FORM_INPUT_CLASS}>
               {PROVIDER_OPTIONS.map(p => (
@@ -375,32 +341,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
               onChange={e => { setApiKey(e.target.value); if (errors.apiKey) setErrors(p => ({ ...p, apiKey: '' })) }}
               className={FORM_INPUT_CLASS} placeholder="sk-..." />
           </FormField>
-        </>)}
-
-        {/* Local model fields */}
-        {isLocal && (<>
-          <FormField label={t('eval.modelPath')} required error={errors.modelPath}>
-            <input value={modelPath}
-              onChange={e => { setModelPath(e.target.value); if (errors.modelPath) setErrors(p => ({ ...p, modelPath: '' })) }}
-              className={FORM_INPUT_CLASS} placeholder="stabilityai/stable-diffusion-2-1 或 /data/models/sd" />
-          </FormField>
-
-          <FormField label={t('aigc.device')}>
-            <select value={device} onChange={e => setDevice(e.target.value)} className={FORM_INPUT_CLASS}>
-              <option value="cuda">CUDA (GPU)</option>
-              <option value="cpu">CPU</option>
-              <option value="mps">MPS (Apple Silicon)</option>
-            </select>
-          </FormField>
-
-          <FormField label={t('aigc.dtype')}>
-            <select value={dtype} onChange={e => setDtype(e.target.value)} className={FORM_INPUT_CLASS}>
-              <option value="float16">float16</option>
-              <option value="float32">float32</option>
-              <option value="bfloat16">bfloat16</option>
-            </select>
-          </FormField>
-        </>)}
+        </>
       </div>
 
       {/* Generation Parameters */}

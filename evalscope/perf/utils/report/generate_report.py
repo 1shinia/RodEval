@@ -287,7 +287,7 @@ def gen_perf_html_report(
         Absolute path to the generated HTML file, or ``''`` on failure.
     """
     try:
-        from jinja2 import Environment, FileSystemLoader
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
     except ImportError as exc:
         raise ImportError('jinja2 is required: pip install jinja2') from exc
 
@@ -336,7 +336,10 @@ def gen_perf_html_report(
     summary_columns, summary_rows = _build_summary_table(runs, is_emb)
 
     # ── Template rendering ──────────────────────────────────────────────────
-    env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR), autoescape=False)
+    env = Environment(
+        loader=FileSystemLoader(_TEMPLATE_DIR),
+        autoescape=select_autoescape(enabled_extensions=('html', 'j2'), default_for_string=True),
+    )
     template = env.get_template('perf_report.html.j2')
 
     html_content = template.render(

@@ -227,6 +227,7 @@ def finalize_slot(task_id: str, proc: multiprocessing.Process) -> bool:
             pid=proc.pid,
             model=info.model,
             user_id=info.user_id,
+            pid_start_ticks=_db._process_start_ticks(proc.pid),
         )
     except Exception as e:
         logger.debug(f'Failed to persist task state for {task_id}: {e}')

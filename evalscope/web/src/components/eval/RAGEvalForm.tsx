@@ -78,7 +78,6 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
 
   const [ragTool, setRagTool] = useState<RAGTool>('embedding')
   // ── MTEB fields ──
-  const [ragModelSource, setRagModelSource] = useState<'api' | 'local'>('api')
   const [ragModelPath, setRagModelPath] = useState('')
   const [ragApiBase, setRagApiBase] = useState('')
   const [ragApiKey, setRagApiKey] = useState('')
@@ -88,10 +87,9 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
   const [ragLimit, setRagLimit] = useState('')
   const [ragRandomSample, setRagRandomSample] = useState(false)
   const [ragDimension, setRagDimension] = useState('')
-  const [ragMaxSeqLen, setRagMaxSeqLen] = useState('')
   const [ragBatchSize, setRagBatchSize] = useState('')
   const [ragTopK, setRagTopK] = useState('')
-  const [ragPooling, setRagPooling] = useState('')
+
   const [ragTwoStage, setRagTwoStage] = useState(false)
   const [ragEncoderModel, setRagEncoderModel] = useState('')
   const [ragPrompt, setRagPrompt] = useState('')
@@ -214,24 +212,15 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
     }
 
     // MTEB submit
-    const isApi = ragModelSource === 'api'
     const modelConfig: Record<string, unknown> = {
       is_cross_encoder: ragTool === 'reranker',
+      model_name: ragModelPath.trim(),
+      model_name_or_path: ragModelPath.trim(),
+      api_base: ragApiBase.trim(),
     }
-    if (!isApi) modelConfig.hub = 'modelscope'
     if (ragPrompt.trim()) modelConfig.prompt = ragPrompt.trim()
-    if (isApi) {
-      modelConfig.model_name = ragModelPath.trim()
-      modelConfig.model_name_or_path = ragModelPath.trim()
-      modelConfig.api_base = ragApiBase.trim()
-      if (ragApiKey) modelConfig.api_key = ragApiKey
-      if (ragDimension) modelConfig.dimensions = Number(ragDimension)
-    } else {
-      modelConfig.model_name_or_path = ragModelPath.trim()
-      if (ragMaxSeqLen) modelConfig.max_seq_length = Number(ragMaxSeqLen)
-      if (ragTool === 'embedding' && ragPooling) modelConfig.pooling_mode = ragPooling
-    }
-    // API 与本地模式均生效：encode batch_size
+    if (ragApiKey) modelConfig.api_key = ragApiKey
+    if (ragDimension) modelConfig.dimensions = Number(ragDimension)
     if (ragBatchSize) modelConfig.encode_kwargs = { batch_size: Number(ragBatchSize) }
 
     const models: Record<string, unknown>[] = [modelConfig]
@@ -276,81 +265,34 @@ export default function RAGEvalForm({ onSubmit, disabled }: Props) {
       {/* ── MTEB Embedding / Reranker ── */}
       {isMTEB && (
         <>
-          <div className="flex items-center gap-6">
-            <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="rms" value="api" checked={ragModelSource === 'api'}
-                onChange={() => setRagModelSource('api')} className="accent-[var(--accent)]" />
-              <span className="text-sm text-[var(--text)]">API</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="rms" value="local" checked={ragModelSource === 'local'}
-                onChange={() => setRagModelSource('local')} className="accent-[var(--accent)]" />
-              <span className="text-sm text-[var(--text)]">{t('eval.modelSourceLocal')}</span>
-            </label>
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {ragModelSource === 'api' && (
-              <>
-                <FormField label={t('eval.modelName')} required>
-                  <input value={ragModelPath}
-                    onChange={e => { setRagModelPath(e.target.value); if (errors.ragModelPath) setErrors(p => ({ ...p, ragModelPath: '' })) }}
-                    className={inputClass(errors.ragModelPath)} placeholder="text-embedding-3-small" />
-                </FormField>
-                <FormField label={t('eval.apiUrl')} required>
-                  <input value={ragApiBase}
-                    onChange={e => { setRagApiBase(e.target.value); if (errors.ragApiBase) setErrors(p => ({ ...p, ragApiBase: '' })) }}
-                    className={inputClass(errors.ragApiBase)} placeholder="https://api.openai.com/v1（自动追加 /embeddings，无需手动填写）" />
-                </FormField>
-                <FormField label={t('eval.apiKey')} required>
-                  <input type="password" value={ragApiKey}
-                    onChange={e => { setRagApiKey(e.target.value); if (errors.ragApiKey) setErrors(p => ({ ...p, ragApiKey: '' })) }}
-                    className={FORM_INPUT_CLASS} placeholder="sk-..." />
-                </FormField>
-                {ragTool === 'embedding' && (
-                  <FormField label={t('eval.ragDimension')}>
-                    <input type="number" value={ragDimension}
-                      onChange={e => setRagDimension(e.target.value.replace(/[^0-9]/g, ''))}
-                      className={FORM_INPUT_CLASS} placeholder="1024" />
-                  </FormField>
-                )}
-                <FormField label={t('eval.ragBatchSize')}>
-                  <input type="number" value={ragBatchSize}
-                    onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
-                    className={FORM_INPUT_CLASS} placeholder="20（网关上限）" />
-                </FormField>
-              </>
+            <FormField label={t('eval.modelName')} required>
+              <input value={ragModelPath}
+                onChange={e => { setRagModelPath(e.target.value); if (errors.ragModelPath) setErrors(p => ({ ...p, ragModelPath: '' })) }}
+                className={inputClass(errors.ragModelPath)} placeholder="text-embedding-3-small" />
+            </FormField>
+            <FormField label={t('eval.apiUrl')} required>
+              <input value={ragApiBase}
+                onChange={e => { setRagApiBase(e.target.value); if (errors.ragApiBase) setErrors(p => ({ ...p, ragApiBase: '' })) }}
+                className={inputClass(errors.ragApiBase)} placeholder="https://api.openai.com/v1（自动追加 /embeddings，无需手动填写）" />
+            </FormField>
+            <FormField label={t('eval.apiKey')} required>
+              <input type="password" value={ragApiKey}
+                onChange={e => { setRagApiKey(e.target.value); if (errors.ragApiKey) setErrors(p => ({ ...p, ragApiKey: '' })) }}
+                className={FORM_INPUT_CLASS} placeholder="sk-..." />
+            </FormField>
+            {ragTool === 'embedding' && (
+              <FormField label={t('eval.ragDimension')}>
+                <input type="number" value={ragDimension}
+                  onChange={e => setRagDimension(e.target.value.replace(/[^0-9]/g, ''))}
+                  className={FORM_INPUT_CLASS} placeholder="1024" />
+              </FormField>
             )}
-
-            {ragModelSource === 'local' && (
-              <>
-                <FormField label={t('eval.modelPath')} required>
-                  <input value={ragModelPath}
-                    onChange={e => { setRagModelPath(e.target.value); if (errors.ragModelPath) setErrors(p => ({ ...p, ragModelPath: '' })) }}
-                    className={inputClass(errors.ragModelPath)} placeholder="BAAI/bge-small-zh-v1.5" />
-                </FormField>
-                <FormField label={t('eval.ragMaxSeqLen')}>
-                  <input type="number" value={ragMaxSeqLen}
-                    onChange={e => setRagMaxSeqLen(e.target.value.replace(/[^0-9]/g, ''))}
-                    className={FORM_INPUT_CLASS} placeholder="512" />
-                </FormField>
-                <FormField label={t('eval.ragBatchSize')}>
-                  <input type="number" value={ragBatchSize}
-                    onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
-                    className={FORM_INPUT_CLASS} placeholder="20（网关上限）" />
-                </FormField>
-                {ragTool === 'embedding' && (
-                  <FormField label={t('eval.ragPoolingMode')}>
-                    <select value={ragPooling} onChange={e => setRagPooling(e.target.value)} className={FORM_INPUT_CLASS}>
-                      <option value="">auto</option>
-                      <option value="mean">mean</option>
-                      <option value="cls">cls</option>
-                    </select>
-                  </FormField>
-                )}
-              </>
-            )}
+            <FormField label={t('eval.ragBatchSize')}>
+              <input type="number" value={ragBatchSize}
+                onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
+                className={FORM_INPUT_CLASS} placeholder="20（网关上限）" />
+            </FormField>
 
             <FormField label="数据集来源">
               <select value={ragDataHub} onChange={e => setRagDataHub(e.target.value)} className={FORM_INPUT_CLASS}>

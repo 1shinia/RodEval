@@ -60,6 +60,73 @@ def test_checkpoint_never_persists_credentials():
     assert 'secret' not in serialized
 
 
+def test_item_and_aggregate_checkpoint_commit_together():
+    db.create_batch_job('batch_atomic', 'eval', 11, 'manifest-atomic', _items())
+
+    db.checkpoint_batch_item(
+        'batch_atomic',
+        0,
+        item_fields={'status': 'completed', 'task_id': 'eval_done'},
+        job_fields={
+            'completed': 1,
+            'results_json': [{'task_id': 'eval_done', 'status': 'completed'}],
+        },
+    )
+
+    job = db.get_batch_job('batch_atomic', user_id=11, batch_type='eval')
+    assert job['completed'] == 1
+    assert job['results'] == [{'task_id': 'eval_done', 'status': 'completed'}]
+    assert job['items'][0]['status'] == 'completed'
+
+
+def test_item_and_aggregate_checkpoint_roll_back_together_on_failure():
+    db.create_batch_job('batch_rollback', 'perf', 11, 'manifest-rollback', _items())
+    conn = db._get_conn()
+    conn.execute('''
+        CREATE TRIGGER fail_batch_job_update
+        BEFORE UPDATE ON batch_jobs
+        BEGIN
+            SELECT RAISE(ABORT, 'forced aggregate failure');
+        END
+    ''')
+
+    with pytest.raises(db.BatchCheckpointError, match='batch_rollback/0'):
+        db.checkpoint_batch_item(
+            'batch_rollback',
+            0,
+            item_fields={'status': 'completed', 'task_id': 'perf_done'},
+            job_fields={'completed': 1},
+        )
+
+    conn.execute('DROP TRIGGER fail_batch_job_update')
+    job = db.get_batch_job('batch_rollback', user_id=11, batch_type='perf')
+    assert job['completed'] == 0
+    assert job['items'][0]['status'] == 'pending'
+    assert job['items'][0]['task_id'] == ''
+
+
+def test_final_item_checkpoint_commits_terminal_job_state_atomically():
+    db.create_batch_job('batch_terminal', 'eval', 11, 'manifest-terminal', [
+        {'row_index': 0, 'model': 'only-model'},
+    ])
+
+    db.checkpoint_batch_item(
+        'batch_terminal',
+        0,
+        item_fields={'status': 'completed', 'task_id': 'eval_done'},
+        job_fields={
+            'status': 'completed',
+            'completed': 1,
+            'results_json': [{'task_id': 'eval_done', 'status': 'completed'}],
+        },
+    )
+
+    job = db.get_batch_job('batch_terminal', user_id=11, batch_type='eval')
+    assert job['status'] == 'completed'
+    assert job['completed'] == 1
+    assert job['items'][0]['status'] == 'completed'
+
+
 def test_recover_interrupted_batches_after_service_restart():
     db.create_batch_job('batch_e', 'eval', 12, 'manifest-e', [
         {'row_index': 0, 'model': 'done'},

@@ -1,4 +1,5 @@
 aiohttp
+bleach>=6.2.0,<7.0
 colorlog
 docstring_parser
 dotenv

@@ -395,17 +395,6 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
         </div>
       )}
 
-      {/* ── Model Source (single mode only) — API only ── */}
-      {!isBatch && (
-      <div className="flex items-center gap-6">
-        <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="ms" value="openai" checked readOnly className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">API</span>
-        </label>
-      </div>
-      )}
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* ── OpenAI API fields ── */}

@@ -141,10 +141,18 @@ def create_app(outputs: str = None):
 
         # recover_stale_tasks MUST run BEFORE write_service_pid:
         # it reads the PID file to check if the old service is still alive.
-        _db.recover_stale_tasks()
-        recovered_batches = _db.recover_interrupted_batches()
-        if recovered_batches:
-            logger.info('Recovered %d interrupted batch job(s) for resume', recovered_batches)
+        stale_workers_fenced = True
+        try:
+            _db.recover_stale_tasks()
+        except _db.StaleWorkerRecoveryError as e:
+            stale_workers_fenced = False
+            logger.error(
+                'Skipping batch recovery until stale workers are fenced off: %s', e
+            )
+        if stale_workers_fenced:
+            recovered_batches = _db.recover_interrupted_batches()
+            if recovered_batches:
+                logger.info('Recovered %d interrupted batch job(s) for resume', recovered_batches)
         _db.cleanup_task_state()
         _db.write_service_pid(outputs_root)
     except Exception as e:

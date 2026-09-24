@@ -54,7 +54,7 @@ function PlotlyChart({ src, height = 400, className, title }: PlotlyChartProps) 
             'w-full h-full border-0 transition-opacity duration-200',
             (loading || error) && 'opacity-0',
           )}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts"
           onLoad={handleLoad}
           onError={handleError}
           title={title ?? 'Chart'}

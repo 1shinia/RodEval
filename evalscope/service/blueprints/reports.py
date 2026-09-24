@@ -12,10 +12,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import uuid
 from datetime import datetime
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 from typing import List
 
-from evalscope.constants import PLOTLY_CDN_URL, PLOTLY_THEME
+from evalscope.constants import PLOTLY_CDN_URL, PLOTLY_LOCAL_URL, PLOTLY_THEME
 from evalscope.report import ReportKey, get_data_frame
 from evalscope.report.report import Report
 from evalscope.report.visualization import (
@@ -45,6 +45,34 @@ logger = get_logger()
 bp_reports = Blueprint('reports', __name__, url_prefix='/api/v1/reports')
 
 _DEFAULT_ROOT = OUTPUT_DIR
+_PLOTLY_ASSET = os.path.join(os.path.dirname(__file__), '..', 'static', 'vendor', 'plotly-2.35.2.min.js')
+
+
+def _local_plotly_source() -> str:
+    trusted_proxies = {
+        value.strip()
+        for value in os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',')
+        if value.strip()
+    }
+    if request.remote_addr in trusted_proxies:
+        forwarded_host = request.headers.get('X-Forwarded-Host', '').split(',')[0].strip()
+        forwarded_proto = request.headers.get('X-Forwarded-Proto', '').split(',')[0].strip()
+        if forwarded_host and forwarded_proto in ('http', 'https'):
+            return f'{forwarded_proto}://{forwarded_host}{PLOTLY_LOCAL_URL}'
+    return request.host_url.rstrip('/') + PLOTLY_LOCAL_URL
+
+
+@bp_reports.route('/assets/plotly-2.35.2.min.js', methods=['GET'])
+def get_plotly_asset():
+    response = send_file(
+        os.path.realpath(_PLOTLY_ASSET),
+        mimetype='application/javascript',
+        conditional=True,
+        max_age=31536000,
+    )
+    response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 # Allowed extensions for the media proxy (security: do not serve arbitrary files)
 _MEDIA_EXTENSIONS = {
@@ -725,9 +753,20 @@ def get_html_report():
             # Build a clean filename from the report identity, e.g.
             #   eval_1787630356193@@ox-alpha::gsm8k -> eval_1787630356193_ox-alpha_gsm8k.html
             safe_name = re.sub(r'[\\/:*?"<>|]', '_', f'{prefix}_{model_name}_{"_".join(datasets)}.html')
-            return send_file(report_html, mimetype='text/html', as_attachment=True, download_name=safe_name)
+            from ..html_security import secure_report_response
+            return secure_report_response(send_file(
+                report_html,
+                mimetype='text/html',
+                as_attachment=True,
+                download_name=safe_name,
+            ))
 
-        return send_file(report_html, mimetype='text/html')
+        from ..html_security import secure_report_response
+        plotly_source = _local_plotly_source()
+        with open(report_html, encoding='utf-8') as f:
+            html = f.read().replace(PLOTLY_CDN_URL, PLOTLY_LOCAL_URL)
+        response = current_app.response_class(html, mimetype='text/html')
+        return secure_report_response(response, plotly_source)
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] Failed to get HTML report: {e}', exc_info=True)
@@ -852,14 +891,22 @@ def get_chart():
                 fig = plot_single_report_scores(acc_df)
 
         if fig is None:
-            return '<html><body style="background:#0f172a;color:#94a3b8;display:flex;align-items:center;' \
-                   'justify-content:center;height:100vh;font-family:sans-serif;">No data to plot</body></html>', \
-                   200, {'Content-Type': 'text/html'}
+            from ..html_security import secure_report_response
+            response = current_app.make_response((
+                '<html><body style="background:#0f172a;color:#94a3b8;display:flex;align-items:center;'
+                'justify-content:center;height:100vh;font-family:sans-serif;">No data to plot</body></html>',
+                200,
+                {'Content-Type': 'text/html'},
+            ))
+            return secure_report_response(response)
 
         html = fig.to_html(full_html=True, include_plotlyjs=False, config={'responsive': True})
-        plotly_script = f'<script src="{PLOTLY_CDN_URL}" charset="utf-8"></script>'
+        plotly_source = _local_plotly_source()
+        plotly_script = f'<script src="{PLOTLY_LOCAL_URL}" charset="utf-8"></script>'
         html = html.replace('</head>', f'  {plotly_script}\n</head>')
-        return html, 200, {'Content-Type': 'text/html'}
+        from ..html_security import secure_report_response
+        response = current_app.make_response((html, 200, {'Content-Type': 'text/html'}))
+        return secure_report_response(response, plotly_source)
 
     except ValueError as e:
         return jsonify({'error': str(e)}), 400

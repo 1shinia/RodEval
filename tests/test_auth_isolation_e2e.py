@@ -75,6 +75,8 @@ def test_owner_can_read_own_report(clients):
     resp = client_a.get(f'/api/v1/eval/report?task_id={TASK_A}')
     assert resp.status_code == 200
     assert 'report eval_e2e_a' in resp.data.decode()
+    assert resp.headers['Content-Security-Policy'].endswith('sandbox allow-scripts')
+    assert 'allow-same-origin' not in resp.headers['Content-Security-Policy']
 
 
 def test_other_user_cannot_read_report(clients):

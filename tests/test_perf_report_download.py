@@ -45,6 +45,9 @@ def test_inline_serving_unchanged(perf_report_client):
     assert resp.status_code == 200
     assert 'text/html' in resp.content_type
     assert 'attachment' not in (resp.headers.get('Content-Disposition') or '')
+    assert resp.headers['Content-Security-Policy'].endswith('sandbox allow-scripts')
+    assert 'allow-same-origin' not in resp.headers['Content-Security-Policy']
+    assert resp.headers['X-Content-Type-Options'] == 'nosniff'
     assert resp.data.decode() == REPORT_BODY
 
 

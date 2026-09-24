@@ -2,7 +2,7 @@ import { useState, type SyntheticEvent } from 'react'
 
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from '@/components/ui/formStyles'
+import { FORM_INPUT_CLASS } from '@/components/ui/formStyles'
 
 interface Props {
   onSubmit: (config: Record<string, unknown>) => void
@@ -68,9 +68,6 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     }
   }
 
-  // Model source: API or Local
-  const [modelSource, setModelSource] = useState<'api' | 'local'>('api')
-  const isLocal = modelSource === 'local'
 
   // API fields
   const [provider, setProvider] = useState('openai')
@@ -79,8 +76,6 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
   const [apiKey, setApiKey] = useState('')
   const [language, setLanguage] = useState('zh')
 
-  // Local model fields
-  const [modelPath, setModelPath] = useState('')
 
   const currentProvider = PROVIDER_OPTIONS.find(p => p.value === provider)!
 
@@ -126,13 +121,9 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
 
-    if (isLocal) {
-      if (tool === 'asr' && !modelPath.trim()) newErrors.modelPath = '请输入模型路径'
-    } else {
-      if (!model.trim()) newErrors.model = '请输入模型名称'
-      if (!apiBase.trim()) newErrors.apiBase = '请输入 API URL'
-      if (!apiKey.trim()) newErrors.apiKey = '请输入 API Key'
-    }
+    if (!model.trim()) newErrors.model = '请输入模型名称'
+    if (!apiBase.trim()) newErrors.apiBase = '请输入 API URL'
+    if (!apiKey.trim()) newErrors.apiKey = '请输入 API Key'
 
     // ASR requires audio file
     if (tool === 'asr' && !audioBase64) {
@@ -146,14 +137,12 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     setErrors({})
 
     const modelConfig: Record<string, unknown> = {
-      model_name_or_path: isLocal ? modelPath.trim() : model.trim(),
+      model_name_or_path: model.trim(),
       model_type: tool,
-      provider: isLocal ? 'local' : provider,
+      provider,
+      api_base: apiBase.trim(),
     }
-    if (!isLocal) {
-      modelConfig.api_base = apiBase.trim()
-      if (apiKey.trim()) modelConfig.api_key = apiKey.trim()
-    }
+    if (apiKey.trim()) modelConfig.api_key = apiKey.trim()
 
     const generateConfig: Record<string, unknown> = {}
 
@@ -205,28 +194,13 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
         </select>
       </div>
 
-      {/* Model Source */}
-      <div className="flex items-center gap-6">
-        <label className={`${FORM_LABEL_CLASS} !mb-0`}>模型来源</label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="audio_ms" value="api" checked={!isLocal}
-            onChange={() => setModelSource('api')} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">API</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="audio_ms" value="local" checked={isLocal}
-            onChange={() => setModelSource('local')} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">本地模型</span>
-        </label>
-      </div>
 
       {/* Model Configuration */}
       <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2">
         模型配置
       </h4>
 
-      {/* API mode fields */}
-      {!isLocal && (<>
+      <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <FormField label="API 提供商">
           <select value={provider} onChange={e => {
@@ -271,17 +245,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
         </FormField>
       </div>
       )}
-      </>)}
-      {/* Local model fields */}
-      {isLocal && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField label="模型路径" required={tool === 'asr'} error={errors.modelPath}>
-            <input value={modelPath}
-              onChange={e => { setModelPath(e.target.value); if (errors.modelPath) setErrors(p => ({ ...p, modelPath: '' })) }}
-              className={FORM_INPUT_CLASS} placeholder="openai/whisper-large-v3 或 /data/models/whisper" />
-          </FormField>
-        </div>
-      )}
+      </>
 
       {/* ── ASR-specific ────────────────────────────── */}
       {tool === 'asr' && (

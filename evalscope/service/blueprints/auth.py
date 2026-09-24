@@ -293,6 +293,7 @@ def require_auth():
         '/api/v1/auth/login',
         '/api/v1/auth/register',
         '/api/v1/auth/reset-password',
+        '/api/v1/reports/assets/plotly-2.35.2.min.js',
     }
     if request.path in public_auth_paths:
         return None

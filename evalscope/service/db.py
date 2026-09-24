@@ -6,6 +6,7 @@ request.  The database file lives at ``{OUTPUT_DIR}/evalscope_meta.db``.
 
 import json
 import os
+import signal
 import shutil
 import sqlite3
 import threading
@@ -28,6 +29,14 @@ _db_path: str | None = None
 # threads (waitress workers) cannot deadlock on the database write lock
 # when multiple tasks complete at the same time. Reads are lock-free.
 _write_lock = threading.Lock()
+
+
+class StaleWorkerRecoveryError(RuntimeError):
+    """Raised when a live stale worker cannot be safely fenced off."""
+
+
+class BatchCheckpointError(RuntimeError):
+    """Raised when an atomic batch checkpoint cannot be persisted."""
 
 
 _DEFAULT_BUSY_TIMEOUT_MS = 3000
@@ -84,7 +93,7 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 22  # Bump when adding migrations below
+SCHEMA_VERSION = 23  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -457,6 +466,11 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         );
     '''
     ),
+    (
+        23, 'add task worker process identity', '''
+        ALTER TABLE task_state ADD COLUMN pid_start_ticks INTEGER;
+    '''
+    ),
 ]
 
 
@@ -818,6 +832,8 @@ def _verify_schema(*, strict: bool = False) -> None:
             'compare_reports': {'id', 'task_ids', 'user_id'},
             'users': {'id', 'username', 'deleted_at'},
         }
+        if current_version >= 23:
+            required_columns['task_state'].add('pid_start_ticks')
         if current_version >= 16:
             required_columns['task_registry'] = {'task_id', 'task_kind', 'user_id', 'created_at'}
         if current_version >= 17:
@@ -2000,6 +2016,60 @@ def update_batch_item(batch_id: str, row_index: int, **fields: Any) -> None:
     ))
 
 
+def checkpoint_batch_item(
+    batch_id: str,
+    row_index: int,
+    *,
+    item_fields: dict[str, Any],
+    job_fields: dict[str, Any],
+) -> None:
+    """Atomically persist one row transition and its aggregate checkpoint."""
+    allowed_item = {'status', 'task_id', 'error', 'started_at', 'finished_at'}
+    allowed_job = {'status', 'completed', 'errors', 'results_json', 'errors_json'}
+    invalid_item = set(item_fields) - allowed_item
+    invalid_job = set(job_fields) - allowed_job
+    if invalid_item:
+        raise ValueError(f'Unsupported batch item field: {sorted(invalid_item)[0]}')
+    if invalid_job:
+        raise ValueError(f'Unsupported batch job field: {sorted(invalid_job)[0]}')
+    if not item_fields or not job_fields:
+        raise ValueError('Both item_fields and job_fields are required')
+
+    item_values = dict(item_fields)
+    job_values = dict(job_fields)
+    for key in ('results_json', 'errors_json'):
+        if key in job_values and not isinstance(job_values[key], str):
+            job_values[key] = json.dumps(job_values[key], ensure_ascii=False)
+    job_values['updated_at'] = utc_now_iso()
+
+    item_assignments = ', '.join(f'{key} = ?' for key in item_values)
+    job_assignments = ', '.join(f'{key} = ?' for key in job_values)
+
+    def _op(conn: sqlite3.Connection) -> None:
+        item_cursor = conn.execute(
+            f'''UPDATE batch_items SET {item_assignments}
+                WHERE batch_id = ? AND row_index = ?''',
+            [*item_values.values(), batch_id, int(row_index)],
+        )
+        if item_cursor.rowcount != 1:
+            raise ValueError(f'Batch item not found: {batch_id}/{row_index}')
+        job_cursor = conn.execute(
+            f'UPDATE batch_jobs SET {job_assignments} WHERE batch_id = ?',
+            [*job_values.values(), batch_id],
+        )
+        if job_cursor.rowcount != 1:
+            raise ValueError(f'Batch job not found: {batch_id}')
+
+    try:
+        _write(_op)
+    except (ValueError, BatchCheckpointError):
+        raise
+    except Exception as e:
+        raise BatchCheckpointError(
+            f'Failed to persist batch checkpoint {batch_id}/{row_index}'
+        ) from e
+
+
 def get_batch_job(
     batch_id: str,
     *,
@@ -2124,6 +2194,7 @@ def upsert_task_state(
     pid: int | None = None,
     model: str = '',
     user_id: int = 0,
+    pid_start_ticks: int | None = None,
 ) -> None:
     """Insert or update a task's runtime state.
 
@@ -2149,15 +2220,18 @@ def upsert_task_state(
                 )
             effective_user_id = int(registry['user_id'])
         conn.execute(
-            '''INSERT INTO task_state (task_id, task_type, status, pid, model, user_id, started_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            '''INSERT INTO task_state
+               (task_id, task_type, status, pid, model, user_id, pid_start_ticks, started_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(task_id) DO UPDATE SET
                    task_type = excluded.task_type,
                    status = excluded.status,
                    pid = excluded.pid,
+                   pid_start_ticks = excluded.pid_start_ticks,
                    user_id = excluded.user_id,
                    updated_at = excluded.updated_at''',
-            (task_id, task_type, status, pid, model, effective_user_id, now, now),
+            (task_id, task_type, status, pid, model, effective_user_id,
+             pid_start_ticks, now, now),
         )
 
     _write(_op)
@@ -2189,11 +2263,17 @@ def sweep_orphaned_tasks() -> list[dict]:
     """
     conn = _get_conn()
     rows = conn.execute(
-        '''SELECT task_id, task_type, status, pid, model, user_id, started_at, updated_at
+        '''SELECT task_id, task_type, status, pid, pid_start_ticks, model,
+                  user_id, started_at, updated_at
            FROM task_state WHERE status = 'running'
            ORDER BY started_at DESC'''
     ).fetchall()
-    dead = [r['task_id'] for r in rows if not (r['pid'] and _pid_alive(r['pid']))]
+    dead = [
+        r['task_id'] for r in rows
+        if (not r['pid'] or not _pid_alive(r['pid'])
+            or (r['pid_start_ticks'] is not None
+                and _process_start_ticks(r['pid']) != r['pid_start_ticks']))
+    ]
     if dead:
         for tid in dead:
             logger.info(f'Auto-orphaned zombie task {tid}')
@@ -2209,13 +2289,16 @@ def list_running_tasks() -> list[dict]:
     """
     conn = _get_conn()
     rows = conn.execute(
-        '''SELECT task_id, task_type, status, pid, model, user_id, started_at, updated_at
+        '''SELECT task_id, task_type, status, pid, pid_start_ticks, model,
+                  user_id, started_at, updated_at
            FROM task_state WHERE status = 'running'
            ORDER BY started_at DESC'''
     ).fetchall()
     return [
         dict(r) for r in rows
-        if r['pid'] and _pid_alive(r['pid'])
+        if (r['pid'] and _pid_alive(r['pid'])
+            and r['pid_start_ticks'] is not None
+            and _process_start_ticks(r['pid']) == r['pid_start_ticks'])
     ]
 
 
@@ -2223,10 +2306,125 @@ def get_all_task_states() -> list[dict]:
     """Return all task states (for debugging / admin)."""
     conn = _get_conn()
     rows = conn.execute(
-        '''SELECT task_id, task_type, status, pid, model, user_id, started_at, updated_at
+        '''SELECT task_id, task_type, status, pid, pid_start_ticks, model,
+                  user_id, started_at, updated_at
            FROM task_state ORDER BY started_at DESC'''
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _process_start_ticks(pid: int) -> int | None:
+    """Read Linux's boot-relative process start time from procfs."""
+    try:
+        with open(f'/proc/{pid}/stat', encoding='utf-8') as handle:
+            stat = handle.read()
+        # ``comm`` (field 2) is parenthesized and may contain spaces or ')'.
+        fields_after_comm = stat.rsplit(')', 1)[1].split()
+        return int(fields_after_comm[19])  # field 22 overall; list starts at field 3
+    except (FileNotFoundError, PermissionError, IndexError, ValueError):
+        return None
+
+
+def _is_confirmed_stale_worker(pid: int, expected_start_ticks: int | None) -> bool:
+    """Return whether *pid* is the exact persisted EvalScope worker.
+
+    A persisted PID may have been reused after the old worker exited. Never
+    signal it unless procfs confirms both its start time and worker identity.
+    """
+    if (pid <= 1 or expected_start_ticks is None or not _pid_alive(pid)
+            or _process_start_ticks(pid) != expected_start_ticks):
+        return False
+    try:
+        if os.getpgid(pid) != pid:
+            return False
+        status = {}
+        with open(f'/proc/{pid}/status', encoding='utf-8') as handle:
+            for line in handle:
+                key, _, value = line.partition(':')
+                status[key] = value.strip()
+        real_uid = int(status.get('Uid', '-1').split()[0])
+        if real_uid != os.getuid():
+            return False
+        with open(f'/proc/{pid}/cmdline', 'rb') as handle:
+            cmdline = handle.read().replace(b'\0', b' ').decode('utf-8', errors='replace')
+        return 'multiprocessing' in cmdline and ('spawn_main' in cmdline or '--multiprocessing-fork' in cmdline)
+    except (OSError, ValueError):
+        return False
+
+
+def _process_group_members(pgid: int) -> dict[int, int]:
+    """Return non-zombie members of *pgid* keyed by process start ticks."""
+    members: dict[int, int] = {}
+    try:
+        entries = os.scandir('/proc')
+    except OSError:
+        return members
+    with entries:
+        for entry in entries:
+            if not entry.name.isdigit():
+                continue
+            try:
+                with open(f'/proc/{entry.name}/stat', encoding='utf-8') as handle:
+                    stat = handle.read()
+                fields = stat.rsplit(')', 1)[1].split()
+                if fields[0] != 'Z' and int(fields[2]) == pgid:
+                    members[int(entry.name)] = int(fields[19])
+            except (FileNotFoundError, PermissionError, OSError, ValueError, IndexError):
+                continue
+    return members
+
+
+def _terminate_stale_worker(
+    pid: int,
+    expected_start_ticks: int | None,
+    *,
+    timeout: float = 5.0,
+) -> bool:
+    """Terminate a verified stale worker group and confirm it is empty."""
+    if not _pid_alive(pid):
+        return not _process_group_members(pid)
+    if not _is_confirmed_stale_worker(pid, expected_start_ticks):
+        logger.error('Refusing to signal unverified stale worker PID %s', pid)
+        return False
+    group_members = _process_group_members(pid)
+    if pid not in group_members:
+        logger.error('Refusing to signal stale worker group %s without its verified leader', pid)
+        return False
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return not _process_group_members(pid)
+    except OSError as e:
+        logger.error('Failed to terminate stale worker group %s: %s', pid, e)
+        return False
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _process_group_members(pid):
+            return True
+        time.sleep(0.05)
+
+    remaining = _process_group_members(pid)
+    if not remaining:
+        return True
+    if any(group_members.get(member_pid) != start_ticks
+           for member_pid, start_ticks in remaining.items()):
+        logger.error('Refusing to kill stale worker group %s after its identity changed', pid)
+        return False
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return not _process_group_members(pid)
+    except OSError as e:
+        logger.error('Failed to kill stale worker group %s: %s', pid, e)
+        return False
+
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        if not _process_group_members(pid):
+            return True
+        time.sleep(0.05)
+    return not _process_group_members(pid)
 
 
 def recover_stale_tasks() -> list[str]:
@@ -2234,10 +2432,10 @@ def recover_stale_tasks() -> list[str]:
 
     Called on server startup to clean up stale state from a previous crash.
     Uses a PID file (``evalscope_service.pid`` in the outputs directory) to
-    determine whether the previous service instance is still alive.  If the
-    old service is dead, all running tasks are marked orphaned regardless
-    of their child-process liveness (eval children use os.setsid() and can
-    outlive the parent service).
+    determine whether the previous service instance is still alive. If the
+    old service is dead, each persisted worker is terminated only after its
+    process identity is verified. Tasks whose live PID cannot be verified or
+    stopped remain ``running`` so a replacement worker cannot race them.
 
     Returns the list of task_ids that were marked orphaned.
     """
@@ -2245,21 +2443,47 @@ def recover_stale_tasks() -> list[str]:
         return []
 
     pid_file = os.path.join(os.path.dirname(_db_path), 'evalscope_service.pid')
-    old_pid = _read_service_pid(pid_file)
+    old_pid, old_start_ticks = _read_service_pid(pid_file)
 
-    # If old service is still alive, its tasks are legitimate — skip recovery.
-    if old_pid is not None and _pid_alive(old_pid):
+    # A PID alone is not an identity: it may have been reused after a crash.
+    if (old_pid is not None and old_start_ticks is not None
+            and _pid_alive(old_pid)
+            and _process_start_ticks(old_pid) == old_start_ticks):
         logger.info(f'Previous service (PID {old_pid}) is still running — skipping stale task recovery.')
         return []
 
     conn = _get_conn()
-    rows = conn.execute("SELECT task_id FROM task_state WHERE status = 'running'").fetchall()
+    rows = conn.execute(
+        "SELECT task_id, pid, pid_start_ticks FROM task_state WHERE status = 'running'"
+    ).fetchall()
     if not rows:
         return []
+    if old_pid is not None and old_start_ticks is None and _pid_alive(old_pid):
+        raise StaleWorkerRecoveryError(
+            f'Unable to verify legacy service PID {old_pid}; refusing stale worker recovery'
+        )
 
-    orphaned = [row['task_id'] for row in rows]
-    _mark_orphaned_tasks(orphaned)
-    logger.info(f'Recovered {len(orphaned)} stale tasks from dead service (PID {old_pid}): {orphaned}')
+    orphaned = []
+    blocked = []
+    for row in rows:
+        pid = row['pid']
+        if (not pid or not _pid_alive(pid)
+                or _terminate_stale_worker(pid, row['pid_start_ticks'])):
+            orphaned.append(row['task_id'])
+        else:
+            blocked.append(row['task_id'])
+    if blocked:
+        logger.error(
+            'Stale task recovery blocked because worker identity or termination could not be confirmed: %s',
+            blocked,
+        )
+    if orphaned:
+        _mark_orphaned_tasks(orphaned)
+        logger.info(f'Recovered {len(orphaned)} stale tasks from dead service (PID {old_pid}): {orphaned}')
+    if blocked:
+        raise StaleWorkerRecoveryError(
+            f'Unable to fence stale workers for tasks: {", ".join(blocked)}'
+        )
     return orphaned
 
 
@@ -2291,22 +2515,28 @@ def cleanup_task_state(days: int = 7) -> int:
 
 
 def write_service_pid(output_dir: str) -> None:
-    """Write the current process PID to ``evalscope_service.pid``.
-
-    Must be called once on service startup, before :func:`recover_stale_tasks`.
-    """
+    """Persist the current service process identity for restart fencing."""
     pid_file = os.path.join(output_dir, 'evalscope_service.pid')
+    pid = os.getpid()
+    start_ticks = _process_start_ticks(pid)
+    if start_ticks is None:
+        raise RuntimeError(f'Unable to read process identity for service PID {pid}')
     with open(pid_file, 'w') as f:
-        f.write(str(os.getpid()))
+        f.write(f'{pid} {start_ticks}')
 
 
-def _read_service_pid(pid_file: str) -> int | None:
-    """Read a PID from *pid_file*; return None if the file is missing or corrupt."""
+def _read_service_pid(pid_file: str) -> tuple[int | None, int | None]:
+    """Read ``(pid, start_ticks)``; legacy PID-only files lack identity."""
     try:
         with open(pid_file) as f:
-            return int(f.read().strip())
+            values = f.read().split()
+        if len(values) == 1:
+            return int(values[0]), None
+        if len(values) == 2:
+            return int(values[0]), int(values[1])
     except (FileNotFoundError, ValueError):
-        return None
+        pass
+    return None, None
 
 
 def _pid_alive(pid: int) -> bool:
@@ -2315,12 +2545,12 @@ def _pid_alive(pid: int) -> bool:
         os.kill(pid, 0)
     except (OSError, ProcessLookupError):
         return False
-    # Exclude zombies (PID exists but process is terminated, unreaped)
+    # Exclude zombies (PID exists but process is terminated, unreaped).
     try:
-        with open(f'/proc/{pid}/status', 'r') as f:
-            first_line = f.readline()
-            if 'zombie' in first_line.lower() or first_line.startswith('State:\tZ'):
-                return False
+        with open(f'/proc/{pid}/status', encoding='utf-8') as handle:
+            for line in handle:
+                if line.startswith('State:'):
+                    return '\tZ' not in line and '(zombie)' not in line.lower()
     except (FileNotFoundError, PermissionError):
         pass
     return True

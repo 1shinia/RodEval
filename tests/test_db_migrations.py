@@ -388,6 +388,11 @@ RELEASED: list[tuple[int, str, str]] = [
         );
     '''
     ),
+    (
+        23, 'add task worker process identity', '''
+        ALTER TABLE task_state ADD COLUMN pid_start_ticks INTEGER;
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -473,9 +478,9 @@ def test_released_migrations_immutable():
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 22
+    assert len(RELEASED) == 23
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 22
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 23
 
 
 def test_fresh_db_converges(tmp_path):
@@ -494,6 +499,7 @@ def test_fresh_db_converges(tmp_path):
         assert {'batch_id', 'row_index', 'status', 'task_id'} <= set(_columns(conn, 'batch_items'))
         assert {'id', 'code_hash', 'max_uses', 'used_count', 'expires_at', 'created_by'} <= set(_columns(conn, 'registration_invites'))
         assert {'key', 'value', 'updated_by', 'updated_at'} <= set(_columns(conn, 'system_settings'))
+        assert 'pid_start_ticks' in _columns(conn, 'task_state')
         idx = {r[1] for r in conn.execute("PRAGMA index_list('eval_reports')").fetchall()}
         assert 'idx_eval_reports_user_timestamp' in idx
         assert 'idx_eval_reports_user_backend_timestamp' in idx

@@ -81,8 +81,28 @@ def _md_to_html(text: str) -> str:
     if not text:
         return ''
 
+    import bleach
     import markdown as md_lib
-    return md_lib.markdown(text, extensions=['extra'])
+
+    rendered = md_lib.markdown(text, extensions=['extra'])
+    allowed_tags = set(bleach.sanitizer.ALLOWED_TAGS) | {
+        'p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'pre', 'code', 'blockquote', 'table', 'thead', 'tbody', 'tr',
+        'th', 'td', 'del', 'sup', 'sub',
+    }
+    allowed_attributes = {
+        'a': ['href', 'title'],
+        'th': ['align'],
+        'td': ['align'],
+    }
+    return bleach.clean(
+        rendered,
+        tags=allowed_tags,
+        attributes=allowed_attributes,
+        protocols={'http', 'https', 'mailto'},
+        strip=True,
+        strip_comments=True,
+    )
 
 
 def _build_dataset_info(report_list: List[Report]) -> Dict[str, dict]:
@@ -196,7 +216,7 @@ def gen_html_report_file(
         Absolute path to the generated HTML file.
     """
     try:
-        from jinja2 import Environment, FileSystemLoader
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
     except ImportError as exc:
         raise ImportError('jinja2 is required to generate HTML reports: pip install jinja2') from exc
 
@@ -321,7 +341,10 @@ def gen_html_report_file(
     # ------------------------------------------------------------------
     # Render template
     # ------------------------------------------------------------------
-    env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR), autoescape=False)
+    env = Environment(
+        loader=FileSystemLoader(_TEMPLATE_DIR),
+        autoescape=select_autoescape(enabled_extensions=('html', 'j2'), default_for_string=True),
+    )
     template = env.get_template('report.html.j2')
     html_content = template.render(
         models=all_models,

@@ -546,18 +546,14 @@ def launch_batch_perf():
                     state['errors'] += 1
                     error = '任务 ID 冲突' if reservation == 'conflict' else '并发已满'
                     state['error_details'].append({'name': model_name, 'model': model_name, 'error': error})
-                    _db.update_batch_item(
+                    _db.checkpoint_batch_item(
                         batch_id,
                         row_index,
-                        status='failed',
-                        task_id=task_id,
-                        error=error,
-                        finished_at=utc_now_iso(),
-                    )
-                    _db.update_batch_job(
-                        batch_id,
-                        errors=state['errors'],
-                        errors_json=state['error_details'],
+                        item_fields={
+                            'status': 'failed', 'task_id': task_id,
+                            'error': error, 'finished_at': utc_now_iso(),
+                        },
+                        job_fields={'errors': state['errors'], 'errors_json': state['error_details']},
                     )
                     continue
 
@@ -617,35 +613,42 @@ def launch_batch_perf():
                         pass
 
                     if not perf_success:
-                        state['errors'] += 1
-                        _mark_perf_failed(task_id, perf_error_msg)
-                        state['results'].append({
+                        next_errors = state['errors'] + 1
+                        next_results = [*state['results'], {
                             'task_id': task_id,
                             'name': model_name,
                             'model': model_name,
                             'status': 'failed',
                             'error': perf_error_msg,
-                        })
-                        state['error_details'].append({
+                        }]
+                        next_error_details = [*state['error_details'], {
                             'name': model_name,
                             'model': model_name,
                             'error': perf_error_msg,
-                        })
-                        _db.update_batch_item(
+                        }]
+                        job_fields = {
+                            'completed': state['completed'], 'errors': next_errors,
+                            'results_json': next_results, 'errors_json': next_error_details,
+                        }
+                        if state['completed'] + next_errors == total:
+                            job_fields['status'] = aggregate_batch_status(
+                                total=total, completed=state['completed'], errors=next_errors,
+                            )
+                        _mark_perf_failed(task_id, perf_error_msg)
+                        _db.checkpoint_batch_item(
                             batch_id,
                             row_index,
-                            status='failed',
-                            task_id=task_id,
-                            error=perf_error_msg,
-                            finished_at=utc_now_iso(),
+                            item_fields={
+                                'status': 'failed', 'task_id': task_id,
+                                'error': perf_error_msg, 'finished_at': utc_now_iso(),
+                            },
+                            job_fields=job_fields,
                         )
-                        _db.update_batch_job(
-                            batch_id,
-                            completed=state['completed'],
-                            errors=state['errors'],
-                            results_json=state['results'],
-                            errors_json=state['error_details'],
-                        )
+                        state['errors'] = next_errors
+                        state['results'] = next_results
+                        state['error_details'] = next_error_details
+                        if 'status' in job_fields:
+                            state['status'] = job_fields['status']
                         logger.warning(f'[batch:{batch_id}] [{task_id}] {model_name} 压测失败: {perf_error_msg}')
                     else:
                         _require_perf_report(task_id)
@@ -675,53 +678,72 @@ def launch_batch_perf():
                             logger.error(f'Failed to write perf to SQLite (data remains on disk, will backfill on restart): {e}')
 
                         _mark_perf_completed(task_id)
-                        state['completed'] += 1
-                        state['results'].append({'task_id': task_id, 'name': model_name, 'model': model_name, 'status': 'completed'})
-                        _db.update_batch_item(
+                        next_completed = state['completed'] + 1
+                        next_results = [
+                            *state['results'],
+                            {'task_id': task_id, 'name': model_name, 'model': model_name, 'status': 'completed'},
+                        ]
+                        job_fields = {'completed': next_completed, 'results_json': next_results}
+                        if next_completed + state['errors'] == total:
+                            job_fields['status'] = aggregate_batch_status(
+                                total=total, completed=next_completed, errors=state['errors'],
+                            )
+                        _db.checkpoint_batch_item(
                             batch_id,
                             row_index,
-                            status='completed',
-                            task_id=task_id,
-                            finished_at=utc_now_iso(),
+                            item_fields={
+                                'status': 'completed', 'task_id': task_id,
+                                'finished_at': utc_now_iso(),
+                            },
+                            job_fields=job_fields,
                         )
-                        _db.update_batch_job(
-                            batch_id,
-                            completed=state['completed'],
-                            results_json=state['results'],
-                        )
+                        state['completed'] = next_completed
+                        state['results'] = next_results
+                        if 'status' in job_fields:
+                            state['status'] = job_fields['status']
                         logger.info(f'[batch:{batch_id}] [{task_id}] {model_name} completed ({state["completed"]}/{total})')
 
+                except _db.BatchCheckpointError:
+                    raise
                 except Exception as e:
                     if state['cancel_requested']:
                         state['status'] = 'stopped'
-                        _db.update_batch_item(
+                        _db.checkpoint_batch_item(
                             batch_id,
                             row_index,
-                            status='interrupted',
-                            task_id=task_id,
-                            error='',
-                            finished_at=utc_now_iso(),
+                            item_fields={
+                                'status': 'interrupted', 'task_id': task_id,
+                                'error': '', 'finished_at': utc_now_iso(),
+                            },
+                            job_fields={'status': 'stopped'},
                         )
-                        _db.update_batch_job(batch_id, status='stopped')
                         break
                     error_id = uuid.uuid4().hex[:8]
                     logger.error(f'[batch:{batch_id}] [{task_id}] {model_name} failed: {e}', exc_info=True)
                     _mark_perf_failed(task_id, str(e))
-                    state['errors'] += 1
-                    state['error_details'].append({'name': model_name, 'model': model_name, 'error': str(e)})
-                    _db.update_batch_item(
+                    next_errors = state['errors'] + 1
+                    next_error_details = [
+                        *state['error_details'],
+                        {'name': model_name, 'model': model_name, 'error': str(e)},
+                    ]
+                    job_fields = {'errors': next_errors, 'errors_json': next_error_details}
+                    if state['completed'] + next_errors == total:
+                        job_fields['status'] = aggregate_batch_status(
+                            total=total, completed=state['completed'], errors=next_errors,
+                        )
+                    _db.checkpoint_batch_item(
                         batch_id,
                         row_index,
-                        status='failed',
-                        task_id=task_id,
-                        error=str(e),
-                        finished_at=utc_now_iso(),
+                        item_fields={
+                            'status': 'failed', 'task_id': task_id,
+                            'error': str(e), 'finished_at': utc_now_iso(),
+                        },
+                        job_fields=job_fields,
                     )
-                    _db.update_batch_job(
-                        batch_id,
-                        errors=state['errors'],
-                        errors_json=state['error_details'],
-                    )
+                    state['errors'] = next_errors
+                    state['error_details'] = next_error_details
+                    if 'status' in job_fields:
+                        state['status'] = job_fields['status']
                 finally:
                     unregister_process(task_id)
                     state['current_model'] = ''
@@ -1551,10 +1573,16 @@ def get_performance_report():
         # task_id is already validated by validate_task_id, so it is safe as a
         # filename component; replace any path-hostile characters defensively.
         safe_name = (task_id.replace('/', '_').replace('\\', '_') + '_perf_report.html')
-        return send_file(report_file, mimetype='text/html', as_attachment=True,
-                         download_name=safe_name)
+        from ..html_security import secure_report_response
+        return secure_report_response(send_file(
+            report_file,
+            mimetype='text/html',
+            as_attachment=True,
+            download_name=safe_name,
+        ))
 
-    return send_file(report_file, mimetype='text/html')
+    from ..html_security import secure_report_response
+    return secure_report_response(send_file(report_file, mimetype='text/html'))
 
 
 @bp_perf.route('/config', methods=['GET'])

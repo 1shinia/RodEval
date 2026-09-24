@@ -463,17 +463,7 @@ export default function LLMEvalForm({ context }: Props) {
         </div>
       )}
 
-      {/* Model Source — API only.  Local (backend / model-path) evaluation is not
-        offered, so the model is always reached through an OpenAI/Anthropic API. */}
       {!isBatch && (<>
-      <div className="flex items-center gap-6">
-        <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('eval.modelSource')}</label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="ms" value="openai" checked readOnly className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">{t('eval.modelSourceOpenAI')}</span>
-        </label>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* OpenAI API fields */}

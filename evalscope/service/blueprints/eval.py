@@ -1182,7 +1182,8 @@ def get_evaluation_report():
     if not os.path.exists(report_file):
         return jsonify({'error': f'Report not found for task_id: {task_id}'}), 404
 
-    return send_file(report_file, mimetype='text/html')
+    from ..html_security import secure_report_response
+    return secure_report_response(send_file(report_file, mimetype='text/html'))
 
 
 @bp_eval.route('/log', methods=['GET'])
@@ -1671,18 +1672,14 @@ def launch_eval_batch():
                     s['errors'] += 1
                     error = '任务 ID 冲突' if reservation == 'conflict' else '并发已满'
                     s['error_details'].append({'name': model_name, 'model': model_name, 'error': error})
-                    _db.update_batch_item(
+                    _db.checkpoint_batch_item(
                         batch_id,
                         row_index,
-                        status='failed',
-                        task_id=task_id,
-                        error=error,
-                        finished_at=utc_now_iso(),
-                    )
-                    _db.update_batch_job(
-                        batch_id,
-                        errors=s['errors'],
-                        errors_json=s['error_details'],
+                        item_fields={
+                            'status': 'failed', 'task_id': task_id,
+                            'error': error, 'finished_at': utc_now_iso(),
+                        },
+                        job_fields={'errors': s['errors'], 'errors_json': s['error_details']},
                     )
                     continue
 
@@ -1754,62 +1751,81 @@ def launch_eval_batch():
                     if _task_response_status_code(task_response) >= 400:
                         raise RuntimeError(_task_response_error(task_response))
 
-                    s['completed'] += 1
-                    s['results'].append({
+                    next_completed = s['completed'] + 1
+                    next_results = [*s['results'], {
                         'task_id': task_id,
                         'name': model_name,
                         'model': model_name,
                         'eval_backend': eval_backend,
                         'status': 'completed',
-                    })
-                    _db.update_batch_item(
+                    }]
+                    job_fields = {
+                        'completed': next_completed,
+                        'results_json': next_results,
+                    }
+                    if next_completed + s['errors'] == total:
+                        job_fields['status'] = aggregate_batch_status(
+                            total=total, completed=next_completed, errors=s['errors'],
+                        )
+                    _db.checkpoint_batch_item(
                         batch_id,
                         row_index,
-                        status='completed',
-                        task_id=task_id,
-                        finished_at=utc_now_iso(),
+                        item_fields={
+                            'status': 'completed', 'task_id': task_id,
+                            'finished_at': utc_now_iso(),
+                        },
+                        job_fields=job_fields,
                     )
-                    _db.update_batch_job(
-                        batch_id,
-                        completed=s['completed'],
-                        results_json=s['results'],
-                    )
+                    s['completed'] = next_completed
+                    s['results'] = next_results
+                    if 'status' in job_fields:
+                        s['status'] = job_fields['status']
                     logger.info(f'[eval-batch:{batch_id}] [{task_id}] {model_name} completed ({s["completed"]}/{total})')
 
+                except _db.BatchCheckpointError:
+                    raise
                 except Exception as e:
                     if s['cancel_requested']:
                         s['status'] = 'stopped'
-                        _db.update_batch_item(
+                        _db.checkpoint_batch_item(
                             batch_id,
                             row_index,
-                            status='interrupted',
-                            task_id=task_id,
-                            error='',
-                            finished_at=utc_now_iso(),
+                            item_fields={
+                                'status': 'interrupted', 'task_id': task_id,
+                                'error': '', 'finished_at': utc_now_iso(),
+                            },
+                            job_fields={'status': 'stopped'},
                         )
-                        _db.update_batch_job(batch_id, status='stopped')
                         break
                     error_id = uuid.uuid4().hex[:8]
                     logger.error(f'[eval-batch:{batch_id}] [{task_id}] {model_name} failed: {e}', exc_info=True)
-                    s['errors'] += 1
-                    s['error_details'].append({
+                    next_errors = s['errors'] + 1
+                    next_error_details = [*s['error_details'], {
                         'name': model_name,
                         'model': model_name,
                         'error': str(e),
-                    })
-                    _db.update_batch_item(
+                    }]
+                    job_fields = {
+                        'errors': next_errors,
+                        'errors_json': next_error_details,
+                    }
+                    if s['completed'] + next_errors == total:
+                        job_fields['status'] = aggregate_batch_status(
+                            total=total, completed=s['completed'], errors=next_errors,
+                        )
+                    _db.checkpoint_batch_item(
                         batch_id,
                         row_index,
-                        status='failed',
-                        task_id=task_id,
-                        error=str(e),
-                        finished_at=utc_now_iso(),
+                        item_fields={
+                            'status': 'failed', 'task_id': task_id,
+                            'error': str(e), 'finished_at': utc_now_iso(),
+                        },
+                        job_fields=job_fields,
                     )
-                    _db.update_batch_job(
-                        batch_id,
-                        errors=s['errors'],
-                        errors_json=s['error_details'],
-                    )
+                    s['errors'] = next_errors
+                    s['error_details'] = next_error_details
+                    if 'status' in job_fields:
+                        s['status'] = job_fields['status']
                 finally:
                     unregister_process(task_id)
                     s['current_model'] = ''
