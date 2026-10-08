@@ -29,6 +29,13 @@ const LOCAL_TYPE_LABEL: Record<string, string> = {
 
 type ThinkingMode = 'auto' | 'on' | 'off'
 
+const JUDGE_STRATEGY_COPY_SUFFIX: Record<string, string> = {
+  auto: 'Auto',
+  rule: 'Rule',
+  llm: 'Llm',
+  llm_recall: 'LlmRecall',
+}
+
 function applyThinkingMode(config: Record<string, unknown>, mode: ThinkingMode) {
   if (mode === 'auto') return
   config.extra_body = {
@@ -98,10 +105,10 @@ export default function LLMEvalForm({ context }: Props) {
   // Common
   const [limit, setLimit] = useState('')
   const [randomSample, setRandomSample] = useState(false)
-  const [evalBatchSize, setEvalBatchSize] = useState('1')
+  const [evalBatchSize, setEvalBatchSize] = useState('')
   const [showMore, setShowMore] = useState(false)
-  const [repeats, setRepeats] = useState('1')
-  const [timeout, setTimeout_] = useState('300')
+  const [repeats, setRepeats] = useState('')
+  const [timeout, setTimeout_] = useState('')
   const [stream, setStream] = useState(false)
   const [useSandbox, setUseSandbox] = useState(false)
   const [sandboxDatasets, setSandboxDatasets] = useState<Set<string>>(new Set())
@@ -110,7 +117,7 @@ export default function LLMEvalForm({ context }: Props) {
   const [maxTokens, setMaxTokens] = useState('')
   const [topK, setTopK] = useState('')
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('auto')
-  const [seed, setSeed] = useState('42')
+  const [seed, setSeed] = useState('')
   const [judgeStrategy, setJudgeStrategy] = useState('auto')
   const [ignoreErrors, setIgnoreErrors] = useState(false)
   const [datasetArgs, setDatasetArgs] = useState('')
@@ -120,6 +127,7 @@ export default function LLMEvalForm({ context }: Props) {
   const [judgeModel, setJudgeModel] = useState('')
   const [judgeApiUrl, setJudgeApiUrl] = useState('')
   const [judgeApiKey, setJudgeApiKey] = useState('')
+  const judgeStrategyCopySuffix = JUDGE_STRATEGY_COPY_SUFFIX[judgeStrategy] ?? 'Auto'
 
   // Validation
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -573,7 +581,7 @@ export default function LLMEvalForm({ context }: Props) {
         </FormField>
 
         <FormField label={t('eval.batchSize')} error={errors.evalBatchSize}>
-          <input type="number" value={evalBatchSize} onChange={(e) => { setEvalBatchSize(e.target.value.replace(/[^0-9]/g, '')); if (errors.evalBatchSize) setErrors((p) => ({ ...p, evalBatchSize: '' })) }} className={inputClass(errors.evalBatchSize)} />
+          <input type="number" value={evalBatchSize} onChange={(e) => { setEvalBatchSize(e.target.value.replace(/[^0-9]/g, '')); if (errors.evalBatchSize) setErrors((p) => ({ ...p, evalBatchSize: '' })) }} className={inputClass(errors.evalBatchSize)} placeholder="1" />
         </FormField>
       </div>
 
@@ -587,36 +595,6 @@ export default function LLMEvalForm({ context }: Props) {
       {showMore && (
         <Card className="!p-0">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
-            {/* Row 1 — 采样参数 */}
-            <FormField label={t('eval.temperature')} error={errors.temperature}>
-              <input type="number" step="0.1" min={0} max={2} value={temperature}
-                onChange={(e) => {
-                  let v = e.target.value.replace(/[^0-9.]/g, '')
-                  if (v !== '' && Number(v) > 2) v = '2'
-                  setTemperature(v)
-                  if (errors.temperature) setErrors((p) => ({ ...p, temperature: '' }))
-                }}
-                className={inputClass(errors.temperature)} />
-            </FormField>
-            <FormField label={t('eval.topP')} error={errors.topP}>
-              <input type="number" step="0.05" min={0} max={1} value={topP}
-                onChange={(e) => {
-                  let v = e.target.value.replace(/[^0-9.]/g, '')
-                  if (v !== '' && Number(v) > 1) v = '1'
-                  setTopP(v)
-                  if (errors.topP) setErrors((p) => ({ ...p, topP: '' }))
-                }}
-                className={inputClass(errors.topP)} />
-            </FormField>
-            <FormField label={t('eval.topK')} error={errors.topK}>
-              <input type="number" min={1} step="1" value={topK}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^0-9]/g, '')
-                  setTopK(v)
-                  if (errors.topK) setErrors((p) => ({ ...p, topK: '' }))
-                }}
-                className={inputClass(errors.topK)} />
-            </FormField>
             {!isAnthropic && (
               <FormField label={t('eval.thinkingMode')} hint={t('eval.thinkingModeHint')}>
                 <select value={thinkingMode} onChange={(e) => setThinkingMode(e.target.value as ThinkingMode)} className={FORM_INPUT_CLASS}>
@@ -626,52 +604,7 @@ export default function LLMEvalForm({ context }: Props) {
                 </select>
               </FormField>
             )}
-            {/* Row 2 — 长度 + 运行控制 */}
-            <FormField label={t('eval.maxTokens')} error={errors.maxTokens}>
-              <input type="number" min={1} step="1" value={maxTokens}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^0-9]/g, '')
-                  setMaxTokens(v)
-                  if (errors.maxTokens) setErrors((p) => ({ ...p, maxTokens: '' }))
-                }}
-                className={inputClass(errors.maxTokens)} />
-            </FormField>
-            <FormField label={t('eval.repeats')} error={errors.repeats}>
-              <input type="number" min={1} step="1" value={repeats}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^0-9]/g, '')
-                  setRepeats(v)
-                  if (errors.repeats) setErrors((p) => ({ ...p, repeats: '' }))
-                }}
-                className={inputClass(errors.repeats)} />
-            </FormField>
-            <FormField label={t('eval.timeout')} error={errors.timeout}>
-              <input type="number" min={1} step="1" value={timeout}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^0-9]/g, '')
-                  setTimeout_(v)
-                  if (errors.timeout) setErrors((p) => ({ ...p, timeout: '' }))
-                }}
-                className={inputClass(errors.timeout)} />
-            </FormField>
-            {/* Row 3 — 种子 + 评判 + 开关 */}
-            <FormField label={t('eval.seed')}>
-              <input type="number" min={1} step="1" value={seed}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^0-9]/g, '')
-                  setSeed(v)
-                }}
-                className={FORM_INPUT_CLASS} />
-            </FormField>
-            <FormField label={t('eval.judgeStrategy')}>
-              <select value={judgeStrategy} onChange={(e) => setJudgeStrategy(e.target.value)} className={FORM_INPUT_CLASS}>
-                <option value="auto">auto</option>
-                <option value="rule">rule</option>
-                <option value="llm">llm</option>
-                <option value="llm_recall">llm_recall</option>
-              </select>
-            </FormField>
-            <div className="flex items-end gap-4 pb-0.5">
+            <div className="md:col-span-2 flex items-end gap-4 pb-0.5">
               <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] cursor-pointer">
                 <input type="checkbox" checked={stream} onChange={(e) => setStream(e.target.checked)} className="accent-[var(--accent)]" />
                 {t('eval.stream')}
@@ -685,7 +618,81 @@ export default function LLMEvalForm({ context }: Props) {
                 Docker 沙箱
               </label>
             </div>
-            {/* Row 4 — 系统提示 + 数据集参数 */}
+            {/* A. 模型生成参数 */}
+            <div className="md:col-span-3">
+              <p className={`${FORM_LABEL_CLASS} mb-1`}>{t('eval.generationGroupTitle')}</p>
+              <p className="text-xs text-[var(--text-muted)]">{t('eval.generationGroupHint')}</p>
+            </div>
+            <FormField label={t('eval.temperature')} error={errors.temperature}>
+              <input type="number" step="0.1" min={0} max={2} value={temperature}
+                onChange={(e) => {
+                  let v = e.target.value.replace(/[^0-9.]/g, '')
+                  if (v !== '' && Number(v) > 2) v = '2'
+                  setTemperature(v)
+                  if (errors.temperature) setErrors((p) => ({ ...p, temperature: '' }))
+                }}
+                className={inputClass(errors.temperature)} placeholder={t('eval.modelApiDefault')} />
+            </FormField>
+            <FormField label={t('eval.topP')} error={errors.topP}>
+              <input type="number" step="0.05" min={0} max={1} value={topP}
+                onChange={(e) => {
+                  let v = e.target.value.replace(/[^0-9.]/g, '')
+                  if (v !== '' && Number(v) > 1) v = '1'
+                  setTopP(v)
+                  if (errors.topP) setErrors((p) => ({ ...p, topP: '' }))
+                }}
+                className={inputClass(errors.topP)} placeholder={t('eval.modelApiDefault')} />
+            </FormField>
+            <FormField label={t('eval.topK')} hint={t('eval.topKHint')} error={errors.topK}>
+              <input type="number" min={1} step="1" value={topK}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setTopK(v)
+                  if (errors.topK) setErrors((p) => ({ ...p, topK: '' }))
+                }}
+                className={inputClass(errors.topK)} placeholder={t('eval.modelApiDefault')} />
+            </FormField>
+            <FormField label={t('eval.maxTokens')} error={errors.maxTokens}>
+              <input type="number" min={1} step="1" value={maxTokens}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setMaxTokens(v)
+                  if (errors.maxTokens) setErrors((p) => ({ ...p, maxTokens: '' }))
+                }}
+                className={inputClass(errors.maxTokens)} placeholder={t('eval.modelApiDefault')} />
+            </FormField>
+            {/* B. 评测运行参数 */}
+            <div className="md:col-span-3 border-t border-[var(--border-md)] pt-4 mt-2">
+              <p className={`${FORM_LABEL_CLASS} mb-1`}>{t('eval.runtimeGroupTitle')}</p>
+              <p className="text-xs text-[var(--text-muted)]">{t('eval.runtimeGroupHint')}</p>
+            </div>
+            <FormField label={t('eval.repeats')} error={errors.repeats}>
+              <input type="number" min={1} step="1" value={repeats}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setRepeats(v)
+                  if (errors.repeats) setErrors((p) => ({ ...p, repeats: '' }))
+                }}
+                className={inputClass(errors.repeats)} placeholder="1" />
+            </FormField>
+            <FormField label={t('eval.timeout')} error={errors.timeout}>
+              <input type="number" min={1} step="1" value={timeout}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setTimeout_(v)
+                  if (errors.timeout) setErrors((p) => ({ ...p, timeout: '' }))
+                }}
+                className={inputClass(errors.timeout)} placeholder="300" />
+            </FormField>
+            {/* Row 3 — 种子 + 运行开关 */}
+            <FormField label={t('eval.seed')}>
+              <input type="number" min={1} step="1" value={seed}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  setSeed(v)
+                }}
+                className={FORM_INPUT_CLASS} placeholder="42" />
+            </FormField>
             <div className="md:col-span-3">
               <label className={FORM_LABEL_CLASS}>System Prompt</label>
               <textarea value={systemPrompt}
@@ -702,10 +709,24 @@ export default function LLMEvalForm({ context }: Props) {
                 placeholder='{"gsm8k": {"few_shot_num": 4}}' />
               {errors.datasetArgs && <p className="mt-1 text-xs text-red-500">{errors.datasetArgs}</p>}
             </div>
-            {/* Row 5 — 评判模型 */}
+            {/* C. 评分与裁判 */}
             <div className="md:col-span-3 border-t border-[var(--border-md)] pt-4 mt-2">
+              <p className={`${FORM_LABEL_CLASS} mb-1`}>{t('eval.scoringGroupTitle')}</p>
+              <p className="text-xs text-[var(--text-muted)] mb-3">{t('eval.scoringGroupHint')}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField label={t('eval.judgeStrategy')} hint={t(`eval.judgeStrategy${judgeStrategyCopySuffix}Hint`)}>
+                  <select value={judgeStrategy} onChange={(e) => setJudgeStrategy(e.target.value)} className={FORM_INPUT_CLASS}>
+                    <option value="auto">{t('eval.judgeStrategyAuto')}</option>
+                    <option value="rule">{t('eval.judgeStrategyRule')}</option>
+                    <option value="llm">{t('eval.judgeStrategyLlm')}</option>
+                    <option value="llm_recall">{t('eval.judgeStrategyLlmRecall')}</option>
+                  </select>
+                </FormField>
+              </div>
+            </div>
+            <div className="md:col-span-3">
               <p className={`${FORM_LABEL_CLASS} mb-2`}>{t('eval.judgeModelTitle')}</p>
-              <p className="text-xs text-[var(--text-muted)] mb-3">{t('eval.judgeModelHint')}</p>
+              <p className="text-xs text-[var(--text-muted)] mb-3">{t(`eval.judgeModelHint${judgeStrategyCopySuffix}`)}</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField label={t('eval.judgeModel')}>
                   <input value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)}
