@@ -110,7 +110,7 @@ export interface EvalBatchStatus {
   current_model: string
   current_task_id: string
   results: { task_id: string; name: string; model: string; eval_backend: string; status: TaskStatus; error?: string }[]
-  error_details: { name: string; model: string; error: string }[]
+  error_details: { task_id: string; name: string; model: string; error: string }[]
   resumable: boolean
 }
 

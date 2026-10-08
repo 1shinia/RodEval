@@ -1671,7 +1671,7 @@ def launch_eval_batch():
                 if reservation != 'reserved':
                     s['errors'] += 1
                     error = '任务 ID 冲突' if reservation == 'conflict' else '并发已满'
-                    s['error_details'].append({'name': model_name, 'model': model_name, 'error': error})
+                    s['error_details'].append({'task_id': task_id, 'name': model_name, 'model': model_name, 'error': error})
                     _db.checkpoint_batch_item(
                         batch_id,
                         row_index,
@@ -1803,6 +1803,7 @@ def launch_eval_batch():
                     next_error_details = [*s['error_details'], {
                         'name': model_name,
                         'model': model_name,
+                        'task_id': task_id,
                         'error': str(e),
                     }]
                     job_fields = {
@@ -1858,6 +1859,15 @@ def get_eval_batch_status(batch_id: str):
         job = _db.get_batch_job(batch_id, user_id=get_current_user_id(), batch_type='eval')
         if not job:
             return jsonify({'error': 'Batch not found'}), 404
+        item_task_ids = {
+            item['model']: item.get('task_id', '')
+            for item in job.get('items', [])
+            if item.get('status') == 'failed' and item.get('task_id')
+        }
+        error_details = [
+            {**detail, 'task_id': detail.get('task_id') or item_task_ids.get(detail.get('model', ''), '')}
+            for detail in job['error_details']
+        ]
         return jsonify({
             'batch_id': batch_id,
             'status': job['status'],
@@ -1867,7 +1877,7 @@ def get_eval_batch_status(batch_id: str):
             'current_model': '',
             'current_task_id': '',
             'results': job['results'],
-            'error_details': job['error_details'],
+            'error_details': error_details,
             'resumable': job['status'] == 'stopped' and bool(resumable_row_indexes(job['items'])),
         }), 200
     from .auth import get_current_role, get_current_user_id

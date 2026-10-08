@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { listBenchmarks, getEvalTemplateDownloadUrl } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
 import Button from '@/components/ui/Button'
@@ -26,8 +27,20 @@ const LOCAL_TYPE_LABEL: Record<string, string> = {
   data_collection: 'eval.datasetLocalTypeDataCollection',
 }
 
+type ThinkingMode = 'auto' | 'on' | 'off'
+
+function applyThinkingMode(config: Record<string, unknown>, mode: ThinkingMode) {
+  if (mode === 'auto') return
+  config.extra_body = {
+    ...(config.extra_body as Record<string, unknown> | undefined),
+    enable_thinking: mode === 'on',
+  }
+}
+
 export default function LLMEvalForm({ context }: Props) {
   const { t } = useLocale()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const { onSubmit, disabled, initialDataset, onApiKeyChange, isBatch, batchRunning, batchState,
     batchInfo, batchError, batchUploading, selectedTaskId, onSelectTask,
     onBatchSubmit, onBatchResume, onBatchStop, onBatchUpload, setBatchMode } = context
@@ -79,8 +92,7 @@ export default function LLMEvalForm({ context }: Props) {
   const [datasetPath, setDatasetPath] = useState('')
   const [datasetDir, setDatasetDir] = useState('')
   const isLocalDataset = datasetHub === 'local'
-  // Anthropic 的思考走 thinking.budget_tokens（后端从 generation_config.reasoning_tokens 映射），
-  // 不认 OpenAI/Qwen 系的 extra_body.enable_thinking ⇒ 该协议下不下发这个键，并禁用「思考模式」下拉
+  // Anthropic does not use the OpenAI-compatible enable_thinking parameter.
   const isAnthropic = evalType === 'anthropic'
 
   // Common
@@ -97,7 +109,7 @@ export default function LLMEvalForm({ context }: Props) {
   const [topP, setTopP] = useState('')
   const [maxTokens, setMaxTokens] = useState('')
   const [topK, setTopK] = useState('')
-  const [thinkingMode, setThinkingMode] = useState('auto')
+  const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('auto')
   const [seed, setSeed] = useState('42')
   const [judgeStrategy, setJudgeStrategy] = useState('auto')
   const [ignoreErrors, setIgnoreErrors] = useState(false)
@@ -238,10 +250,7 @@ export default function LLMEvalForm({ context }: Props) {
       if (topP) genConfig.top_p = Number(topP)
       if (maxTokens) genConfig.max_tokens = Number(maxTokens)
       if (topK) genConfig.top_k = Number(topK)
-      // 与单模型一致：Anthropic 不下发 enable_thinking
-      if (thinkingMode !== 'auto' && !isAnthropic) {
-        genConfig.extra_body = { ...(genConfig.extra_body as Record<string, unknown> || {}), enable_thinking: thinkingMode === 'on' }
-      }
+      if (!isAnthropic) applyThinkingMode(genConfig, thinkingMode)
       if (systemPrompt.trim()) {
         for (const ds of dsList) {
           const entry = (dsArgs[ds] as Record<string, unknown>) || {}
@@ -385,13 +394,8 @@ export default function LLMEvalForm({ context }: Props) {
     if (topP) genConfig.top_p = Number(topP)
     if (maxTokens) genConfig.max_tokens = Number(maxTokens)
     if (topK) genConfig.top_k = Number(topK)
+    if (!isAnthropic) applyThinkingMode(genConfig, thinkingMode)
     if (Object.keys(genConfig).length > 0) config.generation_config = genConfig
-    // Thinking mode：enable_thinking 是 OpenAI/Qwen 系参数，Anthropic 不认（其 thinking 走 reasoning_tokens），
-    // 该协议下不发，避免未知字段被塞进请求体
-    if (thinkingMode !== 'auto' && !isAnthropic) {
-      genConfig.extra_body = { ...(genConfig.extra_body || {}), enable_thinking: thinkingMode === 'on' }
-      config.generation_config = genConfig
-    }
     if (seed && seed !== '42') config.seed = Number(seed)
     if (judgeStrategy && judgeStrategy !== 'auto') config.judge_strategy = judgeStrategy
     if (ignoreErrors) config.ignore_errors = true
@@ -494,15 +498,17 @@ export default function LLMEvalForm({ context }: Props) {
       </div>
       </>)}
 
-      {/* Dataset Source */}
+      {/* Dataset Source — only administrators choose the backend source. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <FormField label={t('eval.datasetHub')}>
-          <select value={datasetHub} onChange={(e) => setDatasetHub(e.target.value)} className={FORM_INPUT_CLASS}>
-            <option value="modelscope">{t('eval.datasetHubModelScope')}</option>
-            <option value="huggingface">{t('eval.datasetHubHuggingFace')}</option>
-            <option value="local">{t('eval.datasetHubLocal')}</option>
-          </select>
-        </FormField>
+        {isAdmin && (
+          <FormField label={t('eval.datasetHub')}>
+            <select value={datasetHub} onChange={(e) => setDatasetHub(e.target.value)} className={FORM_INPUT_CLASS}>
+              <option value="modelscope">{t('eval.datasetHubModelScope')}</option>
+              <option value="huggingface">{t('eval.datasetHubHuggingFace')}</option>
+              <option value="local">{t('eval.datasetHubLocal')}</option>
+            </select>
+          </FormField>
+        )}
 
         {isLocalDataset ? (<>
           <FormField label={t('eval.datasets')} required error={errors.datasets} className="relative">
@@ -611,19 +617,15 @@ export default function LLMEvalForm({ context }: Props) {
                 }}
                 className={inputClass(errors.topK)} />
             </FormField>
-            {/* Thinking mode */}
-            <div className="md:col-span-3 border-t border-[var(--border-md)] pt-3">
-              <div className="flex items-center gap-4">
-                <FormField label={t('eval.thinkingMode')} hint={isAnthropic ? t('eval.thinkingModeAnthropicHint') : undefined}>
-                  <select value={thinkingMode} disabled={isAnthropic} onChange={(e) => setThinkingMode(e.target.value)}
-                    className={`${FORM_INPUT_CLASS} ${isAnthropic ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                    <option value="auto">{t('eval.thinkingModeAuto')}</option>
-                    <option value="on">{t('eval.thinkingModeOn')}</option>
-                    <option value="off">{t('eval.thinkingModeOff')}</option>
-                  </select>
-                </FormField>
-              </div>
-            </div>
+            {!isAnthropic && (
+              <FormField label={t('eval.thinkingMode')} hint={t('eval.thinkingModeHint')}>
+                <select value={thinkingMode} onChange={(e) => setThinkingMode(e.target.value as ThinkingMode)} className={FORM_INPUT_CLASS}>
+                  <option value="auto">{t('eval.thinkingModeAuto')}</option>
+                  <option value="on">{t('eval.thinkingModeOn')}</option>
+                  <option value="off">{t('eval.thinkingModeOff')}</option>
+                </select>
+              </FormField>
+            )}
             {/* Row 2 — 长度 + 运行控制 */}
             <FormField label={t('eval.maxTokens')} error={errors.maxTokens}>
               <input type="number" min={1} step="1" value={maxTokens}
@@ -780,12 +782,17 @@ export default function LLMEvalForm({ context }: Props) {
                 <span className="text-[var(--text-dim)] ml-auto">{r.task_id}</span>
               </div>
             ))}
-            {batchState.error_details.filter((e) => !batchState.results.some((r2) => r2.name === e.name)).map((e, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
+            {batchState.error_details.filter((e) => !batchState.results.some((r2) => r2.name === e.name)).map((e) => (
+              <div key={e.task_id}
+                onClick={() => onSelectTask(e.task_id)}
+                className={`flex items-center gap-2 text-xs rounded px-1.5 py-0.5 -mx-1.5 cursor-pointer transition-colors ${
+                  e.task_id === selectedTaskId ? 'bg-[var(--accent)]/10 ring-1 ring-[var(--accent-dim)]' : 'hover:bg-[var(--bg)]'
+                }`}>
                 <span className="text-[var(--danger)]">✗</span>
                 <span className="text-[var(--text)]">{e.name}</span>
                 <span className="text-[var(--text-muted)]">({e.model})</span>
-                <span className="text-[var(--danger)] ml-auto">{e.error}</span>
+                <span className="text-[var(--danger)] truncate max-w-48 ml-auto" title={e.error}>{e.error}</span>
+                <span className="text-[var(--text-dim)]">{e.task_id}</span>
               </div>
             ))}
           </div>
