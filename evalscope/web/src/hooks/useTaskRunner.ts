@@ -35,22 +35,22 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
   const resumedRef = useRef(false)
   const suppressProgressPollRef = useRef(false)
 
-  // --- localStorage persistence: survive page refresh ---
+  // --- sessionStorage persistence: survive refresh without sharing task state across tabs ---
   const STORAGE_KEY = `evalscope_last_${taskPrefix}`
 
   const saveTaskId = useCallback((id: string) => {
-    try { localStorage.setItem(STORAGE_KEY, id) } catch { /* quota / private mode */ }
+    try { sessionStorage.setItem(STORAGE_KEY, id) } catch { /* quota / private mode */ }
   }, [STORAGE_KEY])
 
   const clearTaskId = useCallback(() => {
-    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+    try { sessionStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
   }, [STORAGE_KEY])
 
   // On mount: restore persisted task if no URL param and no active task
   useEffect(() => {
     if (urlTaskId || taskId) return
     try {
-      const saved = localStorage.getItem(STORAGE_KEY)
+      const saved = sessionStorage.getItem(STORAGE_KEY)
       if (saved) {
         queueMicrotask(() => {
           setTaskId(saved)
