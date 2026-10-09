@@ -483,7 +483,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
             className={inputClass(errors.maxTokens)} placeholder={t('perf.placeholderDefaultVal', { v: '2048' })} />
         </FormField>
 
-        <FormField label={t('perf.minTokens')} error={errors.minTokens}>
+        <FormField label={t('perf.minTokens')} error={errors.minTokens} hint={t('perf.minTokensHint')}>
           <input type="number" value={minTokens}
             onChange={(e) => { setMinTokens(e.target.value.replace(/[^0-9]/g, '')); if (errors.minTokens) setErrors((p) => ({ ...p, minTokens: '' })) }}
             className={inputClass(errors.minTokens)} placeholder={t('perf.placeholderNoLimit')} />

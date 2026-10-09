@@ -118,6 +118,17 @@ class OpenaiPlugin(DefaultApiPlugin):
             payload['max_tokens'] = _sample_int_or_range(param.max_tokens)
         if param.min_tokens is not None:
             payload['min_tokens'] = param.min_tokens
+            # A minimum output length can be defeated by an early EOS.  Some
+            # OpenAI-compatible servers expose the opt-in EOS override as a
+            # non-standard ``ignore_eos`` request field.  Add that field only
+            # when the user requested a positive minimum and did not provide
+            # an explicit override in extra_args; the latter is merged below.
+            if (
+                isinstance(param.min_tokens, int)
+                and param.min_tokens > 0
+                and (not param.extra_args or 'ignore_eos' not in param.extra_args)
+            ):
+                payload['ignore_eos'] = True
         if param.frequency_penalty is not None:
             payload['frequency_penalty'] = param.frequency_penalty
         if param.repetition_penalty is not None:
