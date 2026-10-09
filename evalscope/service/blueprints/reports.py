@@ -7,9 +7,9 @@ direct filesystem access.
 import json
 import mimetypes
 import os
-import re
 import plotly.express as px
 import plotly.graph_objects as go
+import re
 import uuid
 from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request, send_file
@@ -73,6 +73,7 @@ def get_plotly_asset():
     response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
+
 
 # Allowed extensions for the media proxy (security: do not serve arbitrary files)
 _MEDIA_EXTENSIONS = {
@@ -692,7 +693,7 @@ def delete_report():
 
         # Deletion requires durable ownership evidence.  Keep the more lenient
         # admin fallback for legacy report reads, but never for filesystem removal.
-        from .auth import get_current_user_id, check_task_artifact_access
+        from .auth import check_task_artifact_access, get_current_user_id
         if not check_task_artifact_access(
             task_id, ('eval_reports', 'task_registry', 'task_state'), allow_admin_legacy=False
         ):
@@ -754,19 +755,20 @@ def get_html_report():
             #   eval_1787630356193@@ox-alpha::gsm8k -> eval_1787630356193_ox-alpha_gsm8k.html
             safe_name = re.sub(r'[\\/:*?"<>|]', '_', f'{prefix}_{model_name}_{"_".join(datasets)}.html')
             from ..html_security import secure_report_response
-            return secure_report_response(send_file(
-                report_html,
-                mimetype='text/html',
-                as_attachment=True,
-                download_name=safe_name,
-            ))
+            return secure_report_response(
+                send_file(
+                    report_html,
+                    mimetype='text/html',
+                    as_attachment=True,
+                    download_name=safe_name,
+                )
+            )
 
         from ..html_security import secure_report_response
-        plotly_source = _local_plotly_source()
         with open(report_html, encoding='utf-8') as f:
-            html = f.read().replace(PLOTLY_CDN_URL, PLOTLY_LOCAL_URL)
+            html = f.read()
         response = current_app.response_class(html, mimetype='text/html')
-        return secure_report_response(response, plotly_source)
+        return secure_report_response(response)
     except Exception as e:
         error_id = uuid.uuid4().hex[:8]
         logger.error(f'[{error_id}] Failed to get HTML report: {e}', exc_info=True)
@@ -896,17 +898,18 @@ def get_chart():
                 '<html><body style="background:#0f172a;color:#94a3b8;display:flex;align-items:center;'
                 'justify-content:center;height:100vh;font-family:sans-serif;">No data to plot</body></html>',
                 200,
-                {'Content-Type': 'text/html'},
+                {
+                    'Content-Type': 'text/html'
+                },
             ))
             return secure_report_response(response)
 
         html = fig.to_html(full_html=True, include_plotlyjs=False, config={'responsive': True})
-        plotly_source = _local_plotly_source()
-        plotly_script = f'<script src="{PLOTLY_LOCAL_URL}" charset="utf-8"></script>'
+        plotly_script = f'<script src="{PLOTLY_CDN_URL}" charset="utf-8"></script>'
         html = html.replace('</head>', f'  {plotly_script}\n</head>')
         from ..html_security import secure_report_response
         response = current_app.make_response((html, 200, {'Content-Type': 'text/html'}))
-        return secure_report_response(response, plotly_source)
+        return secure_report_response(response)
 
     except ValueError as e:
         return jsonify({'error': str(e)}), 400

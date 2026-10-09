@@ -64,7 +64,7 @@ export default function ReportViewerPage() {
         title="Report"
         className="w-full border border-[var(--border)] rounded-lg bg-[var(--bg-card)]"
         style={{ height: 'calc(100vh - 140px)' }}
-        sandbox="allow-scripts"
+        sandbox="allow-scripts allow-same-origin"
       />
     </div>
   )

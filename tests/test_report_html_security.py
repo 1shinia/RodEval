@@ -1,14 +1,12 @@
 """Security regression tests for interactive HTML reports."""
 
 import hashlib
-from pathlib import Path
-
-from flask import Flask
 import plotly.graph_objects as go
+from flask import Flask
+from pathlib import Path
 
 from evalscope.constants import PLOTLY_CDN_URL, PLOTLY_LOCAL_URL
 from evalscope.report.renderer import _md_to_html
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,16 +31,15 @@ def test_markdown_report_content_removes_active_html():
     assert '<table>' in lowered
 
 
-def test_report_viewer_does_not_grant_same_origin_to_report_scripts():
+def test_report_viewer_allows_plotly_same_origin_execution():
     source = (
         REPO_ROOT / 'evalscope/web/src/pages/ReportViewerPage.tsx'
     ).read_text(encoding='utf-8')
 
-    assert 'sandbox="allow-scripts"' in source
-    assert 'allow-same-origin' not in source
+    assert 'sandbox="allow-scripts allow-same-origin"' in source
 
 
-def test_report_csp_sandboxes_scripts_without_same_origin():
+def test_report_csp_allows_plotly_without_response_sandbox():
     from evalscope.service.html_security import REPORT_CONTENT_SECURITY_POLICY
 
     directives = {
@@ -50,24 +47,22 @@ def test_report_csp_sandboxes_scripts_without_same_origin():
         for part in REPORT_CONTENT_SECURITY_POLICY.split(';')
         if part.strip()
     }
-    assert 'sandbox allow-scripts' in directives
-    assert all('allow-same-origin' not in directive for directive in directives)
+    assert not any(directive.startswith('sandbox') for directive in directives)
     assert "default-src 'none'" in directives
     assert any(directive.startswith('script-src ') for directive in directives)
     script_src = next(directive for directive in directives if directive.startswith('script-src '))
     assert PLOTLY_CDN_URL in script_src
 
 
-def test_plotly_chart_iframe_does_not_grant_same_origin():
+def test_plotly_chart_iframe_allows_same_origin_execution():
     source = (
         REPO_ROOT / 'evalscope/web/src/components/charts/PlotlyChart.tsx'
     ).read_text(encoding='utf-8')
 
-    assert 'sandbox="allow-scripts"' in source
-    assert 'allow-same-origin' not in source
+    assert 'sandbox="allow-scripts allow-same-origin"' in source
 
 
-def test_chart_endpoint_applies_report_sandbox(monkeypatch, tmp_path):
+def test_chart_endpoint_keeps_plotly_csp_compatible(monkeypatch, tmp_path):
     from evalscope.service.blueprints import reports
 
     app = Flask(__name__)
@@ -83,15 +78,14 @@ def test_chart_endpoint_applies_report_sandbox(monkeypatch, tmp_path):
     response = app.test_client().get('/api/v1/reports/chart?report_name=report-a')
 
     assert response.status_code == 200
-    assert response.headers['Content-Security-Policy'].endswith('sandbox allow-scripts')
-    assert 'allow-same-origin' not in response.headers['Content-Security-Policy']
-    local_url = f'http://localhost{PLOTLY_LOCAL_URL}'
-    assert PLOTLY_LOCAL_URL.encode() in response.data
-    assert local_url in response.headers['Content-Security-Policy']
-    assert PLOTLY_CDN_URL.encode() not in response.data
+    csp = response.headers['Content-Security-Policy']
+    assert 'sandbox ' not in csp
+    assert PLOTLY_CDN_URL in csp
+    assert PLOTLY_CDN_URL.encode() in response.data
+    assert PLOTLY_LOCAL_URL.encode() not in response.data
 
 
-def test_html_report_uses_local_plotly_but_download_remains_portable(monkeypatch, tmp_path):
+def test_html_report_preserves_plotly_reference_and_download_remains_portable(monkeypatch, tmp_path):
     from evalscope.service.blueprints import reports
 
     report_dir = tmp_path / 'eval_test' / 'reports'
@@ -109,11 +103,10 @@ def test_html_report_uses_local_plotly_but_download_remains_portable(monkeypatch
     inline = client.get('/api/v1/reports/html?report_name=report-a')
     download = client.get('/api/v1/reports/html?report_name=report-a&download=1')
 
-    local_url = f'http://localhost{PLOTLY_LOCAL_URL}'
     assert inline.status_code == 200
-    assert PLOTLY_LOCAL_URL.encode() in inline.data
-    assert PLOTLY_CDN_URL.encode() not in inline.data
-    assert local_url in inline.headers['Content-Security-Policy']
+    assert PLOTLY_CDN_URL.encode() in inline.data
+    assert PLOTLY_LOCAL_URL.encode() not in inline.data
+    assert PLOTLY_CDN_URL in inline.headers['Content-Security-Policy']
     assert download.status_code == 200
     assert PLOTLY_CDN_URL.encode() in download.data
 

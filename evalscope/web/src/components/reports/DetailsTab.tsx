@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
-import { getAnalysis, getDataFrame } from '@/api/reports'
+import { getAnalysis, getChartUrl, getDataFrame } from '@/api/reports'
 import { toast } from '@/components/common/Toast'
 import Card from '@/components/ui/Card'
 import Table from '@/components/ui/Table'
@@ -50,8 +50,10 @@ export default function DetailsTab({ reportName, datasetName, rootPath, perfMetr
     return () => { cancelled = true }
   }, [datasetName, reportName, rootPath])
 
-  // Detect whether data has Metric column
   const hasMetricCol = subsetData.data.length > 0 && 'Metric' in subsetData.data[0]
+  const subsets = useMemo(() => (
+    [...new Set(subsetData.data.map((row) => String(row.Subset ?? '')).filter(Boolean))]
+  ), [subsetData.data])
 
   const subsetColumns = [
     {
@@ -162,7 +164,28 @@ export default function DetailsTab({ reportName, datasetName, rootPath, perfMetr
         )}
       </Card>
 
-      {/* Score Distribution Chart removed - info already visible in Subset Scores table */}
+      {/* Score Distribution Charts */}
+      {subsets.length > 0 && (
+        <Card title={t('reportDetail.scoreDistribution')}>
+          <div className="flex flex-col gap-4">
+            {subsets.map((subset) => (
+              <div key={subset} className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-[var(--text-muted)]">{subset}</span>
+                <iframe
+                  src={getChartUrl(rootPath, 'histogram', {
+                    reportName,
+                    datasetName,
+                    subsetName: subset,
+                  })}
+                  className="w-full h-[360px] border-0 rounded-[var(--radius)]"
+                  sandbox="allow-scripts allow-same-origin"
+                  title={`${t('reportDetail.scoreDistribution')}: ${subset}`}
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Performance Metrics */}
       {perfMetrics && (

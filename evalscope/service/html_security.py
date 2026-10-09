@@ -12,14 +12,13 @@ def report_content_security_policy(plotly_source: str = PLOTLY_CDN_URL) -> str:
         "default-src 'none'",
         f"script-src 'unsafe-inline' {plotly_source}",
         "style-src 'unsafe-inline'",
-        "img-src data: blob:",
-        "font-src data:",
+        'img-src data: blob:',
+        'font-src data:',
         "connect-src 'none'",
         "object-src 'none'",
         "base-uri 'none'",
         "form-action 'none'",
         "frame-ancestors 'self'",
-        "sandbox allow-scripts",
     ))
 
 
