@@ -48,15 +48,55 @@ _TERMINAL_PROGRESS_STATUSES = set(TERMINAL_STATES) | {'error', 'cancelled'}
 _DESCRIPTION_MODES = ('full', 'preview', 'none')
 
 
+def _apply_rag_dataset_policy(eval_config: dict, is_admin: bool) -> dict:
+    """Apply the server-side dataset download policy for RAG evaluations.
+
+    Administrators may use the existing online MTEB loading behaviour. Normal
+    users must run against datasets already present in the local cache; the
+    child process receives the offline flags so a forged ``hub`` value cannot
+    re-enable network downloads.
+    """
+    import copy
+
+    normalized = copy.deepcopy(eval_config)
+    if normalized.get('tool', 'mteb').lower() != 'mteb':
+        return normalized
+    if is_admin:
+        return normalized
+
+    eval_args = normalized.setdefault('eval', {})
+    if not isinstance(eval_args, dict):
+        raise ValueError('RAG MTEB eval configuration must be an object.')
+    eval_args['offline'] = True
+    eval_args['allow_download'] = False
+    normalized['eval'] = eval_args
+    return normalized
+
+
 def _inject_resume_credentials(saved_data: dict, request_data: dict) -> dict:
     """Return a resume config containing only credentials from this request."""
     import copy
 
     restored = copy.deepcopy(saved_data)
+    request_key = request_data.get('api_key')
     if restored.get('api_key') == '***':
         restored.pop('api_key', None)
-    if request_data.get('api_key'):
-        restored['api_key'] = request_data['api_key']
+    if request_key:
+        restored['api_key'] = request_key
+
+    eval_config = restored.get('eval_config')
+    if isinstance(eval_config, dict) and eval_config.get('tool', '').lower() == 'mteb':
+        models = eval_config.get('models')
+        if isinstance(models, list):
+            for model in models:
+                if not isinstance(model, dict):
+                    continue
+                if model.get('api_key') == '***':
+                    model.pop('api_key', None)
+                # A two-stage Reranker may contain a local encoder followed by
+                # an API reranker; only inject into the API model entry.
+                if request_key and (model.get('model_name') or model.get('api_base')):
+                    model['api_key'] = request_key
 
     judge_args = restored.get('judge_model_args')
     if isinstance(judge_args, dict):
@@ -64,7 +104,7 @@ def _inject_resume_credentials(saved_data: dict, request_data: dict) -> dict:
             judge_args.pop('api_key', None)
         request_judge = request_data.get('judge_model_args')
         judge_key = request_judge.get('api_key') if isinstance(request_judge, dict) else None
-        judge_key = judge_key or request_data.get('api_key')
+        judge_key = judge_key or request_key
         if judge_key:
             judge_args['api_key'] = judge_key
         restored['judge_model_args'] = judge_args
@@ -647,6 +687,11 @@ def run_evaluation():
 
             tool = eval_config.get('tool', 'mteb')
             if tool == 'mteb':
+                from .auth import get_current_role
+                try:
+                    eval_config = _apply_rag_dataset_policy(eval_config, get_current_role() == 'admin')
+                except ValueError as exc:
+                    return jsonify({'error': str(exc)}), 400
                 try:
                     import mteb  # noqa: F401
                 except ImportError:
@@ -834,6 +879,12 @@ def launch_evaluation():
             eval_config = data.get('eval_config', {})
             if not eval_config:
                 return jsonify({'error': 'eval_config is required for RAG eval'}), 400
+            if eval_config.get('tool', 'mteb').lower() == 'mteb':
+                from .auth import get_current_role
+                try:
+                    eval_config = _apply_rag_dataset_policy(eval_config, get_current_role() == 'admin')
+                except ValueError as exc:
+                    return jsonify({'error': str(exc)}), 400
             task_config = TaskConfig(
                 eval_backend=EvalBackend.RAG_EVAL, eval_config=eval_config,
                 work_dir=os.path.join(OUTPUT_DIR, task_id),

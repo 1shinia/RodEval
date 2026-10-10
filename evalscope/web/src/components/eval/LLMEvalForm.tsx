@@ -513,7 +513,6 @@ export default function LLMEvalForm({ context }: Props) {
             <select value={datasetHub} onChange={(e) => setDatasetHub(e.target.value)} className={FORM_INPUT_CLASS}>
               <option value="modelscope">{t('eval.datasetHubModelScope')}</option>
               <option value="huggingface">{t('eval.datasetHubHuggingFace')}</option>
-              <option value="local">{t('eval.datasetHubLocal')}</option>
             </select>
           </FormField>
         )}

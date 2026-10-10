@@ -32,10 +32,28 @@ class MTEBModelConfig(BaseArgument):
 
     @model_validator(mode='before')
     @classmethod
-    def resolve_model_path(cls, data):
-        if isinstance(data, dict) and not data.get('model_name_or_path') and data.get('model_name'):
-            data['model_name_or_path'] = data['model_name']
-        return data
+    def validate_model_source(cls, data):
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+        for field in ('model_name', 'model_name_or_path', 'api_base', 'api_key'):
+            value = normalized.get(field)
+            if isinstance(value, str):
+                normalized[field] = value.strip()
+
+        # Keep the established compatibility rule: model_name wins when both
+        # fields are present, so older API configs remain API configs.
+        if not normalized.get('model_name_or_path') and normalized.get('model_name'):
+            normalized['model_name_or_path'] = normalized['model_name']
+
+        if normalized.get('model_name'):
+            if not normalized.get('api_base'):
+                raise ValueError('api_base is required when model_name is set for an API model.')
+        elif not normalized.get('model_name_or_path'):
+            raise ValueError('model_name_or_path is required for a local MTEB model.')
+
+        return normalized
 
 
 class MTEBEvalConfig(BaseArgument):
@@ -58,6 +76,10 @@ class MTEBEvalConfig(BaseArgument):
     limits: Optional[int] = None
     random_sample: bool = False
     hub: str = 'modelscope'
+    # Server-side policy flags. The service sets these for normal users;
+    # they are consumed by the MTEB runner and never trusted from the client.
+    offline: bool = False
+    allow_download: bool = True
     top_k: int = 10
     splits: Optional[Dict[str, Any]] = None
     encode_kwargs: Optional[Dict[str, Any]] = None

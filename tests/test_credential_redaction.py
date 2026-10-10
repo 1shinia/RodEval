@@ -58,6 +58,37 @@ def test_resume_credentials_are_injected_only_from_request():
     assert restored['judge_model_args']['api_key'] == 'judge-secret'
 
 
+def test_resume_mteb_injects_request_key_into_api_models_only():
+    from evalscope.service.blueprints.eval import _inject_resume_credentials
+
+    saved = {
+        'eval_config': {
+            'tool': 'mteb',
+            'models': [
+                {'model_name_or_path': 'local-encoder', 'api_key': '***'},
+                {'model_name': 'remote-reranker', 'api_base': 'https://api', 'api_key': '***'},
+            ],
+        }
+    }
+
+    restored = _inject_resume_credentials(saved, {'api_key': 'rag-secret'})
+
+    assert 'api_key' not in restored['eval_config']['models'][0]
+    assert restored['eval_config']['models'][1]['api_key'] == 'rag-secret'
+    assert saved['eval_config']['models'][1]['api_key'] == '***'
+
+
+def test_resume_mteb_does_not_reuse_redacted_nested_key():
+    from evalscope.service.blueprints.eval import _inject_resume_credentials
+
+    restored = _inject_resume_credentials(
+        {'eval_config': {'tool': 'mteb', 'models': [{'model_name': 'remote', 'api_key': '***'}]}},
+        {},
+    )
+
+    assert 'api_key' not in restored['eval_config']['models'][0]
+
+
 def test_resume_default_judge_reuses_current_request_model_key():
     from evalscope.service.blueprints.eval import _inject_resume_credentials
 

@@ -47,17 +47,16 @@ def _redirect_stderr_to_logger():
 
 
 def run_mteb_eval(config: MTEBToolConfig):
-    """Main entry point for MTEB evaluation.
-
-    Dispatch logic:
-        - 1 encoder + 1 cross-encoder, with at least one Retrieval task
-          → two-stage evaluation (encoder retrieval → cross-encoder rerank)
-        - 1 encoder + 1 cross-encoder without Retrieval tasks
-          → run cross-encoder directly (single-stage on Reranking tasks)
-        - otherwise → run each model independently in single-stage mode
-    """
+    """Main entry point for MTEB evaluation."""
     eval_args = config.eval
     models = config.models
+
+    # Normal-user tasks are marked offline by the service. Set the standard
+    # HuggingFace switches in the child process before MTEB loads any task.
+    if eval_args.offline or not eval_args.allow_download:
+        os.environ['HF_DATASETS_OFFLINE'] = '1'
+        os.environ['HF_HUB_OFFLINE'] = '1'
+        os.environ['TRANSFORMERS_OFFLINE'] = '1'
 
     encoders = [m for m in models if not m.is_cross_encoder]
     rerankers = [m for m in models if m.is_cross_encoder]

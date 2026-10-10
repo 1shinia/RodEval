@@ -184,7 +184,7 @@ class APIReranker(BaseReranker):
             self.rerank_url = 'https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank'
         else:
             self.rerank_url = api_base.rstrip('/')
-            if not self.rerank_url.endswith('/rerank'):
+            if not self.rerank_url.endswith(('/rerank', '/reranks')):
                 self.rerank_url = f'{self.rerank_url}/rerank'
 
         # Set up headers
@@ -263,8 +263,14 @@ class APIReranker(BaseReranker):
                     # DashScope native format: {model, input: {query, documents}, parameters: {top_n}}
                     payload: Dict[str, Any] = {
                         'model': self.model_name,
-                        'input': {'query': query, 'documents': documents},
-                        'parameters': {'top_n': len(documents), 'return_documents': False},
+                        'input': {
+                            'query': query,
+                            'documents': documents
+                        },
+                        'parameters': {
+                            'top_n': len(documents),
+                            'return_documents': False
+                        },
                     }
                 else:
                     payload = {
