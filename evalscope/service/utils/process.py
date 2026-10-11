@@ -480,7 +480,25 @@ def run_eval_wrapper(task_config: TaskConfig):
     single point (parent process) so concurrent task completions cannot
     deadlock on the database write lock.
     """
-    return run_task(task_config)
+    if not task_config.dataset_offline:
+        return run_task(task_config)
+
+    offline_env = {
+        'EVALSCOPE_DATASET_OFFLINE': '1',
+        'HF_DATASETS_OFFLINE': '1',
+        'HF_HUB_OFFLINE': '1',
+        'TRANSFORMERS_OFFLINE': '1',
+    }
+    previous = {key: os.environ.get(key) for key in offline_env}
+    try:
+        os.environ.update(offline_env)
+        return run_task(task_config)
+    finally:
+        for key, old_value in previous.items():
+            if old_value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old_value
 
 
 def run_perf_wrapper(perf_args: PerfArguments):

@@ -107,6 +107,10 @@ class RemoteDataLoader(DataLoader):
         if os.path.exists(dataset_cache_dir):
             dataset = datasets.load_from_disk(dataset_cache_dir)
         else:
+            if os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on'):
+                raise RuntimeError(
+                    f'数据集 {path} 尚未由管理员准备；普通用户只能离线使用服务器已缓存的数据集。'
+                )
             logger.info(
                 f'Loading dataset {path} from {self.data_source} > subset: {self.subset} > split: {self.split} ...'
             )

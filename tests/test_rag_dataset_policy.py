@@ -31,3 +31,53 @@ def test_non_mteb_rag_tools_are_not_changed():
 
     assert result == config
     assert result is not config
+
+
+def test_rag_offline_preflight_reports_missing_cache_before_evaluation():
+    from evalscope.backend.rag_eval.mteb.task_template import _preflight_offline_tasks
+
+    class Metadata:
+        name = 'STSBenchmark'
+
+    class MissingCacheTask:
+        metadata = Metadata()
+        data_loaded = False
+
+        def load_data(self):
+            raise FileNotFoundError('cached dataset files are missing')
+
+    try:
+        _preflight_offline_tasks([MissingCacheTask()], offline=True, allow_download=False)
+    except RuntimeError as exc:
+        assert 'RAG 数据集缓存不可用' in str(exc)
+        assert 'STSBenchmark' in str(exc)
+    else:
+        raise AssertionError('missing RAG cache must fail before evaluation')
+
+
+def test_rag_offline_guard_enables_and_restores_runtime_flags(monkeypatch):
+    from evalscope.backend.rag_eval.mteb.task_template import _offline_dataset_guard
+
+    from datasets import config as datasets_config
+    from huggingface_hub import constants as hf_constants
+
+    monkeypatch.delenv('HF_DATASETS_OFFLINE', raising=False)
+    monkeypatch.delenv('HF_HUB_OFFLINE', raising=False)
+    monkeypatch.delenv('TRANSFORMERS_OFFLINE', raising=False)
+    monkeypatch.setattr(datasets_config, 'HF_HUB_OFFLINE', False)
+    monkeypatch.setattr(datasets_config, 'HF_DATASETS_OFFLINE', False)
+    monkeypatch.setattr(hf_constants, 'HF_HUB_OFFLINE', False)
+
+    with _offline_dataset_guard(True):
+        import os
+
+        assert os.environ['HF_DATASETS_OFFLINE'] == '1'
+        assert os.environ['HF_HUB_OFFLINE'] == '1'
+        assert os.environ['TRANSFORMERS_OFFLINE'] == '1'
+        assert datasets_config.HF_HUB_OFFLINE is True
+        assert datasets_config.HF_DATASETS_OFFLINE is True
+        assert hf_constants.HF_HUB_OFFLINE is True
+
+    assert datasets_config.HF_HUB_OFFLINE is False
+    assert datasets_config.HF_DATASETS_OFFLINE is False
+    assert hf_constants.HF_HUB_OFFLINE is False

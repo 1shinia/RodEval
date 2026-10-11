@@ -7,7 +7,7 @@ from tabulate import tabulate
 from typing import Any, Dict, List
 
 from evalscope.config import TaskConfig
-from evalscope.constants import EvalBackend, EvalType
+from evalscope.constants import DEFAULT_DATASET_CACHE_DIR, EvalBackend, EvalType, HubType
 from evalscope.report.combinator import get_data_frame, get_report_list
 from evalscope.utils.logger import get_logger
 from ..time_utils import utc_now_iso
@@ -46,6 +46,44 @@ _TERMINAL_PROGRESS_STATUSES = set(TERMINAL_STATES) | {'error', 'cancelled'}
 #: Accepted values for the ``description`` query param on the benchmark list
 #: endpoint.  See ``build_benchmark_entry`` for the payload each mode produces.
 _DESCRIPTION_MODES = ('full', 'preview', 'none')
+
+_NORMAL_USER_DATASET_FORBIDDEN_KEYS = {
+    'cache_dir', 'data_dir', 'data_files', 'dataset_dir', 'dataset_hub',
+    'dataset_id', 'force_redownload', 'local_path', 'source_dataset_hub',
+    'source_dataset_id',
+}
+
+
+def _strip_normal_user_dataset_overrides(value):
+    """Remove download-source and server-path overrides from nested dataset args."""
+    if isinstance(value, dict):
+        return {
+            key: _strip_normal_user_dataset_overrides(item)
+            for key, item in value.items()
+            if key not in _NORMAL_USER_DATASET_FORBIDDEN_KEYS
+        }
+    if isinstance(value, list):
+        return [_strip_normal_user_dataset_overrides(item) for item in value]
+    return value
+
+
+def _apply_eval_dataset_policy(data: dict, is_admin: bool) -> dict:
+    """Force normal LLM/VLM evaluations onto the managed offline dataset cache."""
+    import copy
+
+    normalized = copy.deepcopy(data)
+    if is_admin or normalized.get('eval_backend') in (
+        EvalBackend.RAG_EVAL, EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL,
+    ):
+        return normalized
+
+    normalized['dataset_offline'] = True
+    normalized['dataset_hub'] = HubType.MODELSCOPE
+    normalized['dataset_dir'] = DEFAULT_DATASET_CACHE_DIR
+    normalized['dataset_args'] = _strip_normal_user_dataset_overrides(
+        normalized.get('dataset_args') or {}
+    )
+    return normalized
 
 
 def _apply_rag_dataset_policy(eval_config: dict, is_admin: bool) -> dict:
@@ -631,8 +669,9 @@ def run_evaluation():
     """
     # --- Concurrency guard (atomic check + reserve) ---
     data, task_id = _parse_request()
+    from .auth import get_current_role, get_current_user_id
+    data = _apply_eval_dataset_policy(data, get_current_role() == 'admin')
     model = data.get('model', '')
-    from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
     reservation = try_reserve_new_slot(task_id, 'eval', model=model, user_id=uid)
@@ -832,8 +871,9 @@ def launch_evaluation():
     /progress and use the SSE log stream (/log/stream) for real-time updates.
     """
     data, task_id = _parse_request()
+    from .auth import get_current_role, get_current_user_id
+    data = _apply_eval_dataset_policy(data, get_current_role() == 'admin')
     model = data.get('model', '')
-    from .auth import get_current_user_id
     from ..utils.process import get_user_slots
     uid = get_current_user_id()
     reservation = try_reserve_new_slot(task_id, 'eval', model=model, user_id=uid)
@@ -1057,9 +1097,10 @@ def resume_evaluation():
             }), 500
 
         # Re-inject API keys from this request only; persisted values are redacted.
-        task_config = TaskConfig.from_dict(_inject_resume_credentials(
-            task_config.to_dict(), data
-        ))
+        from .auth import get_current_role
+        resumed_data = _inject_resume_credentials(task_config.to_dict(), data)
+        resumed_data = _apply_eval_dataset_policy(resumed_data, get_current_role() == 'admin')
+        task_config = TaskConfig.from_dict(resumed_data)
         task_config.use_cache = work_dir
         task_config.work_dir = work_dir
 
@@ -1559,6 +1600,7 @@ def launch_eval_batch():
 
     from .auth import get_current_user_id, get_current_role
     current_uid = get_current_user_id()
+    data = _apply_eval_dataset_policy(data, get_current_role() == 'admin')
 
     if is_resume and batch_id in _eval_batch_state and _eval_batch_state[batch_id].get('status') == 'running':
         return jsonify({'error': 'Batch already running'}), 409
@@ -1598,6 +1640,7 @@ def launch_eval_batch():
         'datasets': data.get('datasets', []),
         'dataset_hub': data.get('dataset_hub'),
         'dataset_dir': data.get('dataset_dir'),
+        'dataset_offline': data.get('dataset_offline', False),
         'random_sample': data.get('random_sample'),
         'limit': data.get('limit'),
         'eval_batch_size': data.get('eval_batch_size', 1),
@@ -1750,7 +1793,7 @@ def launch_eval_batch():
 
                     # Merge shared config（只列 TaskConfig 认得的键：生成参数走 generation_config、
                     # 裁判走 judge_model_args；平铺的采样/裁判/系统提示词键会被 pydantic 静默忽略）
-                    for key in ('datasets', 'dataset_hub', 'dataset_dir', 'random_sample',
+                    for key in ('datasets', 'dataset_hub', 'dataset_dir', 'dataset_offline', 'random_sample',
                                 'limit', 'eval_batch_size', 'repeats',
                                 'timeout', 'stream', 'seed', 'judge_strategy',
                                 'ignore_errors', 'use_sandbox',

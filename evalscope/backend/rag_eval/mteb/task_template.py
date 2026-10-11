@@ -57,23 +57,90 @@ def run_mteb_eval(config: MTEBToolConfig):
         os.environ['HF_DATASETS_OFFLINE'] = '1'
         os.environ['HF_HUB_OFFLINE'] = '1'
         os.environ['TRANSFORMERS_OFFLINE'] = '1'
+        # These libraries cache offline flags at import time. RAG imports MTEB
+        # before this function runs, so update the live constants as well.
+        from datasets import config as datasets_config
+        from huggingface_hub import constants as hf_constants
+        datasets_config.HF_HUB_OFFLINE = True
+        datasets_config.HF_DATASETS_OFFLINE = True
+        hf_constants.HF_HUB_OFFLINE = True
 
     encoders = [m for m in models if not m.is_cross_encoder]
     rerankers = [m for m in models if m.is_cross_encoder]
 
     with _redirect_stderr_to_logger():
-        if len(encoders) == 1 and len(rerankers) == 1:
-            tasks = resolve_tasks(eval_args)
-            has_retrieval = any(getattr(t.metadata, 'type', None) == 'Retrieval' for t in tasks)
-            if has_retrieval:
-                return two_stage_eval(encoders[0], rerankers[0], eval_args)
-            else:
-                return one_stage_eval(rerankers[0], eval_args)
+        with _offline_dataset_guard(eval_args.offline or not eval_args.allow_download):
+            if len(encoders) == 1 and len(rerankers) == 1:
+                tasks = resolve_tasks(eval_args)
+                has_retrieval = any(getattr(t.metadata, 'type', None) == 'Retrieval' for t in tasks)
+                if has_retrieval:
+                    return two_stage_eval(encoders[0], rerankers[0], eval_args)
+                else:
+                    return one_stage_eval(rerankers[0], eval_args)
 
-        results = None
-        for model_config in models:
-            results = one_stage_eval(model_config, eval_args)
-        return results
+            results = None
+            for model_config in models:
+                results = one_stage_eval(model_config, eval_args)
+            return results
+
+
+@contextmanager
+def _offline_dataset_guard(enabled: bool):
+    """Enable Hugging Face offline mode, including import-time cached flags."""
+    if not enabled:
+        yield
+        return
+
+    from datasets import config as datasets_config
+    from huggingface_hub import constants as hf_constants
+
+    env_names = ('HF_DATASETS_OFFLINE', 'HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE')
+    previous_env = {name: os.environ.get(name) for name in env_names}
+    previous_flags = (
+        datasets_config.HF_HUB_OFFLINE,
+        datasets_config.HF_DATASETS_OFFLINE,
+        hf_constants.HF_HUB_OFFLINE,
+    )
+    try:
+        os.environ.update({name: '1' for name in env_names})
+        datasets_config.HF_HUB_OFFLINE = True
+        datasets_config.HF_DATASETS_OFFLINE = True
+        hf_constants.HF_HUB_OFFLINE = True
+        yield
+    finally:
+        for name, value in previous_env.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        (
+            datasets_config.HF_HUB_OFFLINE,
+            datasets_config.HF_DATASETS_OFFLINE,
+            hf_constants.HF_HUB_OFFLINE,
+        ) = previous_flags
+
+
+def _preflight_offline_tasks(tasks: list, offline: bool, allow_download: bool) -> None:
+    """Fail early with a clear message when an offline MTEB cache is unusable."""
+    if not (offline or not allow_download):
+        return
+
+    missing = []
+    for task in tasks:
+        task_name = getattr(getattr(task, 'metadata', None), 'name', repr(task))
+        try:
+            task.data_loaded = False
+            with _offline_dataset_guard(True):
+                task.load_data()
+        except Exception as exc:
+            missing.append(f'{task_name}: {exc}')
+
+    if missing:
+        details = '; '.join(missing)
+        raise RuntimeError(
+            'RAG 数据集缓存不可用；普通用户只能使用管理员已准备的本地缓存。'
+            f' 请联系管理员准备后再试。详情：{details}'
+        )
 
 
 def resolve_tasks(eval_args: MTEBEvalConfig) -> list:
@@ -171,6 +238,7 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
 
     model = load_model(model_args)
     tasks = resolve_tasks(eval_args)
+    _preflight_offline_tasks(tasks, eval_args.offline, eval_args.allow_download)
 
     work_dir = eval_args.output_folder
     task_names = [t.metadata.name for t in tasks]
@@ -245,7 +313,10 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
             _update_config_limits(work_dir, actual_limits)
 
     logger.info(f'Resolved {total_tasks} task(s): {task_names}')
-    logger.info(f'Starting evaluation (data will be downloaded from HF mirror on first run)...')
+    if eval_args.offline or not eval_args.allow_download:
+        logger.info('Starting evaluation with server-prepared local dataset cache (online download disabled)...')
+    else:
+        logger.info('Starting evaluation (data may be downloaded from HF mirror on first run)...')
     eval_kwargs = _build_evaluate_kwargs(eval_args, eval_args.output_folder)
 
     # ── Update progress: evaluating ─────────────────────────────────
@@ -297,6 +368,7 @@ def two_stage_eval(
     reranker = load_model(reranker_args)
 
     tasks = resolve_tasks(eval_args)
+    _preflight_offline_tasks(tasks, eval_args.offline, eval_args.allow_download)
 
     stage1_path = os.path.join(eval_args.output_folder, 'stage1')
     stage2_path = os.path.join(eval_args.output_folder, 'stage2')

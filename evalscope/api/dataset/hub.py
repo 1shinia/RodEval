@@ -11,6 +11,17 @@ from evalscope.utils.logger import get_logger
 logger = get_logger()
 
 
+def _dataset_offline() -> bool:
+    return os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on')
+
+
+def _raise_if_dataset_hub_access_is_offline(data_id_or_path: str) -> None:
+    if _dataset_offline():
+        raise RuntimeError(
+            f'数据集 {data_id_or_path} 尚未由管理员准备；普通用户只能离线使用服务器已缓存的数据集。'
+        )
+
+
 @dataclass(frozen=True)
 class DatasetHub:
     """Small hub handle shared by dataset loaders and benchmark-specific media resolvers."""
@@ -56,6 +67,7 @@ def load_dataset_from_hub(
     **kwargs,
 ):
     """Load a dataset split from ModelScope, Hugging Face, or a local dataset path."""
+    _raise_if_dataset_hub_access_is_offline(data_id_or_path)
     import datasets
     from datasets import DownloadMode as HFDownloadMode
     from modelscope import MsDataset
@@ -187,6 +199,8 @@ def download_dataset_file(
 ) -> str:
     """Download or resolve a single file from a dataset hub."""
     data_source = data_source or HubType.MODELSCOPE
+    if data_source != HubType.LOCAL:
+        _raise_if_dataset_hub_access_is_offline(data_id_or_path)
 
     if data_source == HubType.HUGGINGFACE:
         from huggingface_hub import hf_hub_download
