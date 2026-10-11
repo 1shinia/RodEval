@@ -19,6 +19,23 @@ from evalscope.utils.logger import get_logger
 
 logger = get_logger()
 
+DEFAULT_API_BATCH_SIZE = 20
+MAX_API_BATCH_SIZE = 20
+
+
+def _effective_api_batch_size(requested_batch_size: Optional[int]) -> int:
+    """Return the safe per-request batch size for remote embedding APIs."""
+    requested = requested_batch_size or DEFAULT_API_BATCH_SIZE
+    return min(requested, MAX_API_BATCH_SIZE)
+
+
+def _validate_embedding_response_count(batch_texts: List[str], response: List[Any]) -> None:
+    """Reject a provider response that cannot be aligned to input texts."""
+    if len(response) != len(batch_texts):
+        raise ValueError('Embedding response count mismatch: '
+                         f'expected {len(batch_texts)}, got {len(response)}')
+
+
 try:
     from mteb.types import PromptType
     _PROMPT_TYPE_QUERY = PromptType.query
@@ -262,8 +279,14 @@ class APIEncoder(BaseEncoder):
         self.prompt = prompt
         self.prompts = prompts or {}
         self.framework = ['API']
-        # unitoken 等网关限制单次 embeddings 请求 batch 上限 20，超限报 400
-        self.batch_size = min(batch_size, 20) if batch_size else 20
+        self.requested_batch_size = batch_size or DEFAULT_API_BATCH_SIZE
+        self.batch_size = _effective_api_batch_size(batch_size)
+        logger.info(
+            'Embedding batch size: requested=%s, effective=%s, cap=%s',
+            self.requested_batch_size,
+            self.batch_size,
+            MAX_API_BATCH_SIZE,
+        )
         self.max_seq_length = max_seq_length
         # Optional path to progress.json for incremental encode progress
         self.progress_path: Optional[str] = None
@@ -325,6 +348,7 @@ class APIEncoder(BaseEncoder):
             if prompt is not None:
                 batch_texts = [prompt + text for text in batch_texts]
             response = self._client.embed_documents(batch_texts, chunk_size=self.batch_size, **encode_kwargs)
+            _validate_embedding_response_count(batch_texts, response)
             embeddings.extend(response)
             _update_progress(self.progress_path, i + 1, total_batches)
         return torch.tensor(embeddings)

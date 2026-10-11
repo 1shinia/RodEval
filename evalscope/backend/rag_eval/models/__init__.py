@@ -94,7 +94,7 @@ def load_model(config):
             prompt=getattr(config, 'prompt', None),
             prompts=getattr(config, 'prompts', None),
             revision=getattr(config, 'revision', 'master'),
-            batch_size=kwargs.get('encode_kwargs', {}).get('batch_size', 32),
+            batch_size=kwargs.get('encode_kwargs', {}).get('batch_size', 20),
         )
 
     # Route to local models

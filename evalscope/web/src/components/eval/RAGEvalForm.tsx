@@ -90,14 +90,13 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
   const [ragLanguages, setRagLanguages] = useState('')
   const [ragLimit, setRagLimit] = useState('')
   const [ragRandomSample, setRagRandomSample] = useState(false)
-  const [ragDimension, setRagDimension] = useState('')
   const [ragBatchSize, setRagBatchSize] = useState('')
   const [ragTopK, setRagTopK] = useState('')
 
   const [ragTwoStage, setRagTwoStage] = useState(false)
   const [ragEncoderModel, setRagEncoderModel] = useState('')
   const [ragPrompt, setRagPrompt] = useState('')
-  const [ragDataHub, setRagDataHub] = useState('modelscope')
+  const [ragDataHub, setRagDataHub] = useState('huggingface')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // ── RAGAS fields ──
@@ -237,6 +236,12 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
     if (!modelName) mtebErrors.ragModelPath = 'Required'
     if (!apiBase) mtebErrors.ragApiBase = 'Required for API models'
     if (!apiKey) mtebErrors.ragApiKey = 'Required for API models'
+    if (ragBatchSize) {
+      const batchSize = Number(ragBatchSize)
+      if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 20) {
+        mtebErrors.ragBatchSize = '必须是 1～20 的正整数'
+      }
+    }
     if (Object.keys(mtebErrors).length > 0) {
       setErrors(mtebErrors)
       return
@@ -249,7 +254,6 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
     }
     if (ragPrompt.trim()) modelConfig.prompt = ragPrompt.trim()
     modelConfig.api_key = apiKey
-    if (ragDimension) modelConfig.dimensions = Number(ragDimension)
     if (ragBatchSize) modelConfig.encode_kwargs = { batch_size: Number(ragBatchSize) }
 
     const models: Record<string, unknown>[] = [modelConfig]
@@ -310,23 +314,15 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
                 onChange={e => { setRagApiKey(e.target.value); if (errors.ragApiKey) setErrors(p => ({ ...p, ragApiKey: '' })) }}
                 className={inputClass(errors.ragApiKey)} placeholder="请输入 API Key" />
             </FormField>
-            {ragTool === 'embedding' && (
-              <FormField label={t('eval.ragDimension')}>
-                <input type="number" value={ragDimension}
-                  onChange={e => setRagDimension(e.target.value.replace(/[^0-9]/g, ''))}
-                  className={FORM_INPUT_CLASS} placeholder="模型 API 默认值" />
-              </FormField>
-            )}
-            <FormField label={t('eval.ragBatchSize')} hint={t('eval.ragBatchSizeHint')}>
+            <FormField label={t('eval.ragBatchSize')} error={errors.ragBatchSize}>
               <input type="number" value={ragBatchSize}
                 onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
-                className={FORM_INPUT_CLASS} placeholder="默认 20，网关上限 20" />
+                className={inputClass(errors.ragBatchSize)} placeholder="默认20，上限20" min={1} max={20} />
             </FormField>
 
             {isAdmin && (
-              <FormField label="数据集来源" hint={t('eval.ragDatasetSourceAdminHint')}>
+              <FormField label="数据集来源">
                 <select value={ragDataHub} onChange={e => setRagDataHub(e.target.value)} className={FORM_INPUT_CLASS}>
-                  <option value="modelscope">ModelScope</option>
                   <option value="huggingface">HuggingFace</option>
                 </select>
               </FormField>
