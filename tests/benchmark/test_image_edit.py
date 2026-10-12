@@ -8,6 +8,7 @@ import unittest
 from evalscope.constants import EvalType, JudgeStrategy, ModelTask
 from evalscope.utils.logger import get_logger
 from tests.common import TestBenchmark
+from tests.utils import aigc_integration_enabled
 
 logger = get_logger()
 
@@ -46,6 +47,8 @@ class TestImageEditBenchmark(TestBenchmark):
             'debug': True,
         }
 
+    @unittest.skipUnless(aigc_integration_enabled(),
+                         'set EVALSCOPE_RUN_AIGC_INTEGRATION=1 to run real AIGC integration tests')
     def test_gedit(self):
         """Test GEdit dataset."""
         dataset_args = {
@@ -55,6 +58,8 @@ class TestImageEditBenchmark(TestBenchmark):
         }
         self._run_dataset_test('gedit', dataset_args=dataset_args, use_cache='outputs/20250829_150058')
 
+    @unittest.skipUnless(aigc_integration_enabled(),
+                         'set EVALSCOPE_RUN_AIGC_INTEGRATION=1 to run real AIGC integration tests')
     def test_gedit_local(self):
         dataset_args = {
             'extra_params':{

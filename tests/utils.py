@@ -11,3 +11,8 @@ def test_level_list():
         TEST_LEVEL_LIST = [int(x) for x in os.environ[TEST_LEVEL_LIST_STR].split(',')]
 
     return TEST_LEVEL_LIST
+
+
+def aigc_integration_enabled():
+    """Return whether tests that may download AIGC models may run."""
+    return os.environ.get('EVALSCOPE_RUN_AIGC_INTEGRATION') == '1'

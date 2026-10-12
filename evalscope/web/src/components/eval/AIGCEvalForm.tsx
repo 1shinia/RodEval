@@ -118,7 +118,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [guidance, setGuidance] = useState('7.5')
   const [negativePrompt, setNegativePrompt] = useState('')
   const [seed, setSeed] = useState('42')
-  const [batchSize, setBatchSize] = useState('1')
 
   // Video-specific params
   const [numFrames, setNumFrames] = useState('16')
@@ -198,7 +197,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       guidance_scale: Number(guidance) || 7.5,
       negative_prompt: negativePrompt.trim(),
       seed: Number(seed) || 42,
-      batch_size: Number(batchSize) || 1,
     }
 
     if (tool === 'txt2video') {
@@ -389,12 +387,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           <input type="number" value={seed}
             onChange={e => setSeed(e.target.value.replace(/[^0-9]/g, ''))}
             className={FORM_INPUT_CLASS} placeholder="42" />
-        </FormField>
-
-        <FormField label={t('aigc.batchSize')}>
-          <input type="number" value={batchSize}
-            onChange={e => setBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
-            className={FORM_INPUT_CLASS} placeholder="1" />
         </FormField>
 
         {tool === 'txt2video' && (<>

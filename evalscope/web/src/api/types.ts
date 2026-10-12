@@ -328,7 +328,6 @@ export interface AIGCGenerateConfig {
   guidance_scale: number
   negative_prompt?: string
   seed?: number
-  batch_size?: number
 }
 
 export interface AIGCEvalConfig {

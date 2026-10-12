@@ -35,7 +35,6 @@ export function AIGCEvalForm({ onResult }: AIGCEvalFormProps) {
   const [guidanceScale, setGuidanceScale] = useState(7.5);
   const [negativePrompt, setNegativePrompt] = useState('');
   const [seed, setSeed] = useState(42);
-  const [batchSize, setBatchSize] = useState(1);
 
   // Eval config
   const [metrics, setMetrics] = useState<string[]>(['clip_score']);
@@ -66,7 +65,6 @@ export function AIGCEvalForm({ onResult }: AIGCEvalFormProps) {
           guidance_scale: guidanceScale,
           negative_prompt: negativePrompt || undefined,
           seed,
-          batch_size: batchSize,
         },
         eval: {
           metrics,
@@ -110,7 +108,7 @@ export function AIGCEvalForm({ onResult }: AIGCEvalFormProps) {
 
               <div>
                 <Label htmlFor="modelType">{t('aigc.modelType', '模型类型')}</Label>
-                <Select value={modelType} onValueChange={(v) => setModelType(v as any)}>
+                <Select value={modelType} onValueChange={(v) => setModelType(v as 'txt2img' | 'txt2video' | 'img2img')}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -237,17 +235,7 @@ export function AIGCEvalForm({ onResult }: AIGCEvalFormProps) {
                 />
               </div>
 
-              <div>
-                <Label htmlFor="batchSize">{t('aigc.batchSize', '批次大小')}</Label>
-                <Input
-                  id="batchSize"
-                  type="number"
-                  value={batchSize}
-                  onChange={(e) => setBatchSize(parseInt(e.target.value.replace(/[^0-9]/g, '')) || 1)}
-                  min={1}
-                  max={16}
-                />
-              </div>
+
             </div>
 
             <div>

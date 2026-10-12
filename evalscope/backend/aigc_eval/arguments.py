@@ -60,7 +60,7 @@ class AIGCGenerateConfig(BaseArgument):
     guidance_scale: float = Field(7.5, ge=1.0, le=30.0, description='Guidance scale (CFG)')
     negative_prompt: str = Field('', description='Negative prompt')
     seed: int = Field(42, description='Random seed')
-    batch_size: int = Field(1, ge=1, le=8, description='Batch size')
+
     # Video-specific parameters
     num_frames: int = Field(16, ge=1, le=128, description='Number of frames (video only)')
     fps: int = Field(8, ge=1, le=60, description='Frames per second (video only)')

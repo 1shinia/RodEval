@@ -9,7 +9,8 @@ from evalscope.config import TaskConfig
 from evalscope.constants import EvalType, JudgeStrategy, ModelTask, OutputType
 from evalscope.run import run_task
 from evalscope.utils.logger import get_logger
-from tests.utils import test_level_list
+from tests.utils import aigc_integration_enabled
+from tests.utils import test_level_list as get_test_level_list
 
 os.environ['EVALSCOPE_LOG_LEVEL'] = 'DEBUG'
 
@@ -17,7 +18,10 @@ logger = get_logger()
 
 
 class TestRun(unittest.TestCase):
-    @unittest.skipUnless(0 in test_level_list(), 'skip test in current test level')
+    @unittest.skipUnless(
+        aigc_integration_enabled() and 0 in get_test_level_list(),
+        'set EVALSCOPE_RUN_AIGC_INTEGRATION=1 to run real AIGC integration tests',
+    )
     def test_run_general(self):
         from evalscope.config import TaskConfig
 
@@ -46,6 +50,8 @@ class TestRun(unittest.TestCase):
 
         run_task(task_cfg=task_cfg)
 
+    @unittest.skipUnless(aigc_integration_enabled(),
+                         'set EVALSCOPE_RUN_AIGC_INTEGRATION=1 to run real AIGC integration tests')
     def test_run_local_evalmuse(self):
         from evalscope import TaskConfig, run_task
 
@@ -64,7 +70,10 @@ class TestRun(unittest.TestCase):
 
         run_task(task_cfg=task_cfg)
 
-    @unittest.skipUnless(0 in test_level_list(), 'skip test in current test level')
+    @unittest.skipUnless(
+        aigc_integration_enabled() and 0 in get_test_level_list(),
+        'set EVALSCOPE_RUN_AIGC_INTEGRATION=1 to run real AIGC integration tests',
+    )
     def test_run_benchmark(self):
 
         task_cfg = TaskConfig(
@@ -104,7 +113,10 @@ class TestRun(unittest.TestCase):
 
         run_task(task_cfg=task_cfg)
 
-    @unittest.skipUnless(0 in test_level_list(), 'skip test in current test level')
+    @unittest.skipUnless(
+        aigc_integration_enabled() and 0 in get_test_level_list(),
+        'set EVALSCOPE_RUN_AIGC_INTEGRATION=1 to run real AIGC integration tests',
+    )
     def test_run_benchmark_flux(self):
 
         task_cfg = TaskConfig(
