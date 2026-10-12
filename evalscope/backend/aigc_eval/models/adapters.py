@@ -213,21 +213,28 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
         payload: Dict[str, Any] = {
             'model': self.model_name,
             'prompt': prompt,
-            'n': 1,
-            'size': f'{width}x{height}',
         }
 
         if tool == 'txt2video':
+            # Video APIs commonly use resolution/aspect-ratio rather than the
+            # image API's WxH ``size`` field.
+            payload['resolution'] = params.get('resolution') or _w_h_to_resolution(width, height)
+            payload['ratio'] = params.get('ratio') or _wh_to_aspect_ratio(width, height)
             num_frames = params.get('num_frames', 16)
             fps = params.get('fps', 8)
             duration = num_frames // fps if fps > 0 else 5
             if duration >= 2:
                 payload['duration'] = duration
-            if params.get('resolution'):
-                payload['resolution'] = params['resolution']
-            if params.get('ratio'):
-                payload['ratio'] = params['ratio']
-        elif tool == 'img2img':
+        else:
+            payload['n'] = 1
+            payload['size'] = f'{width}x{height}'
+            for name in ('num_inference_steps', 'guidance_scale', 'seed'):
+                if params.get(name) is not None:
+                    payload[name] = params[name]
+            if params.get('negative_prompt'):
+                payload['negative_prompt'] = params['negative_prompt']
+
+        if tool == 'img2img':
             if params.get('strength'):
                 payload['strength'] = params['strength']
             ref_b64 = params.get('reference_image_b64')
@@ -334,16 +341,18 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
     # ── Retry ─────────────────────────────────────────────────────
 
     def _handle_retry(self, response, url: str, headers: dict, payload: dict, **params) -> requests.Response:
-        """On 400 response, try falling back size from WxH to resolution string."""
+        """Retry a size-related 400 with the provider's resolution field."""
         if response.status_code == 400:
             err_text = response.text.lower()
             if any(kw in err_text for kw in ('size', 'resolution', 'invalid')):
                 width = params.get('width', 1024)
                 height = params.get('height', 1024)
                 alt = _w_h_to_resolution(width, height)
-                logger.info('Size %s rejected (400), retrying with %s', payload.get('size'), alt)
-                payload['size'] = alt
+                field = 'resolution' if params.get('tool') == 'txt2video' else 'size'
+                logger.info('Request %s rejected (400), retrying with %s=%s', field, alt, alt)
+                payload[field] = alt
                 return requests.post(url, json=payload, headers=headers, timeout=300)
+            logger.warning('API request failed with HTTP 400: %s', response.text[:1000])
         return response
 
 

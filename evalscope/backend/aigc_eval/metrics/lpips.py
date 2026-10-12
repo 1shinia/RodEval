@@ -4,10 +4,10 @@ Measures perceptual quality of generated images using AlexNet features.
 Lower LPIPS = higher perceptual quality (less distortion).
 
 Two modes:
-  - Self-comparison (default): compare against JPEG-compressed version of self,
-    measures image detail richness / fidelity.
   - Reference-comparison (img2img): compare against a reference image,
     measures how much the generated image differs from the reference.
+  - Self-comparison (legacy API compatibility): compare against a JPEG-compressed
+    version of self. This mode is not used by the txt2img evaluation workflow.
 
 Score range: approximately 0.0 (identical) to 1.0 (completely different).
 Uses cosine distance on L2-normalized AlexNet features across 5 layers,

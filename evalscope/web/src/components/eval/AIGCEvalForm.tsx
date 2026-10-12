@@ -24,9 +24,13 @@ const VIDEO_DATASETS = [
   { value: '', label: '不使用（仅用自定义提示词）' },
 ]
 
-const IMAGE_METRICS = [
+const TEXT_TO_IMAGE_METRICS = [
   { value: 'clip_score', label: 'CLIP Score' },
-  { value: 'lpips', label: 'LPIPS (感知质量)' },
+]
+
+const IMAGE_TO_IMAGE_METRICS = [
+  { value: 'clip_score', label: 'CLIP Score' },
+  { value: 'lpips', label: '参考图感知距离' },
 ]
 
 const VIDEO_METRICS = [
@@ -116,7 +120,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [height, setHeight] = useState('1024')
   const [steps, setSteps] = useState('50')
   const [guidance, setGuidance] = useState('7.5')
-  const [negativePrompt, setNegativePrompt] = useState('')
+
   const [seed, setSeed] = useState('42')
 
   // Video-specific params
@@ -147,6 +151,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     if (!file) {
       setReferenceImageBase64('')
       setReferenceImageName('')
+      setMetrics(previous => previous.filter(metric => metric !== 'lpips'))
       return
     }
     setReferenceImageName(file.name)
@@ -195,7 +200,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       height: Number(height) || 512,
       num_inference_steps: Number(steps) || 50,
       guidance_scale: Number(guidance) || 7.5,
-      negative_prompt: negativePrompt.trim(),
+
       seed: Number(seed) || 42,
     }
 
@@ -314,7 +319,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
         <>
-          <FormField label="API 提供商">
+          <FormField label="API 提供商" className="md:col-span-2">
             <select value={provider} onChange={e => setProvider(e.target.value as typeof provider)} className={FORM_INPUT_CLASS}>
               {PROVIDER_OPTIONS.map(p => (
                 <option key={p.value} value={p.value}>{p.label}</option>
@@ -322,7 +327,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
             </select>
           </FormField>
 
-          <FormField label={t('eval.modelName')} required error={errors.model}>
+          <FormField label={t('eval.modelName')} required error={errors.model} className="md:col-span-2">
             <input value={model}
               onChange={e => { setModel(e.target.value.trimStart()); if (errors.model) setErrors(p => ({ ...p, model: '' })) }}
               className={FORM_INPUT_CLASS} placeholder={currentProvider.modelPlaceholder} />
@@ -334,7 +339,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
               className={FORM_INPUT_CLASS} placeholder={currentProvider.apiPlaceholder} />
           </FormField>
 
-          <FormField label={t('eval.apiKey')} required error={errors.apiKey}>
+          <FormField label={t('eval.apiKey')} required error={errors.apiKey} className="md:col-span-2">
             <input type="password" value={apiKey}
               onChange={e => { setApiKey(e.target.value); if (errors.apiKey) setErrors(p => ({ ...p, apiKey: '' })) }}
               className={FORM_INPUT_CLASS} placeholder="sk-..." />
@@ -435,20 +440,14 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
             placeholder="例如：把背景换成海边日落，保持人物不变..." />
         </FormField>
       ) : (
-        <FormField label="自定义提示词（可选）" hint="留空则使用上方选择的数据集">
+        <FormField label="自定义提示词（可选）" hint="留空则使用下方选择的数据集">
           <textarea value={customPrompt}
             onChange={e => setCustomPrompt(e.target.value)}
             className={FORM_INPUT_CLASS + ' h-20 resize-none'}
-            placeholder={tool === 'txt2video' ? '例如：一架无人机飞过雪山湖泊上空，航拍视角...' : '例如：一只橘猫坐在窗台上看着夕阳，温暖的色调...'} />
+            placeholder={tool === 'txt2video' ? '例如：一架无人机飞过雪山湖泊上空，航拍视角...' : '例如：一只小狗坐在窗台上看着夕阳，温暖的色调...'} />
         </FormField>
       )}
 
-      <FormField label={t('aigc.negativePrompt')}>
-        <textarea value={negativePrompt}
-          onChange={e => setNegativePrompt(e.target.value)}
-          className={FORM_INPUT_CLASS + ' h-20 resize-none'}
-          placeholder="low quality, blurry, distorted..." />
-      </FormField>
 
       {/* Evaluation Configuration */}
       <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2 pt-4">
@@ -488,7 +487,11 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
       <FormField label={t('aigc.metrics')}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {(tool === 'txt2video' ? VIDEO_METRICS : IMAGE_METRICS).map(m => {
+          {(tool === 'txt2video'
+            ? VIDEO_METRICS
+            : tool === 'img2img' && referenceImageBase64
+              ? IMAGE_TO_IMAGE_METRICS
+              : TEXT_TO_IMAGE_METRICS).map(m => {
             const selected = metrics.includes(m.value)
             return (
               <label key={m.value} className="flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer">

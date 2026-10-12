@@ -1,11 +1,10 @@
 """Text-to-image model adapter using diffusers or API."""
 
 import logging
-from io import BytesIO
-from typing import Any, Dict, List
-
 import torch
+from io import BytesIO
 from PIL import Image
+from typing import Any, Dict, List
 
 from .adapters import create_adapter
 from .base import AIGCModelBase
@@ -32,9 +31,7 @@ class Txt2ImgModel(AIGCModelBase):
         try:
             from diffusers import StableDiffusionPipeline
         except ImportError:
-            raise ImportError(
-                'diffusers is required for local txt2img. Install with: pip install diffusers'
-            )
+            raise ImportError('diffusers is required for local txt2img. Install with: pip install diffusers')
 
         logger.info('Loading model: %s', self.model_name)
         dtype = torch.float16 if self.dtype == 'float16' else torch.float32
@@ -68,6 +65,9 @@ class Txt2ImgModel(AIGCModelBase):
                     tool=tool,
                     width=width,
                     height=height,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale,
+                    negative_prompt=negative_prompt,
                     seed=seed,
                 )
                 images.append(Image.open(BytesIO(img_bytes)).convert('RGB'))

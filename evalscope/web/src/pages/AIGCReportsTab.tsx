@@ -236,7 +236,7 @@ export default function AIGCReportsTab() {
                     <td className="px-4 py-3 text-right font-mono text-xs">
                       <div className="flex flex-col gap-0.5 items-end">
                         {report.clip_score_mean != null && <span className="text-[var(--accent)]">CLIP: {report.clip_score_mean.toFixed(2)}</span>}
-                        {report.lpips_mean != null && <span className="text-[var(--text)]">LPIPS: {report.lpips_mean.toFixed(4)}</span>}
+                        {report.lpips_mean != null && <span className="text-[var(--text)]">参考图感知距离: {report.lpips_mean.toFixed(4)}</span>}
                         {report.fvd != null && <span className="text-[var(--warning-color)]">FVD: {report.fvd.toFixed(2)}</span>}
                         {report.clip_score_mean == null && report.lpips_mean == null && report.fvd == null && <span className="text-[var(--text-dim)]">-</span>}
                         {report.has_errors ? (

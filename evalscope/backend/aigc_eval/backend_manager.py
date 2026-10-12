@@ -156,12 +156,7 @@ class AIGCBackendManager(BackendManager):
                         logger.warning(f'CLIP score computation failed: {e}')
 
                 if 'lpips' in config.eval.metrics:
-                    try:
-                        from .metrics.lpips import compute_lpips
-                        score = compute_lpips([img])
-                        sample_result['lpips'] = score[0]
-                    except Exception as e:
-                        logger.warning(f'LPIPS computation failed: {e}')
+                    logger.warning('Skipping LPIPS for txt2img: a reference image is required.')
 
                 per_sample_results.append(sample_result)
                 progress.update(i + 1)

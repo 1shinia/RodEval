@@ -7,10 +7,53 @@ from unittest import mock
 
 from evalscope.backend.aigc_eval.models.adapters import (
     DashScopeVideoAdapter,
+    OpenAICompatibleAdapter,
     _nearest_dashscope_duration,
     _wh_to_aspect_ratio,
     create_adapter,
 )
+
+
+def test_openai_video_payload_uses_video_fields_not_image_size():
+    adapter = OpenAICompatibleAdapter({
+        'api_base': 'https://api.example.test/v1',
+        'api_key': 'sk-test',
+        'model_name_or_path': 'video-model',
+    })
+    payload = adapter._build_payload(
+        '森林里一只老虎在奔跑',
+        tool='txt2video',
+        width=1280,
+        height=720,
+        num_frames=16,
+        fps=8,
+    )
+    assert payload['resolution'] == '720p'
+    assert payload['ratio'] == '16:9'
+    assert payload['duration'] == 2
+    assert 'size' not in payload
+    assert 'n' not in payload
+
+
+def test_openai_image_payload_forwards_generation_parameters():
+    adapter = OpenAICompatibleAdapter({
+        'api_base': 'https://api.example.test/v1',
+        'api_key': 'sk-test',
+        'model_name_or_path': 'image-model',
+    })
+    payload = adapter._build_payload(
+        '一只小狗',
+        tool='txt2img',
+        width=1024,
+        height=1024,
+        num_inference_steps=8,
+        guidance_scale=7.5,
+        seed=43,
+    )
+    assert payload['num_inference_steps'] == 8
+    assert payload['guidance_scale'] == 7.5
+    assert payload['seed'] == 43
+
 
 BASE_CONFIG = {
     'provider': 'dashscope',
