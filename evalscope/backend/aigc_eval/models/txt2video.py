@@ -3,9 +3,8 @@
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
-
 from PIL import Image
+from typing import Any, Dict, List
 
 from .adapters import create_adapter
 from .base import AIGCModelBase
@@ -65,6 +64,7 @@ class Txt2VideoModel(AIGCModelBase):
         fps: int = 8,
         resolution: str = '',
         ratio: str = '',
+        duration: int = 5,
         **kwargs,
     ) -> List[Dict[str, Any]]:
         """Generate videos from prompts.
@@ -74,17 +74,30 @@ class Txt2VideoModel(AIGCModelBase):
         """
         if self._adapter:
             return self._generate_api(
-                prompts, width, height, seed,
-                num_frames, fps, resolution, ratio,
+                prompts,
+                width,
+                height,
+                seed,
+                num_frames,
+                fps,
+                resolution,
+                ratio,
+                duration,
             )
 
         if self.pipe is None:
             raise RuntimeError('Model not loaded. Call load() first.')
 
         return self._generate_local(
-            prompts, width, height, num_inference_steps,
-            guidance_scale, negative_prompt, seed,
-            num_frames, fps,
+            prompts,
+            width,
+            height,
+            num_inference_steps,
+            guidance_scale,
+            negative_prompt,
+            seed,
+            num_frames,
+            fps,
         )
 
     def _generate_api(
@@ -97,6 +110,7 @@ class Txt2VideoModel(AIGCModelBase):
         fps: int,
         resolution: str,
         ratio: str,
+        duration: int,
     ) -> List[Dict[str, Any]]:
         """Generate videos using the API adapter."""
         tool = self.config.get('tool', 'txt2video')
@@ -113,6 +127,7 @@ class Txt2VideoModel(AIGCModelBase):
                 fps=fps,
                 resolution=resolution,
                 ratio=ratio,
+                duration=duration,
             )
             if video_bytes:
                 video_path = self._save_video_bytes(video_bytes, i)

@@ -261,6 +261,7 @@ class AIGCBackendManager(BackendManager):
                     fps=config.generate.fps,
                     resolution=getattr(config.generate, 'resolution', '') or '',
                     ratio=getattr(config.generate, 'ratio', '') or '',
+                    duration=getattr(config.generate, 'duration', 5),
                 )[0]
 
                 sample_result = {

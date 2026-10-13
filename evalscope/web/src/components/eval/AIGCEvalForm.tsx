@@ -51,7 +51,7 @@ const VIDEO_ASPECT_RATIOS = [
   { value: '1:1', label: '1:1 (方形)' },
 ]
 
-const PROVIDER_OPTIONS: { value: 'openai' | 'custom' | 'dashscope'; label: string; apiPlaceholder: string; modelPlaceholder: string }[] = [
+const PROVIDER_OPTIONS: { value: 'openai' | 'dashscope' | 'volcengine'; label: string; apiPlaceholder: string; modelPlaceholder: string }[] = [
   {
     value: 'openai', label: 'OpenAI 兼容',
     apiPlaceholder: 'https://api.example.com/v1', modelPlaceholder: 'stable-diffusion-v1-5',
@@ -61,8 +61,8 @@ const PROVIDER_OPTIONS: { value: 'openai' | 'custom' | 'dashscope'; label: strin
     apiPlaceholder: 'https://dashscope.aliyuncs.com/api/v1', modelPlaceholder: 'kling/kling-v3-omni-video-generation',
   },
   {
-    value: 'custom', label: '自定义',
-    apiPlaceholder: 'https://api.example.com/v1', modelPlaceholder: '模型名称',
+    value: 'volcengine', label: '火山引擎',
+    apiPlaceholder: 'https://ark.cn-beijing.volces.com/api/v3', modelPlaceholder: 'doubao-seedance-2-0-260128',
   },
 ]
 
@@ -81,22 +81,14 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const { t } = useLocale()
 
   // API provider
-  const [provider, setProvider] = useState<'openai' | 'custom' | 'dashscope'>('openai')
-  const isCustomProvider = provider === 'custom'
+  const [provider, setProvider] = useState<'openai' | 'dashscope' | 'volcengine'>('openai')
   const currentProvider = PROVIDER_OPTIONS.find(p => p.value === provider) ?? PROVIDER_OPTIONS[0]
-
-  // Advanced settings (for custom provider)
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [endpointTemplate, setEndpointTemplate] = useState('')
-  const [paramAliases, setParamAliases] = useState('')
-  const [responsePath, setResponsePath] = useState('')
-  const [asyncPollUrl, setAsyncPollUrl] = useState('')
-  const [asyncContentUrl, setAsyncContentUrl] = useState('')
 
   const [tool, setTool] = useState<AIGCTool>('txt2img')
 
   const handleToolChange = (newTool: AIGCTool) => {
     setTool(newTool)
+    if (newTool !== 'txt2video' && provider === 'volcengine') setProvider('openai')
     if (newTool === 'txt2video') {
       setPromptDataset('msr_vtt')
       setMetrics(['clip_score'])
@@ -124,8 +116,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [seed, setSeed] = useState('42')
 
   // Video-specific params
-  const [numFrames, setNumFrames] = useState('16')
-  const [fps, setFps] = useState('8')
+  const [videoDuration, setVideoDuration] = useState('5')
   // Video resolution + aspect ratio (replaces width/height)
   const [videoResolution, setVideoResolution] = useState('720p')
   const [videoAspectRatio, setVideoAspectRatio] = useState('16:9')
@@ -180,20 +171,12 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       api_base: apiBase.trim(),
       provider,
     }
-    if (apiKey.trim()) modelConfig.api_key = apiKey.trim()
-    if (provider === 'custom') {
-      if (endpointTemplate.trim()) modelConfig.endpoint_template = endpointTemplate.trim()
-      if (paramAliases.trim()) {
-        try {
-          modelConfig.param_aliases = JSON.parse(paramAliases.trim())
-        } catch {
-          newErrors.paramAliases = 'JSON 格式错误，请修正后再提交'
-        }
-      }
-      if (responsePath.trim()) modelConfig.response_path = responsePath.trim()
-      if (asyncPollUrl.trim()) modelConfig.async_poll_url = asyncPollUrl.trim()
-      if (asyncContentUrl.trim()) modelConfig.async_content_url = asyncContentUrl.trim()
+    if (provider === 'volcengine' && tool !== 'txt2video') {
+      newErrors.provider = '火山引擎当前仅支持文生视频'
+      setErrors(newErrors)
+      return
     }
+    if (apiKey.trim()) modelConfig.api_key = apiKey.trim()
 
     const generateConfig: Record<string, unknown> = {
       width: Number(width) || 512,
@@ -208,8 +191,11 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       const size = resolveVideoSize(videoResolution, videoAspectRatio)
       generateConfig.width = size.width
       generateConfig.height = size.height
-      generateConfig.num_frames = Number(numFrames) || 16
-      generateConfig.fps = Number(fps) || 8
+      generateConfig.resolution = videoResolution
+      generateConfig.ratio = videoAspectRatio
+      generateConfig.duration = videoDuration === '' ? 5 : Number(videoDuration)
+      delete generateConfig.num_inference_steps
+      delete generateConfig.guidance_scale
     }
     if (tool === 'img2img') {
       generateConfig.strength = Number(strength) || 0.8
@@ -258,59 +244,6 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         </select>
       </div>
 
-      {/* Advanced settings (for custom provider) */}
-      {isCustomProvider && (
-        <div className="border border-[var(--border-md)] rounded-lg p-4 space-y-3">
-          <button type="button"
-            className="flex items-center gap-2 text-sm font-medium text-[var(--text)] w-full"
-            onClick={() => setShowAdvanced(!showAdvanced)}>
-            <span className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>▶</span>
-            高级设置（路径映射 · 参数别名 · 异步轮询）
-          </button>
-
-          {showAdvanced && (
-            <div className="space-y-3 pt-2">
-              <FormField label="端点路径模板" hint='留空使用标准 OpenAI 路径（{base}/images/generations 或 /video/generations）。填 "passthrough" 表示不追加任何路径。'>
-                <input value={endpointTemplate}
-                  onChange={e => setEndpointTemplate(e.target.value)}
-                  className={FORM_INPUT_CLASS}
-                  placeholder="自动（OpenAI 标准路径）" />
-              </FormField>
-
-              <FormField label="请求参数别名（JSON）" hint='标准字段名对应的 API 实际字段名，如 {"duration": "seconds"}'>
-                <input value={paramAliases}
-                  onChange={e => setParamAliases(e.target.value)}
-                  className={FORM_INPUT_CLASS}
-                  placeholder='{"duration": "seconds"}' />
-                {errors.paramAliases && (
-                  <span className="text-xs text-[var(--error)] mt-1">{errors.paramAliases}</span>
-                )}
-              </FormField>
-
-              <FormField label="响应提取路径" hint='JMESPath 风格，如 data[0].b64_json。留空自动检测 OpenAI 格式。'>
-                <input value={responsePath}
-                  onChange={e => setResponsePath(e.target.value)}
-                  className={FORM_INPUT_CLASS}
-                  placeholder="data[0].b64_json" />
-              </FormField>
-
-              <FormField label="异步轮询查询接口" hint='模板，用 {id} 表示 task_id。如 /videos/{id}（仅视频需要）。'>
-                <input value={asyncPollUrl}
-                  onChange={e => setAsyncPollUrl(e.target.value)}
-                  className={FORM_INPUT_CLASS}
-                  placeholder="/videos/{id}" />
-              </FormField>
-
-              <FormField label="异步任务内容下载接口" hint='模板，如 /videos/{id}/content（仅视频需要）。'>
-                <input value={asyncContentUrl}
-                  onChange={e => setAsyncContentUrl(e.target.value)}
-                  className={FORM_INPUT_CLASS}
-                  placeholder="/videos/{id}/content" />
-              </FormField>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Model Configuration */}
       <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2">
@@ -320,11 +253,16 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
         <>
           <FormField label="API 提供商" className="md:col-span-2">
-            <select value={provider} onChange={e => setProvider(e.target.value as typeof provider)} className={FORM_INPUT_CLASS}>
+            <select value={provider} onChange={e => {
+              const next = e.target.value as typeof provider
+              setProvider(next)
+              if (next === 'volcengine' && tool !== 'txt2video') setTool('txt2video')
+            }} className={FORM_INPUT_CLASS}>
               {PROVIDER_OPTIONS.map(p => (
                 <option key={p.value} value={p.value}>{p.label}</option>
               ))}
             </select>
+            {errors.provider && <span className="text-xs text-[var(--error)] mt-1">{errors.provider}</span>}
           </FormField>
 
           <FormField label={t('eval.modelName')} required error={errors.model} className="md:col-span-2">
@@ -353,11 +291,11 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       </h4>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {tool === 'txt2video' ? (<>
-          <FormField label="分辨率">
+          {provider !== 'dashscope' && <FormField label="分辨率">
             <select value={videoResolution} onChange={e => setVideoResolution(e.target.value)} className={FORM_INPUT_CLASS}>
               {VIDEO_RESOLUTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
-          </FormField>
+          </FormField>}
           <FormField label="画幅比">
             <select value={videoAspectRatio} onChange={e => setVideoAspectRatio(e.target.value)} className={FORM_INPUT_CLASS}>
               {VIDEO_ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
@@ -376,37 +314,29 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           </FormField>
         </>)}
 
-        <FormField label={t('aigc.steps')}>
+        {tool !== 'txt2video' && <FormField label={t('aigc.steps')}>
           <input type="number" value={steps}
             onChange={e => setSteps(e.target.value.replace(/[^0-9]/g, ''))}
             className={FORM_INPUT_CLASS} placeholder="50" />
-        </FormField>
+        </FormField>}
 
-        <FormField label={t('aigc.guidance')}>
+        {tool !== 'txt2video' && <FormField label={t('aigc.guidance')}>
           <input type="number" value={guidance}
             onChange={e => setGuidance(e.target.value)}
             className={FORM_INPUT_CLASS} placeholder="7.5" step="0.1" />
-        </FormField>
+        </FormField>}
 
-        <FormField label={t('aigc.seed')}>
+        {tool === 'txt2video' && <FormField label="视频时长" hint="限支持5～15 秒整数">
+          <input type="number" value={videoDuration}
+            onChange={e => setVideoDuration(e.target.value.replace(/[^0-9]/g, ''))}
+            className={FORM_INPUT_CLASS} step="1" />
+        </FormField>}
+
+        {tool !== 'txt2video' || provider !== 'dashscope' ? <FormField label={t('aigc.seed')}>
           <input type="number" value={seed}
             onChange={e => setSeed(e.target.value.replace(/[^0-9]/g, ''))}
             className={FORM_INPUT_CLASS} placeholder="42" />
-        </FormField>
-
-        {tool === 'txt2video' && (<>
-          <FormField label={t('aigc.numFrames')}>
-            <input type="number" value={numFrames}
-              onChange={e => setNumFrames(e.target.value.replace(/[^0-9]/g, ''))}
-              className={FORM_INPUT_CLASS} placeholder="16" />
-          </FormField>
-
-          <FormField label={t('aigc.fps')}>
-            <input type="number" value={fps}
-              onChange={e => setFps(e.target.value.replace(/[^0-9]/g, ''))}
-              className={FORM_INPUT_CLASS} placeholder="8" />
-          </FormField>
-        </>)}
+        </FormField> : null}
 
         {tool === 'img2img' && (
           <>

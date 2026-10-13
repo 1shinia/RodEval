@@ -54,6 +54,15 @@ class AIGCApiAdapter(ABC):
         url = self._resolve_url(params.get('tool', 'txt2img'))
         payload = self._build_payload(prompt, **params)
         logger.debug('Adapter POST %s payload keys=%s', url, list(payload.keys()))
+        if params.get('tool') == 'txt2video':
+            logger.info(
+                'Video request payload: %s',
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key != 'prompt'
+                },
+            )
 
         response = requests.post(url, json=payload, headers=headers, timeout=300)
 
@@ -216,15 +225,16 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
         }
 
         if tool == 'txt2video':
-            # Video APIs commonly use resolution/aspect-ratio rather than the
-            # image API's WxH ``size`` field.
-            payload['resolution'] = params.get('resolution') or _w_h_to_resolution(width, height)
-            payload['ratio'] = params.get('ratio') or _wh_to_aspect_ratio(width, height)
-            num_frames = params.get('num_frames', 16)
-            fps = params.get('fps', 8)
-            duration = num_frames // fps if fps > 0 else 5
-            if duration >= 2:
-                payload['duration'] = duration
+            # Preserve the legacy Unitoken/Seedance video contract. Resolution
+            # and ratio are opt-in because not every OpenAI-compatible gateway
+            # accepts those fields.
+            payload['n'] = 1
+            payload['size'] = f'{width}x{height}'
+            payload['duration'] = max(int(params.get('duration', 5)), 5)
+            if params.get('resolution'):
+                payload['resolution'] = params['resolution']
+            if params.get('ratio'):
+                payload['ratio'] = params['ratio']
         else:
             payload['n'] = 1
             payload['size'] = f'{width}x{height}'
@@ -341,18 +351,44 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
     # ── Retry ─────────────────────────────────────────────────────
 
     def _handle_retry(self, response, url: str, headers: dict, payload: dict, **params) -> requests.Response:
-        """Retry a size-related 400 with the provider's resolution field."""
+        """Retry a legacy size-related 400 with a resolution-only payload."""
         if response.status_code == 400:
             err_text = response.text.lower()
-            if any(kw in err_text for kw in ('size', 'resolution', 'invalid')):
+            if params.get('tool') == 'txt2video' and ('size' in err_text or 'resolution' in err_text):
                 width = params.get('width', 1024)
                 height = params.get('height', 1024)
                 alt = _w_h_to_resolution(width, height)
-                field = 'resolution' if params.get('tool') == 'txt2video' else 'size'
-                logger.info('Request %s rejected (400), retrying with %s=%s', field, alt, alt)
-                payload[field] = alt
+                if payload.get('size') != alt:
+                    retry_payload = dict(payload)
+                    retry_payload.pop('size', None)
+                    retry_payload['resolution'] = alt
+                    retry_payload.pop('ratio', None)
+                    logger.info('Request size=%s rejected (400), retrying with resolution=%s', payload.get('size'), alt)
+                    logger.info(
+                        'Video fallback payload: %s',
+                        {
+                            key: value
+                            for key, value in retry_payload.items()
+                            if key != 'prompt'
+                        },
+                    )
+                    retry_response = requests.post(url, json=retry_payload, headers=headers, timeout=300)
+                    if not retry_response.ok:
+                        logger.warning(
+                            'Video fallback request failed: HTTP %d, response=%s',
+                            retry_response.status_code,
+                            retry_response.text[:2000],
+                        )
+                    return retry_response
+            elif any(kw in err_text for kw in ('size', 'resolution', 'invalid')):
+                width = params.get('width', 1024)
+                height = params.get('height', 1024)
+                alt = _w_h_to_resolution(width, height)
+                logger.info('Size %s rejected (400), retrying with %s', payload.get('size'), alt)
+                payload['size'] = alt
                 return requests.post(url, json=payload, headers=headers, timeout=300)
-            logger.warning('API request failed with HTTP 400: %s', response.text[:1000])
+            else:
+                logger.warning('API request failed with HTTP 400: %s', response.text[:1000])
         return response
 
 
@@ -429,11 +465,8 @@ class DashScopeVideoAdapter(AIGCApiAdapter):
         else:
             parameters['aspect_ratio'] = _wh_to_aspect_ratio(params.get('width', 1280), params.get('height', 720))
 
-        # duration: DashScope kling only supports 5s/10s — snap num_frames//fps
-        num_frames = params.get('num_frames', 16)
-        fps = params.get('fps', 8)
-        duration = int(num_frames) // int(fps) if int(fps) > 0 else 5
-        parameters['duration'] = _nearest_dashscope_duration(duration)
+        # duration: DashScope kling only supports 5s/10s — snap to a supported value
+        parameters['duration'] = _nearest_dashscope_duration(int(params.get('duration', 5)))
 
         return {
             'model': self.model_name,
@@ -507,6 +540,86 @@ class DashScopeVideoAdapter(AIGCApiAdapter):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Volcengine video generation adapter (火山方舟 Seedance)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class VolcengineVideoAdapter(AIGCApiAdapter):
+    """Native Volcengine Ark video-task API for Seedance text-to-video."""
+
+    TASK_PATH = 'contents/generations/tasks'
+    SUCCESS_STATUSES = ('succeeded', 'success', 'completed', 'done')
+    FAILURE_STATUSES = ('failed', 'error', 'cancelled', 'canceled')
+
+    def _api_root(self) -> str:
+        base = self.api_base.rstrip('/')
+        marker = '/' + self.TASK_PATH
+        return base[:-len(marker)] if base.endswith(marker) else base
+
+    def _resolve_url(self, tool: str) -> str:
+        if tool != 'txt2video':
+            raise ValueError(f'Volcengine adapter only supports txt2video, got tool={tool!r}')
+        return self._api_root() + '/' + self.TASK_PATH
+
+    def _build_payload(self, prompt: str, **params) -> Dict[str, Any]:
+        if params.get('tool', 'txt2video') != 'txt2video':
+            raise ValueError('Volcengine adapter only supports txt2video')
+        width = int(params.get('width', 1280))
+        height = int(params.get('height', 720))
+        duration = int(params.get('duration', 5))
+        if not 5 <= duration <= 15:
+            message = '火山引擎视频时长必须为 5～15 秒'
+            logger.error(message)
+            raise ValueError(message)
+        return {
+            'model': self.model_name,
+            'content': [{
+                'type': 'text',
+                'text': prompt
+            }],
+            'resolution': str(params.get('resolution') or _w_h_to_resolution(width, height)),
+            'ratio': str(params.get('ratio') or _wh_to_aspect_ratio(width, height)),
+            'duration': duration,
+            'seed': int(params.get('seed', -1)),
+        }
+
+    def _is_async_response(self, data: Dict[str, Any]) -> bool:
+        return bool(data.get('id'))
+
+    def _resolve_poll_url(self, post_url: str, task_id: str) -> str:
+        return self._api_root() + '/' + self.TASK_PATH + '/' + task_id
+
+    def _poll_async(self, data: Dict[str, Any], post_url: str, headers: Dict[str, str]) -> Dict[str, Any]:
+        task_id = data.get('id', '')
+        for attempt in range(60):
+            _time.sleep(5)
+            resp = requests.get(self._resolve_poll_url(post_url, task_id), headers=headers, timeout=30)
+            if not resp.ok:
+                logger.warning('Volcengine poll %d: HTTP %d', attempt + 1, resp.status_code)
+                continue
+            result = resp.json()
+            status = str(result.get('status', '')).lower()
+            logger.info('Volcengine task %s: status=%s', task_id, status)
+            if status in self.SUCCESS_STATUSES:
+                return result
+            if status in self.FAILURE_STATUSES:
+                raise RuntimeError(f'Volcengine task {task_id} failed: {result.get("error") or result}')
+        raise TimeoutError(f'Volcengine task {task_id} did not complete within 300s')
+
+    def _extract_bytes(self, data: Dict[str, Any]) -> bytes:
+        content = data.get('content') or {}
+        video_url = content.get('video_url') if isinstance(content, dict) else None
+        if not video_url:
+            raise ValueError(f'Cannot extract video URL from Volcengine response: {data}')
+        resp = requests.get(video_url, timeout=120)
+        resp.raise_for_status()
+        return resp.content
+
+    def _handle_retry(self, response, url: str, headers: dict, payload: dict, **params) -> requests.Response:
+        return response
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Factory
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -527,6 +640,11 @@ def create_adapter(config: Dict[str, Any]) -> AIGCApiAdapter:
 
     if provider == 'dashscope':
         return DashScopeVideoAdapter(config)
+
+    if provider == 'volcengine':
+        if config.get('model_type', 'txt2video') != 'txt2video':
+            raise ValueError('Volcengine adapter currently supports txt2video only')
+        return VolcengineVideoAdapter(config)
 
     raise ValueError(f'Unsupported AIGC API provider: {provider}')
 

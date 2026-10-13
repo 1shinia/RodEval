@@ -19,7 +19,8 @@ class AIGCModelConfig(BaseArgument):
         None,
         description='API provider. None for local models, "openai" for OpenAI-compatible, '
         '"custom" for custom endpoint mapping, "dashscope" for Aliyun DashScope '
-        'video generation (kling/wanx)',
+        'video generation (kling/wanx), or "volcengine" for Volcengine Ark '
+        'Seedance video generation',
     )
     api_base: Optional[str] = Field(None, description='API base URL for remote models')
     api_key: Optional[str] = Field(None, description='API key for remote models')
@@ -66,6 +67,7 @@ class AIGCGenerateConfig(BaseArgument):
     fps: int = Field(8, ge=1, le=60, description='Frames per second (video only)')
     resolution: Optional[str] = Field(None, description='Video resolution: 480p/720p/1080p/4k')
     ratio: Optional[str] = Field(None, description='Video aspect ratio: 16:9/9:16/4:3/1:1')
+    duration: int = Field(5, ge=1, le=60, description='Video duration in seconds (video only)')
 
 
 class AIGCEvalConfig(BaseArgument):
