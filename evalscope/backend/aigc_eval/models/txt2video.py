@@ -83,6 +83,7 @@ class Txt2VideoModel(AIGCModelBase):
                 resolution,
                 ratio,
                 duration,
+                negative_prompt,
             )
 
         if self.pipe is None:
@@ -111,6 +112,7 @@ class Txt2VideoModel(AIGCModelBase):
         resolution: str,
         ratio: str,
         duration: int,
+        negative_prompt: str = '',
     ) -> List[Dict[str, Any]]:
         """Generate videos using the API adapter."""
         tool = self.config.get('tool', 'txt2video')
@@ -128,6 +130,7 @@ class Txt2VideoModel(AIGCModelBase):
                 resolution=resolution,
                 ratio=ratio,
                 duration=duration,
+                negative_prompt=negative_prompt,
             )
             if video_bytes:
                 video_path = self._save_video_bytes(video_bytes, i)

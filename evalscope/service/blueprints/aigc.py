@@ -8,16 +8,11 @@ from pathlib import Path
 from typing import Any, Dict
 
 from evalscope.backend.aigc_eval.backend_manager import AIGCBackendManager
-from evalscope.service.utils.log import (
-    OUTPUT_DIR as _OUTPUT_DIR,
-    create_log_file,
-    resolve_task_dir,
-    resolve_task_file,
-    validate_task_id,
-)
+from evalscope.service.time_utils import epoch_to_utc_iso
+from evalscope.service.utils.log import OUTPUT_DIR as _OUTPUT_DIR
+from evalscope.service.utils.log import create_log_file, resolve_task_dir, resolve_task_file, validate_task_id
 from evalscope.service.utils.process import register_process, try_reserve_new_slot, unregister_process
 from evalscope.utils.logger import configure_logging, get_logger
-from evalscope.service.time_utils import epoch_to_utc_iso
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
@@ -59,8 +54,8 @@ def run_aigc_evaluation():
         model = data.get('model', {}).get('model_name_or_path', 'unknown')
 
         # Reserve slot for concurrent control
-        from .auth import get_current_user_id
         from .. import db as _db
+        from .auth import get_current_user_id
         uid = get_current_user_id()
         reservation = try_reserve_new_slot(task_id, 'aigc', model, user_id=uid)
         if reservation == 'conflict':
@@ -162,7 +157,7 @@ def serve_media(task_id: str, filename: str):
     if denied is not None:
         return denied
     try:
-        safe_path = resolve_task_file(task_id, filename, OUTPUT_DIR, allowed_subdirs=('media',))
+        safe_path = resolve_task_file(task_id, filename, OUTPUT_DIR, allowed_subdirs=('media', ))
     except ValueError as e:
         if str(e) == 'File not found':
             return jsonify({'error': 'File not found'}), 404
@@ -177,7 +172,7 @@ def serve_thumbnail(task_id: str, filename: str):
     if denied is not None:
         return denied
     try:
-        safe_path = resolve_task_file(task_id, filename, OUTPUT_DIR, allowed_subdirs=('thumbnails',))
+        safe_path = resolve_task_file(task_id, filename, OUTPUT_DIR, allowed_subdirs=('thumbnails', ))
     except ValueError as e:
         if str(e) == 'File not found':
             return jsonify({'error': 'File not found'}), 404
@@ -272,16 +267,16 @@ def list_aigc_reports():
         return jsonify({'reports': reports})
 
     # Get current user's AIGC task_ids from eval_reports table
-    from .auth import get_current_user_id
     from ..db import _get_conn
+    from .auth import get_current_user_id
     current_uid = get_current_user_id()
     conn = _get_conn()
     # task_id -> (has_errors, error_note) from the reconciled metadata store
     task_meta = {
-        r[0]: (r[1] or 0, r[2] or '') for r in conn.execute(
-            "SELECT task_id, has_errors, error_note FROM eval_reports "
-            "WHERE user_id = ? AND eval_backend = 'AIGC_EVAL'",
-            (current_uid,)
+        r[0]: (r[1] or 0, r[2] or '')
+        for r in conn.execute(
+            'SELECT task_id, has_errors, error_note FROM eval_reports '
+            "WHERE user_id = ? AND eval_backend = 'AIGC_EVAL'", (current_uid, )
         ).fetchall()
     }
     user_task_ids = set(task_meta)
@@ -316,7 +311,6 @@ def list_aigc_reports():
                 'total_images': results.get('num_samples', 0),
                 'clip_score_mean': metrics.get('clip_score_mean'),
                 'lpips_mean': metrics.get('lpips_mean'),
-                'fvd': metrics.get('fvd'),
                 'inception_score': metrics.get('inception_score'),
                 'has_errors': has_errors,
                 'error_note': error_note,
@@ -491,7 +485,6 @@ def _build_aigc_config(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
             'prompt_limit': data.get('eval', {}).get('prompt_limit', 1),
             'custom_prompt': data.get('eval', {}).get('custom_prompt'),
             'reference_dir': data.get('eval', {}).get('reference_dir'),
-            'reference_video_dir': data.get('eval', {}).get('reference_video_dir'),
             'reference_image': data.get('eval', {}).get('reference_image'),
             'custom_dataset_path': data.get('eval', {}).get('custom_dataset_path'),
             'output_dir': str(output_dir),
@@ -526,8 +519,8 @@ def delete_aigc_report(task_id: str):
     # Destructive operations require durable ownership evidence.  Unlike reads,
     # an unindexed legacy directory is not deletable merely because the caller
     # is an administrator.
-    from .auth import get_current_user_id, check_task_artifact_access
     from .. import db as _db
+    from .auth import check_task_artifact_access, get_current_user_id
     if not check_task_artifact_access(
         task_id, ('eval_reports', 'task_registry', 'task_state'), allow_admin_legacy=False
     ):

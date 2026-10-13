@@ -82,7 +82,6 @@ class AIGCEvalConfig(BaseArgument):
     custom_prompt: Optional[str] = Field(None, description='Custom prompt for img2img (takes priority over dataset)')
     random_prompt: bool = Field(False, description='Randomly shuffle prompts before taking limit')
     reference_dir: Optional[str] = Field(None, description='Reference image directory for FID calculation')
-    reference_video_dir: Optional[str] = Field(None, description='Reference video directory for FVD calculation')
     custom_dataset_path: Optional[str] = Field(None, description='Path to custom prompt file (one prompt per line)')
     output_dir: str = Field('', description='Output directory for generated media')
 

@@ -41,14 +41,19 @@ class AIGCBackendManager(BackendManager):
         logger.info(f'Model: {config.model.model_name_or_path}')
         logger.info(f'Metrics: {config.eval.metrics}')
 
-        if tool == 'txt2img':
-            return self._run_txt2img(config)
-        elif tool == 'txt2video':
-            return self._run_txt2video(config)
-        elif tool == 'img2img':
-            return self._run_img2img(config)
-        else:
+        try:
+            if tool == 'txt2img':
+                return self._run_txt2img(config)
+            elif tool == 'txt2video':
+                return self._run_txt2video(config)
+            elif tool == 'img2img':
+                return self._run_img2img(config)
             raise ValueError(f'Unsupported AIGC tool: {tool}')
+        except Exception as e:
+            # 失败原因必须写进任务日志（页面 SSE 只展示任务日志），
+            # 否则用户只能看到 progress.json 里的 "Task failed"。
+            logger.error(f'AIGC {tool} 任务失败：{e}')
+            raise
 
     def _parse_config(self) -> AIGCToolConfig:
         """Parse configuration into AIGCToolConfig."""
@@ -280,7 +285,6 @@ class AIGCBackendManager(BackendManager):
                 # Extract and save frames
                 frames = result.get('frames', [])
                 if frames:
-                    sample_result['_frames'] = frames  # kept for FVD computation
                     frame_paths = []
                     for fi, frame in enumerate(frames[:min(len(frames), 4)]):
                         fp = frames_dir / f'{i:04d}_frame{fi:02d}.jpg'
@@ -318,20 +322,6 @@ class AIGCBackendManager(BackendManager):
                 if scores:
                     metrics['clip_score_mean'] = sum(scores) / len(scores)
                     logger.info(f'CLIP Score: mean={metrics["clip_score_mean"]:.4f}')
-
-            # Compute FVD if requested
-            if 'fvd' in config.eval.metrics:
-                from .metrics.fvd import compute_fvd
-                all_frame_sequences = [r.get('_frames', []) for r in per_sample_results]
-                ref_dir = config.eval.reference_video_dir or None
-                fvd_score = compute_fvd(all_frame_sequences, prompts, ref_dir)
-                if fvd_score >= 0:
-                    metrics['fvd'] = fvd_score
-                    logger.info(f'FVD: {fvd_score:.2f}')
-
-            # Strip non-serializable _frames before JSON save
-            for r in per_sample_results:
-                r.pop('_frames', None)
 
             # Save results
             results = {

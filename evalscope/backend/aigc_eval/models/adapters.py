@@ -12,6 +12,7 @@ and async polling. Returns raw media bytes; model classes handle PIL/frame conve
 import base64
 import json
 import logging
+import re
 import requests
 import time as _time
 from abc import ABC, abstractmethod
@@ -19,6 +20,9 @@ from io import BytesIO
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
+
+# 日志里回显供应商响应体前，先抹掉形似凭据的串（sk-xxx / Bearer xxx）
+_SECRET_RE = re.compile(r'(?:sk|Bearer)[- _]?[A-Za-z0-9_\-]{6,}', re.I)
 
 # ═══════════════════════════════════════════════════════════════════════
 # Abstract base
@@ -166,6 +170,30 @@ class AIGCApiAdapter(ABC):
             else:
                 break
         return data
+
+    @staticmethod
+    def _redact_secrets(text: str) -> str:
+        """抹掉响应体里形似凭据的串，再写日志。"""
+        return _SECRET_RE.sub('***', text or '')
+
+    @staticmethod
+    def _poll_error_detail(text: str) -> str:
+        """从供应商错误响应体里取出 code/message/request_id，便于用户与工单定位。
+
+        兼容两种形态：百炼把 code/message/request_id 放在顶层；
+        火山方舟把 code/message 包在 error 里，request_id 在顶层。
+        """
+        raw = (text or '').strip()
+        try:
+            payload = json.loads(text)
+        except (ValueError, TypeError):
+            return raw[:120]
+        if not isinstance(payload, dict):
+            return raw[:120]
+        error = payload.get('error')
+        merged: Dict[str, Any] = dict(error) if isinstance(error, dict) else {}
+        merged.update({key: value for key, value in payload.items() if key != 'error'})
+        return ' '.join(str(merged[key]) for key in ('code', 'message', 'request_id') if merged.get(key)) or raw[:120]
 
     def _fetch_async_content(self, data: Dict[str, Any], task_id: str, headers: Dict[str, str]) -> Dict[str, Any]:
         """Download async task content. Returns data dict with b64_json or url key."""
@@ -393,6 +421,161 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# ── DashScope 视频模型能力表 ────────────────────────────────────────────
+# 百炼文生视频按模型分三套参数形态，字段名与取值域各不相同：
+#   wan2.7 新协议      → parameters.resolution（"720P"/"1080P"）+ ratio
+#   wan2.6~2.1 旧协议  → parameters.size（必须是具体像素值，如 "1280*720"）
+#   kling              → parameters.mode（std=720P / pro=1080P）+ aspect_ratio
+# 数据来源（官方文档，2026-10 核对）：
+#   https://help.aliyun.com/zh/model-studio/text-to-video-api-reference            (wan2.7)
+#   https://help.aliyun.com/zh/model-studio/legacy-wan-text-to-video-api-reference (wan2.1~2.6)
+#   https://help.aliyun.com/zh/model-studio/kling-video-generation-api-reference   (kling)
+# 改值域只需改这张表；前端 evalscope/web/src/components/eval/AIGCEvalForm.tsx 的
+# VIDEO_FAMILIES 与之一一对应（tests/benchmark/test_dashscope_adapter.py 有对齐断言）。
+
+# 旧协议档位 →「宽高比 → 像素值」穷举表（官方文档原文，未列出的组合一律报错，不静默替换）
+_DASHSCOPE_LEGACY_SIZE_TABLE = {
+    '480p': {
+        '16:9': '832*480',
+        '9:16': '480*832',
+        '1:1': '624*624',
+    },
+    '720p': {
+        '16:9': '1280*720',
+        '9:16': '720*1280',
+        '1:1': '960*960',
+        '4:3': '1088*832',
+        '3:4': '832*1088',
+    },
+    '1080p': {
+        '16:9': '1920*1080',
+        '9:16': '1080*1920',
+        '1:1': '1440*1440',
+        '4:3': '1632*1248',
+        '3:4': '1248*1632',
+    },
+}
+
+# wan2.7 用 resolution + ratio 表达，不传 size；此处仅用于校验档位/比例是否配套
+_DASHSCOPE_WAN27_RATIOS = {
+    '720p': ('16:9', '9:16', '1:1', '4:3', '3:4'),
+    '1080p': ('16:9', '9:16', '1:1', '4:3', '3:4'),
+}
+
+# kling 文生视频只支持 3 种宽高比；分辨率用 mode 表达，不支持 seed
+_DASHSCOPE_KLING_RATIOS = ('16:9', '9:16', '1:1')
+
+_DASHSCOPE_VIDEO_FAMILIES = (
+    {
+        'name': 'wan2.7',
+        'prefixes': ('wan2.7', ),
+        'protocol': 'resolution',
+        'tiers': ('720p', '1080p'),
+        'duration': ('range', 2, 15),
+        'seed': True,
+        'default_tier': '1080p'
+    },
+    {
+        'name': 'wan2.6',
+        'prefixes': ('wan2.6', ),
+        'protocol': 'size',
+        'tiers': ('720p', '1080p'),
+        'duration': ('range', 2, 15),
+        'seed': True,
+        'default_tier': '1080p'
+    },
+    {
+        'name': 'wan2.5',
+        'prefixes': ('wan2.5', ),
+        'protocol': 'size',
+        'tiers': ('480p', '720p', '1080p'),
+        'duration': ('choice', (5, 10)),
+        'seed': True,
+        'default_tier': '1080p'
+    },
+    {
+        'name': 'wan2.2',
+        'prefixes': ('wan2.2', ),
+        'protocol': 'size',
+        'tiers': ('480p', '1080p'),
+        'duration': ('fixed', 5),
+        'seed': True,
+        'default_tier': '1080p'
+    },
+    {
+        'name': 'wan2.1-t2v-turbo',
+        'prefixes': ('wan2.1-t2v-turbo', 'wanx2.1-t2v-turbo'),
+        'protocol': 'size',
+        'tiers': ('480p', '720p'),
+        'duration': ('fixed', 5),
+        'seed': True,
+        'default_tier': '720p'
+    },
+    {
+        'name': 'wan2.1-t2v-plus',
+        'prefixes': ('wan2.1-t2v-plus', 'wanx2.1-t2v-plus'),
+        'protocol': 'size',
+        'tiers': ('720p', ),
+        'duration': ('fixed', 5),
+        'seed': True,
+        'default_tier': '720p'
+    },
+    {
+        'name': 'kling',
+        'prefixes': ('kling', ),
+        'protocol': 'mode',
+        'tiers': ('720p', '1080p'),
+        'duration': ('range', 3, 15),
+        'seed': False,
+        'default_tier': '1080p'
+    },
+)
+
+_KLING_MODE_BY_TIER = {'720p': 'std', '1080p': 'pro'}
+_KLING_TIER_BY_MODE = {value: key for key, value in _KLING_MODE_BY_TIER.items()}
+
+
+def _dashscope_video_family(model: str) -> Dict[str, Any]:
+    """按模型 id 前缀匹配百炼视频模型族；无法识别时报错而不是猜参数形态。"""
+    name = (model or '').strip().lower()
+    for family in _DASHSCOPE_VIDEO_FAMILIES:
+        if any(name.startswith(prefix) for prefix in family['prefixes']):
+            return family
+    raise ValueError(
+        f'无法识别 DashScope 视频模型 {model!r}：'
+        '目前支持 wan2.7 / wan2.6 / wan2.5 / wan2.2 / wan2.1-t2v-* / kling 系列'
+    )
+
+
+def _dashscope_ratios(family: Dict[str, Any], tier: str) -> tuple:
+    """返回该模型该档位下可用的宽高比（旧协议由 size 表穷举得出）。"""
+    if family['protocol'] == 'mode':
+        return _DASHSCOPE_KLING_RATIOS
+    if family['protocol'] == 'resolution':
+        return _DASHSCOPE_WAN27_RATIOS[tier]
+    return tuple(_DASHSCOPE_LEGACY_SIZE_TABLE[tier].keys())
+
+
+def _dashscope_duration(family: Dict[str, Any], model: str, duration: int) -> int:
+    """按模型族校验时长，非法值直接报错（不再静默 snap 成 5/10）。"""
+    kind, expected = family['duration'][0], family['duration'][1:]
+    if kind == 'range':
+        low, high = expected
+        if not low <= duration <= high:
+            raise ValueError(f'{model} 时长需为 {low}～{high} 秒整数，收到 {duration}')
+        return duration
+    if kind == 'choice':
+        values = tuple(expected[0])
+        if duration not in values:
+            joined = ' 或 '.join(str(value) for value in values)
+            raise ValueError(f'{model} 只支持时长 {joined} 秒，收到 {duration}')
+        return duration
+    value = int(expected[0])
+    if duration != value:
+        raise ValueError(f'{model} 时长固定为 {value} 秒，收到 {duration}')
+    return value
+
+
 # DashScope video generation adapter (Aliyun 百炼, kling / wanx 等视频模型)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -400,12 +583,18 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
 class DashScopeVideoAdapter(AIGCApiAdapter):
     """Aliyun DashScope video generation API (video-synthesis).
 
-    Wire protocol (https://help.aliyun.com/zh/model-studio/text-to-video):
+    Wire protocol（三套协议共用同一端点与异步轮询，仅 parameters 形态不同）:
+      wan2.7      https://help.aliyun.com/zh/model-studio/text-to-video-api-reference
+      wan2.1~2.6  https://help.aliyun.com/zh/model-studio/legacy-wan-text-to-video-api-reference
+      kling       https://help.aliyun.com/zh/model-studio/kling-video-generation-api-reference
       POST {api_root}/services/aigc/video-generation/video-synthesis
         headers: X-DashScope-Async: enable + Authorization: Bearer <key>
-        body: {"model": ..., "input": {"prompt": ...},
-               "parameters": {"mode": "std", "aspect_ratio": "16:9",
-                              "duration": 5, "audio": False, "watermark": True}}
+        body (wan2.7): {"model": ..., "input": {"prompt": ..., "negative_prompt": ...},
+                        "parameters": {"resolution": "1080P", "ratio": "16:9",
+                                       "duration": 5, "seed": 42}}
+        body (wan2.6~2.1): "parameters": {"size": "1280*720", "duration": 5, "seed": 42}
+        body (kling): "parameters": {"mode": "pro", "aspect_ratio": "16:9",
+                                     "duration": 5, "watermark": False}
         resp: {"output": {"task_id": ..., "task_status": "PENDING"}, "request_id": ...}
       GET  {api_root}/tasks/{task_id}
         resp: {"output": {"task_id": ..., "task_status": "SUCCEEDED", "video_url": ...}}
@@ -421,6 +610,19 @@ class DashScopeVideoAdapter(AIGCApiAdapter):
     SYNTHESIS_PATH = 'services/aigc/video-generation/video-synthesis'
     SUCCESS_STATUSES = ('SUCCEEDED', )
     FAILURE_STATUSES = ('FAILED', 'CANCELED', 'UNKNOWN')
+
+    # 异步轮询预算。官方口径：文生视频通常耗时 1~5 分钟，建议查询间隔 15s，
+    # 查询接口默认 RPS 20；task_id 有效期 24 小时，超时后可用同一 task_id 复查，
+    # 切勿重复创建任务（https://help.aliyun.com/zh/model-studio/text-to-video-api-reference）。
+    POLL_INTERVAL_SECONDS = 15
+    # 20 分钟会对真实负载误杀：实测 wan2.7-t2v 720P / 2 秒片段耗时 739.5s（约 12.3 分钟，
+    # 且并发争抢会进一步拉长），官方口径"通常 1~5 分钟"在本环境不成立。取 45 分钟上限
+    # （15s × 180），既留足余量又不必等官方允许的 3 小时。嫌久可直接调小这个常量。
+    POLL_TIMEOUT_SECONDS = 2700
+    POLL_ERROR_BODY_CHARS = 300  # 非 2xx 轮询回显响应体的截断长度
+    # 鉴权/权限类错误（401/403 + 以下语义）重试无意义：立即失败，别空转到超时。
+    # 实测「current user api does not support asynchronous calls」= 该 API-KEY 无异步调用权限。
+    FATAL_POLL_MARKERS = ('AccessDenied', 'InvalidApiKey', 'does not support asynchronous')
 
     # ── URL resolution ────────────────────────────────────────────
 
@@ -449,30 +651,89 @@ class DashScopeVideoAdapter(AIGCApiAdapter):
     # ── Payload construction ──────────────────────────────────────
 
     def _build_payload(self, prompt: str, **params) -> Dict[str, Any]:
+        """按百炼三套协议分别构造 payload（见文件头部能力表）。
+
+        分辨率一律由 resolution 档位表达（前端传统一小写档位 480p/720p/1080p，
+        kling 额外接受官方 mode 取值 std/pro）；宽高比由 ratio 表达，不再从
+        width/height 反推像素尺寸。所有越界/不配套取值直接抛 ValueError，
+        由任务日志回显给用户，绝不静默替换（旧实现对 duration 做 5/10 snap 已移除）。
+        """
         tool = params.get('tool', 'txt2video')
         if tool != 'txt2video':
             raise ValueError(f'DashScope adapter only supports txt2video, got tool={tool!r}')
 
-        parameters: Dict[str, Any] = {
-            'mode': 'std',
-            'watermark': True,
-        }
+        model = self.model_name
+        family = _dashscope_video_family(model)
 
-        # aspect_ratio: prefer explicit ratio param, fall back to WxH → ratio
-        ratio = params.get('ratio', '')
-        if ratio:
-            parameters['aspect_ratio'] = str(ratio)
+        # ── 分辨率档位 ────────────────────────────────────────────
+        tier_raw = str(params.get('resolution') or '').strip().lower()
+        if not tier_raw:
+            tier = family['default_tier']
+        elif family['protocol'] == 'mode':
+            # kling 官方以 mode 表达分辨率，兼容调用方直接传 std/pro
+            tier = _KLING_TIER_BY_MODE.get(tier_raw, tier_raw)
         else:
-            parameters['aspect_ratio'] = _wh_to_aspect_ratio(params.get('width', 1280), params.get('height', 720))
+            tier = tier_raw
+        if tier not in family['tiers']:
+            tiers_text = '/'.join(family['tiers'])
+            raise ValueError(f'{model} 不支持分辨率 {tier_raw or tier}（可选：{tiers_text}）')
 
-        # duration: DashScope kling only supports 5s/10s — snap to a supported value
-        parameters['duration'] = _nearest_dashscope_duration(int(params.get('duration', 5)))
+        # ── 宽高比 ────────────────────────────────────────────────
+        ratios = _dashscope_ratios(family, tier)
+        ratio = str(params.get('ratio') or '').strip() or '16:9'  # 官方默认值
+        if ratio not in ratios:
+            ratios_text = '/'.join(ratios)
+            raise ValueError(f'{model} 在 {tier} 档位下不支持画幅比 {ratio}（可选：{ratios_text}）')
+
+        # ── 时长 ──────────────────────────────────────────────────
+        raw_duration = params.get('duration', 5)
+        try:
+            duration = int(raw_duration if raw_duration not in (None, '') else 5)
+        except (TypeError, ValueError):
+            raise ValueError(f'时长需为整数秒，收到 {raw_duration!r}')
+        duration = _dashscope_duration(family, model, duration)
+
+        # ── 可选参数 ──────────────────────────────────────────────
+        input_body: Dict[str, Any] = {'prompt': prompt}
+        negative_prompt = str(params.get('negative_prompt') or '').strip()
+        if negative_prompt:
+            # 反向提示词：wan 全系与 kling-v3 / kling-v3-omni 支持；kling-v3-turbo 不支持
+            input_body['negative_prompt'] = negative_prompt
+
+        seed = params.get('seed')
+        seed_value = None
+        if seed not in (None, ''):
+            try:
+                seed_value = int(seed)
+            except (TypeError, ValueError):
+                raise ValueError(f'随机种子需为整数，收到 {seed!r}')
+            if not 0 <= seed_value <= 2147483647:
+                raise ValueError(f'随机种子需在 0～2147483647 之间，收到 {seed_value}')
+            if not family['seed']:
+                logger.warning('%s 不支持 seed 参数，已忽略 seed=%s', model, seed_value)
+                seed_value = None
+
+        # ── 组装 parameters ──────────────────────────────────────
+        parameters: Dict[str, Any] = {}
+        if family['protocol'] == 'resolution':  # wan2.7：resolution + ratio
+            parameters['resolution'] = tier.upper()
+            parameters['ratio'] = ratio
+            parameters['duration'] = duration
+        elif family['protocol'] == 'size':  # wan2.6~2.1：必须给具体像素值
+            parameters['size'] = _DASHSCOPE_LEGACY_SIZE_TABLE[tier][ratio]
+            parameters['duration'] = duration
+        else:  # kling：mode 表达分辨率
+            parameters['mode'] = _KLING_MODE_BY_TIER[tier]
+            parameters['aspect_ratio'] = ratio
+            parameters['duration'] = duration
+            parameters['watermark'] = False  # 官方默认值，评测输出不需要水印
+
+        if seed_value is not None:
+            parameters['seed'] = seed_value
 
         return {
-            'model': self.model_name,
-            'input': {
-                'prompt': prompt
-            },
+            'model': model,
+            'input': input_body,
             'parameters': parameters,
         }
 
@@ -496,17 +757,41 @@ class DashScopeVideoAdapter(AIGCApiAdapter):
             return data
 
         poll_url = self._resolve_poll_url(post_url, task_id)
-        max_attempts = 60  # 5 minutes max
+        max_attempts = max(1, self.POLL_TIMEOUT_SECONDS // self.POLL_INTERVAL_SECONDS)
+        last_status = status
+        # 查询任务是同步 GET：不能带 X-DashScope-Async，否则被网关拒绝
+        # （403 AccessDenied「current user api does not support asynchronous calls」；
+        #  官方 error-code 文档要求移除该头或设为 disable）。
+        poll_headers = {k: v for k, v in headers.items() if k.lower() != 'x-dashscope-async'}
+        logger.info(
+            'Polling %s every %ds, up to %d min',
+            task_id,
+            self.POLL_INTERVAL_SECONDS,
+            self.POLL_TIMEOUT_SECONDS // 60,
+        )
 
         for attempt in range(max_attempts):
-            _time.sleep(5)
-            resp = requests.get(poll_url, headers=headers, timeout=30)
+            _time.sleep(self.POLL_INTERVAL_SECONDS)
+            resp = requests.get(poll_url, headers=poll_headers, timeout=30)
             if not resp.ok:
-                logger.warning('Poll %d: HTTP %d', attempt + 1, resp.status_code)
+                logger.warning(
+                    'Poll %d: HTTP %d body=%s',
+                    attempt + 1,
+                    resp.status_code,
+                    self._redact_secrets(resp.text)[:self.POLL_ERROR_BODY_CHARS],
+                )
+                # 鉴权/权限类错误重试无用：直接失败并把 message/request_id 交给用户
+                if resp.status_code in (401, 403) and any(m in resp.text for m in self.FATAL_POLL_MARKERS):
+                    raise RuntimeError(
+                        f'DashScope 异步轮询被拒（不可重试，task_id={task_id}）：'
+                        f'HTTP {resp.status_code} {self._poll_error_detail(resp.text)}。'
+                        '请为该 API-KEY 开通异步调用权限（百炼控制台 → API-KEY / 业务空间）后重试。'
+                    )
                 continue
             data = resp.json()
             out = data.get('output') or {}
             status = out.get('task_status', '')
+            last_status = status or last_status
             logger.info('DashScope task %s: status=%s', task_id, status)
 
             if status in self.SUCCESS_STATUSES:
@@ -518,7 +803,11 @@ class DashScopeVideoAdapter(AIGCApiAdapter):
                 logger.error('DashScope task %s failed: %s', task_id, fail_msg or data)
                 raise RuntimeError(f'DashScope task {task_id} failed: {fail_msg or data}')
 
-        raise TimeoutError(f'DashScope task {task_id} did not complete within {max_attempts * 5}s')
+        raise TimeoutError(
+            f'DashScope task {task_id} did not complete within {self.POLL_TIMEOUT_SECONDS}s '
+            f'(last status={last_status}). task_id 有效 24 小时，可用 "GET {poll_url}" '
+            f'手工复查结果，请勿重复创建任务。'
+        )
 
     # ── Response extraction ───────────────────────────────────────
 
@@ -543,6 +832,82 @@ class DashScopeVideoAdapter(AIGCApiAdapter):
 # Volcengine video generation adapter (火山方舟 Seedance)
 # ═══════════════════════════════════════════════════════════════════════
 
+# 火山方舟 Seedance 能力表：分辨率 / 时长 / 画幅比**都按模型前缀分档**，严格照官方文档
+# （模型列表 + 创建视频生成任务），前缀顺序敏感 —— 更具体的前缀必须排在前面。
+#   https://docs.volcengine.com/docs/ark/model-list
+#   https://docs.volcengine.com/docs/ark/create-video-generation-task-api
+# 官方 ratio 可选值（文生视频）：16:9、4:3、1:1、3:4、9:16、21:9、adaptive；
+# 其中 adaptive 只有 2.5 / 2.0 系列支持（1.0 系列文生视频不支持），默认 16:9。
+_VOLCENGINE_RATIOS = ('16:9', '4:3', '1:1', '3:4', '9:16', '21:9')
+
+_VOLCENGINE_VIDEO_FAMILIES = (
+    # Seedance 2.5：480p/720p/1080p（无 4k）；时长 4~30，或 -1；支持 adaptive
+    {
+        'name': 'doubao-seedance-2-5',
+        'prefixes': ('doubao-seedance-2-5', ),
+        'tiers': ('480p', '720p', '1080p'),
+        'duration': (4, 30),
+        'smart_duration': True,
+        'ratios': _VOLCENGINE_RATIOS,
+        'adaptive': True
+    },
+    # Seedance 2.0 fast / mini：仅 480p、720p（无 1080p/4k）；时长 4~15；支持 adaptive
+    {
+        'name': 'doubao-seedance-2-0-fast',
+        'prefixes': ('doubao-seedance-2-0-fast', ),
+        'tiers': ('480p', '720p'),
+        'duration': (4, 15),
+        'smart_duration': True,
+        'ratios': _VOLCENGINE_RATIOS,
+        'adaptive': True
+    },
+    {
+        'name': 'doubao-seedance-2-0-mini',
+        'prefixes': ('doubao-seedance-2-0-mini', ),
+        'tiers': ('480p', '720p'),
+        'duration': (4, 15),
+        'smart_duration': True,
+        'ratios': _VOLCENGINE_RATIOS,
+        'adaptive': True
+    },
+    # Seedance 2.0：480p/720p/1080p/4k；时长 4~15；支持 adaptive
+    {
+        'name': 'doubao-seedance-2-0',
+        'prefixes': ('doubao-seedance-2-0', ),
+        'tiers': ('480p', '720p', '1080p', '4k'),
+        'duration': (4, 15),
+        'smart_duration': True,
+        'ratios': _VOLCENGINE_RATIOS,
+        'adaptive': True
+    },
+    # Seedance 1.0 pro / pro fast（官方标注即将下线）：480p/720p/1080p；时长 2~12；
+    # 文生视频默认 16:9，不支持 adaptive，也不支持 -1
+    {
+        'name': 'doubao-seedance-1-0',
+        'prefixes': ('doubao-seedance-1-0', ),
+        'tiers': ('480p', '720p', '1080p'),
+        'duration': (2, 12),
+        'smart_duration': False,
+        'ratios': _VOLCENGINE_RATIOS,
+        'adaptive': False
+    },
+)
+
+VOLCENGINE_DEFAULT_TIER = '720p'  # 官方：各模型默认分辨率 720p
+VOLCENGINE_DEFAULT_RATIO = '16:9'  # 官方：文生视频默认 16:9
+
+
+def _volcengine_video_family(model: str) -> Dict[str, Any]:
+    """按模型 id 前缀匹配火山视频模型族；无法识别时报错而不是猜参数形态。"""
+    name = (model or '').strip().lower()
+    for family in _VOLCENGINE_VIDEO_FAMILIES:
+        if any(name.startswith(prefix) for prefix in family['prefixes']):
+            return family
+    raise ValueError(
+        f'无法识别火山引擎视频模型 {model!r}：'
+        '目前支持 doubao-seedance-2-5 / doubao-seedance-2-0 系列 / doubao-seedance-1-0 系列'
+    )
+
 
 class VolcengineVideoAdapter(AIGCApiAdapter):
     """Native Volcengine Ark video-task API for Seedance text-to-video."""
@@ -550,6 +915,13 @@ class VolcengineVideoAdapter(AIGCApiAdapter):
     TASK_PATH = 'contents/generations/tasks'
     SUCCESS_STATUSES = ('succeeded', 'success', 'completed', 'done')
     FAILURE_STATUSES = ('failed', 'error', 'cancelled', 'canceled')
+
+    # 异步轮询预算。官方：任务创建后需轮询查询结果，个人账号非 4k 并发仅 3
+    # （企业 10），1080p / 长时长排队会显著拉长总耗时 —— 旧的 60×5s=300s 硬上限
+    # 会把排队中的成功任务误判为失败。取与百炼同源的 15s × 180 = 45 分钟。
+    POLL_INTERVAL_SECONDS = 15
+    POLL_TIMEOUT_SECONDS = 2700
+    POLL_ERROR_BODY_CHARS = 300  # 非 2xx 轮询回显响应体的截断长度
 
     def _api_root(self) -> str:
         base = self.api_base.rstrip('/')
@@ -564,11 +936,35 @@ class VolcengineVideoAdapter(AIGCApiAdapter):
     def _build_payload(self, prompt: str, **params) -> Dict[str, Any]:
         if params.get('tool', 'txt2video') != 'txt2video':
             raise ValueError('Volcengine adapter only supports txt2video')
+        family = _volcengine_video_family(self.model_name)
         width = int(params.get('width', 1280))
         height = int(params.get('height', 720))
+        resolution = str(params.get('resolution') or _w_h_to_resolution(width, height)).strip().lower()
+        if resolution not in family['tiers']:
+            message = f"{self.model_name} 分辨率需为 {'、'.join(family['tiers'])}，收到 {resolution}"
+            logger.error(message)
+            raise ValueError(message)
         duration = int(params.get('duration', 5))
-        if not 5 <= duration <= 15:
-            message = '火山引擎视频时长必须为 5～15 秒'
+        low, high = family['duration']
+        if duration == -1 and family['smart_duration']:
+            pass  # 官方允许 -1：由模型在有效范围内智能选择时长（仅 2.0 / 2.5 系列）
+        elif not low <= duration <= high:
+            message = f'{self.model_name} 视频时长需为 {low}～{high} 秒整数，收到 {duration}'
+            logger.error(message)
+            raise ValueError(message)
+        ratio = str(params.get('ratio') or '').strip() or VOLCENGINE_DEFAULT_RATIO
+        if ratio == 'adaptive':
+            # 官方：adaptive（自动适配宽高比）仅 2.5 / 2.0 系列支持；1.0 系列文生视频不支持
+            if not family['adaptive']:
+                message = (f"{self.model_name} 文生视频不支持画幅比 adaptive"
+                           f"（可选：{'、'.join(family['ratios'])}）")
+                logger.error(message)
+                raise ValueError(message)
+        elif ratio not in family['ratios']:
+            message = (
+                f"{self.model_name} 不支持画幅比 {ratio}"
+                f"（可选：{'、'.join(family['ratios'])}{'、adaptive' if family['adaptive'] else ''}）"
+            )
             logger.error(message)
             raise ValueError(message)
         return {
@@ -577,8 +973,8 @@ class VolcengineVideoAdapter(AIGCApiAdapter):
                 'type': 'text',
                 'text': prompt
             }],
-            'resolution': str(params.get('resolution') or _w_h_to_resolution(width, height)),
-            'ratio': str(params.get('ratio') or _wh_to_aspect_ratio(width, height)),
+            'resolution': resolution,
+            'ratio': ratio,
             'duration': duration,
             'seed': int(params.get('seed', -1)),
         }
@@ -591,20 +987,65 @@ class VolcengineVideoAdapter(AIGCApiAdapter):
 
     def _poll_async(self, data: Dict[str, Any], post_url: str, headers: Dict[str, str]) -> Dict[str, Any]:
         task_id = data.get('id', '')
-        for attempt in range(60):
-            _time.sleep(5)
-            resp = requests.get(self._resolve_poll_url(post_url, task_id), headers=headers, timeout=30)
+        status = str(data.get('status', '')).lower()
+        logger.info('Volcengine task %s: status=%s', task_id, status)
+        if status in self.SUCCESS_STATUSES:
+            return data
+
+        poll_url = self._resolve_poll_url(post_url, task_id)
+        max_attempts = max(1, self.POLL_TIMEOUT_SECONDS // self.POLL_INTERVAL_SECONDS)
+        last_status = status
+        logger.info(
+            'Polling %s every %ds, up to %d min',
+            task_id,
+            self.POLL_INTERVAL_SECONDS,
+            self.POLL_TIMEOUT_SECONDS // 60,
+        )
+
+        for attempt in range(max_attempts):
+            _time.sleep(self.POLL_INTERVAL_SECONDS)
+            resp = requests.get(poll_url, headers=headers, timeout=30)
             if not resp.ok:
-                logger.warning('Volcengine poll %d: HTTP %d', attempt + 1, resp.status_code)
+                logger.warning(
+                    'Volcengine poll %d: HTTP %d body=%s',
+                    attempt + 1,
+                    resp.status_code,
+                    self._redact_secrets(resp.text)[:self.POLL_ERROR_BODY_CHARS],
+                )
+                # 创建任务已用同一 API-KEY 成功，轮询再遇 401/403 属鉴权/权限问题，
+                # 不会自愈：立即失败并把 message/request_id 交给用户，别空转到超时。
+                if resp.status_code in (401, 403):
+                    raise RuntimeError(
+                        f'Volcengine 异步轮询被拒（不可重试，task_id={task_id}）：'
+                        f'HTTP {resp.status_code} {self._poll_error_detail(resp.text)}。'
+                        '请确认该 API-KEY 有效、且已开通对应视频模型的任务查询权限后重试。'
+                    )
                 continue
             result = resp.json()
             status = str(result.get('status', '')).lower()
+            last_status = status or last_status
             logger.info('Volcengine task %s: status=%s', task_id, status)
+
             if status in self.SUCCESS_STATUSES:
+                logger.info('Volcengine task %s completed', task_id)
                 return result
             if status in self.FAILURE_STATUSES:
-                raise RuntimeError(f'Volcengine task {task_id} failed: {result.get("error") or result}')
-        raise TimeoutError(f'Volcengine task {task_id} did not complete within 300s')
+                error = result.get('error')
+                if error is None:
+                    detail = json.dumps(result, ensure_ascii=False)
+                elif isinstance(error, str):
+                    detail = error
+                else:
+                    detail = json.dumps(error, ensure_ascii=False)
+                message = f'Volcengine task {task_id} failed: {str(detail)[:self.POLL_ERROR_BODY_CHARS]}'
+                logger.error(message)
+                raise RuntimeError(message)
+
+        raise TimeoutError(
+            f'Volcengine task {task_id} did not complete within {self.POLL_TIMEOUT_SECONDS}s '
+            f'(last status={last_status}). 可用 "GET {poll_url}" 手工复查结果，'
+            f'请勿重复创建任务。'
+        )
 
     def _extract_bytes(self, data: Dict[str, Any]) -> bytes:
         content = data.get('content') or {}
@@ -687,12 +1128,3 @@ def _wh_to_aspect_ratio(width: int, height: int) -> str:
         if diff < best_diff:
             best, best_diff = name, diff
     return best
-
-
-def _nearest_dashscope_duration(duration: int) -> int:
-    """Snap a requested duration to the values DashScope kling supports (5s / 10s)."""
-    if duration <= 0:
-        return 5
-    if duration <= 7:
-        return 5
-    return 10

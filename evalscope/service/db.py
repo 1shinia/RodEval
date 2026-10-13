@@ -6,8 +6,8 @@ request.  The database file lives at ``{OUTPUT_DIR}/evalscope_meta.db``.
 
 import json
 import os
-import signal
 import shutil
+import signal
 import sqlite3
 import threading
 import time
@@ -15,9 +15,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from evalscope.utils.logger import get_logger
-
 from .task_status import normalize_persisted_task_status
-from .time_utils import (epoch_to_utc_iso, legacy_datetime_to_utc_iso, normalize_persisted_timestamp, utc_now_iso)
+from .time_utils import epoch_to_utc_iso, legacy_datetime_to_utc_iso, normalize_persisted_timestamp, utc_now_iso
 
 logger = get_logger()
 
@@ -54,9 +53,8 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
     with _write_lock:
         conn = _get_conn()
         deadline = time.monotonic() + (
-            deadline_seconds
-            if deadline_seconds is not None
-            else float(os.environ.get('EVALSCOPE_DB_WRITE_DEADLINE_SEC', _DEFAULT_WRITE_DEADLINE_SEC))
+            deadline_seconds if deadline_seconds is not None else
+            float(os.environ.get('EVALSCOPE_DB_WRITE_DEADLINE_SEC', _DEFAULT_WRITE_DEADLINE_SEC))
         )
         attempt = 0
         while True:
@@ -88,6 +86,7 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
                 except Exception:
                     pass
                 raise
+
 
 # ---------------------------------------------------------------------------
 # Schema versioning — simple linear migration system
@@ -512,7 +511,8 @@ def _repair_partial_v11(conn: sqlite3.Connection) -> None:
     either state so the immutable v11 script can be replayed safely.
     """
     tables = {
-        r[0] for r in conn.execute(
+        r[0]
+        for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('task_state', 'task_state_new')"
         ).fetchall()
     }
@@ -623,13 +623,13 @@ def _migrate_v16_task_registry(conn: sqlite3.Connection) -> None:
         '''INSERT OR IGNORE INTO task_registry (task_id, task_kind, user_id, created_at)
            SELECT task_id, 'eval', COALESCE(user_id, 1), COALESCE(NULLIF(timestamp, ''), ?)
            FROM eval_reports''',
-        (now,),
+        (now, ),
     )
     conn.execute(
         '''INSERT OR IGNORE INTO task_registry (task_id, task_kind, user_id, created_at)
            SELECT task_id, 'perf', COALESCE(user_id, 1), COALESCE(NULLIF(timestamp, ''), ?)
            FROM perf_tasks''',
-        (now,),
+        (now, ),
     )
     conn.execute(
         '''INSERT OR IGNORE INTO task_registry (task_id, task_kind, user_id, created_at)
@@ -638,15 +638,13 @@ def _migrate_v16_task_registry(conn: sqlite3.Connection) -> None:
                   CASE WHEN COALESCE(user_id, 0) > 0 THEN user_id ELSE 1 END,
                   COALESCE(NULLIF(started_at, ''), ?)
            FROM task_state''',
-        (now,),
+        (now, ),
     )
 
 
 def _migrate_v17_eval_report_datasets(conn: sqlite3.Connection) -> None:
     """Backfill one indexed row per dataset while retaining legacy snapshots."""
-    rows = conn.execute(
-        'SELECT task_id, user_id, dataset_name, dataset_scores, score FROM eval_reports'
-    ).fetchall()
+    rows = conn.execute('SELECT task_id, user_id, dataset_name, dataset_scores, score FROM eval_reports').fetchall()
     inserted = 0
     for row in rows:
         names = _split_dataset_names(row['dataset_name'])
@@ -798,8 +796,13 @@ def _verify_schema(*, strict: bool = False) -> None:
     try:
         current_version = _get_schema_version(conn)
         required_tables = {
-            'schema_version', 'eval_reports', 'perf_tasks', 'task_state',
-            'compare_reports', 'users', 'token_blacklist',
+            'schema_version',
+            'eval_reports',
+            'perf_tasks',
+            'task_state',
+            'compare_reports',
+            'users',
+            'token_blacklist',
         }
         if current_version >= 16:
             required_tables.add('task_registry')
@@ -811,21 +814,20 @@ def _verify_schema(*, strict: bool = False) -> None:
             required_tables.add('registration_invites')
         if current_version >= 22:
             required_tables.add('system_settings')
-        existing_tables = {
-            r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
-        }
+        existing_tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
         missing_tables = sorted(required_tables - existing_tables)
         if missing_tables:
-            structural_errors.append(
-                f'missing table(s): {", ".join(missing_tables)}'
-            )
+            structural_errors.append(f'missing table(s): {", ".join(missing_tables)}')
 
         required_columns = {
             'eval_reports': {
-                'task_id', 'model_name', 'dataset_name', 'eval_backend',
-                'user_id', 'has_errors', 'error_note',
+                'task_id',
+                'model_name',
+                'dataset_name',
+                'eval_backend',
+                'user_id',
+                'has_errors',
+                'error_note',
             },
             'perf_tasks': {'task_id', 'model', 'user_id'},
             'task_state': {'task_id', 'task_type', 'status', 'user_id'},
@@ -840,53 +842,65 @@ def _verify_schema(*, strict: bool = False) -> None:
             required_columns['eval_report_datasets'] = {'task_id', 'user_id', 'dataset_name', 'score', 'position'}
         if current_version >= 20:
             required_columns['batch_jobs'] = {
-                'batch_id', 'batch_type', 'user_id', 'status', 'manifest_hash',
-                'total', 'completed', 'errors', 'results_json', 'errors_json',
-                'created_at', 'updated_at',
+                'batch_id',
+                'batch_type',
+                'user_id',
+                'status',
+                'manifest_hash',
+                'total',
+                'completed',
+                'errors',
+                'results_json',
+                'errors_json',
+                'created_at',
+                'updated_at',
             }
             required_columns['batch_items'] = {
-                'batch_id', 'row_index', 'model', 'status', 'task_id',
-                'error', 'started_at', 'finished_at',
+                'batch_id',
+                'row_index',
+                'model',
+                'status',
+                'task_id',
+                'error',
+                'started_at',
+                'finished_at',
             }
         if current_version >= 21:
             required_columns['registration_invites'] = {
-                'id', 'code_hash', 'max_uses', 'used_count', 'expires_at',
-                'created_by', 'created_at',
+                'id',
+                'code_hash',
+                'max_uses',
+                'used_count',
+                'expires_at',
+                'created_by',
+                'created_at',
             }
         if current_version >= 22:
             required_columns['system_settings'] = {
-                'key', 'value', 'updated_by', 'updated_at',
+                'key',
+                'value',
+                'updated_by',
+                'updated_at',
             }
 
         if current_version >= 21 and 'registration_invites' in existing_tables:
-            invite_indexes = {
-                row['name'] for row in conn.execute("PRAGMA index_list('registration_invites')")
-            }
+            invite_indexes = {row['name'] for row in conn.execute("PRAGMA index_list('registration_invites')")}
             if 'idx_registration_invites_active' not in invite_indexes:
-                structural_errors.append(
-                    'registration_invites missing idx_registration_invites_active index'
-                )
+                structural_errors.append('registration_invites missing idx_registration_invites_active index')
             invite_unique = {
-                row['name'] for row in conn.execute("PRAGMA index_list('registration_invites')")
+                row['name']
+                for row in conn.execute("PRAGMA index_list('registration_invites')")
                 if row['unique']
             }
             if not any(
-                'code_hash' in {
-                    info['name'] for info in conn.execute(
-                        f"PRAGMA index_info({index_name})"
-                    )
-                }
+                'code_hash' in {info['name']
+                                for info in conn.execute(f"PRAGMA index_info({index_name})")}
                 for index_name in invite_unique
             ):
-                structural_errors.append(
-                    'registration_invites missing unique code_hash constraint'
-                )
+                structural_errors.append('registration_invites missing unique code_hash constraint')
 
         if current_version >= 22 and 'system_settings' in existing_tables:
-            settings_columns = {
-                row['name']: row['pk']
-                for row in conn.execute('PRAGMA table_info(system_settings)')
-            }
+            settings_columns = {row['name']: row['pk'] for row in conn.execute('PRAGMA table_info(system_settings)')}
             if settings_columns.get('key') != 1:
                 structural_errors.append('system_settings key column is not the primary key')
         for table, expected in required_columns.items():
@@ -895,16 +909,13 @@ def _verify_schema(*, strict: bool = False) -> None:
             cols = {r['name'] for r in conn.execute(f'PRAGMA table_info({table})')}
             missing = sorted(expected - cols)
             if missing:
-                structural_errors.append(
-                    f'{table} missing column(s): {", ".join(missing)}'
-                )
+                structural_errors.append(f'{table} missing column(s): {", ".join(missing)}')
 
         if current_version >= 17 and 'eval_report_datasets' in existing_tables:
             foreign_keys = conn.execute('PRAGMA foreign_key_list(eval_report_datasets)').fetchall()
             if not any(
-                row['table'] == 'eval_reports' and row['from'] == 'task_id'
-                and row['to'] == 'task_id' and row['on_delete'].upper() == 'CASCADE'
-                for row in foreign_keys
+                row['table'] == 'eval_reports' and row['from'] == 'task_id' and row['to'] == 'task_id'
+                and row['on_delete'].upper() == 'CASCADE' for row in foreign_keys
             ):
                 structural_errors.append(
                     'eval_report_datasets missing task_id → eval_reports ON DELETE CASCADE foreign key'
@@ -917,15 +928,12 @@ def _verify_schema(*, strict: bool = False) -> None:
                 'trg_task_state_task_registry_insert',
             }
             existing_triggers = {
-                row[0] for row in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'trigger'"
-                ).fetchall()
+                row[0]
+                for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'").fetchall()
             }
             missing_triggers = sorted(required_triggers - existing_triggers)
             if missing_triggers:
-                structural_errors.append(
-                    f'missing task-registry trigger(s): {", ".join(missing_triggers)}'
-                )
+                structural_errors.append(f'missing task-registry trigger(s): {", ".join(missing_triggers)}')
 
         if structural_errors:
             message = 'Schema drift: ' + '; '.join(structural_errors)
@@ -948,30 +956,25 @@ def _verify_schema(*, strict: bool = False) -> None:
             logger.error(message)
 
         if current_version >= 11 and 'task_state' in existing_tables:
-            row = conn.execute(
-                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'task_state'"
-            ).fetchone()
+            row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'task_state'").fetchone()
             normalized_sql = ' '.join((row[0] if row and row[0] else '').lower().split())
             required_statuses = ('running', 'completed', 'failed', 'stopped', 'orphaned')
-            if 'check' not in normalized_sql or any(f"'{status}'" not in normalized_sql for status in required_statuses):
+            if 'check' not in normalized_sql or any(
+                f"'{status}'" not in normalized_sql for status in required_statuses
+            ):
                 message = 'Schema drift: task_state.status CHECK constraint is missing or malformed'
                 if strict:
                     raise RuntimeError(message)
                 logger.error(message)
 
         if 'eval_reports' in existing_tables:
-            rows = conn.execute(
-                "PRAGMA index_xinfo('idx_eval_reports_model_nocase')"
-            ).fetchall()
+            rows = conn.execute("PRAGMA index_xinfo('idx_eval_reports_model_nocase')").fetchall()
             if not rows:
                 logger.warning(
                     'Schema drift: idx_eval_reports_model_nocase index is missing; '
                     'model filters fall back to a full scan. Migration v9 should have created it.'
                 )
-            elif not any(
-                r['name'] == 'model_name' and r['coll'] == 'NOCASE' and r['key'] == 1
-                for r in rows
-            ):
+            elif not any(r['name'] == 'model_name' and r['coll'] == 'NOCASE' and r['key'] == 1 for r in rows):
                 logger.warning(
                     'Schema drift: idx_eval_reports_model_nocase exists but is malformed '
                     '(expected model_name COLLATE NOCASE); model filters may not use it.'
@@ -995,9 +998,8 @@ def _verify_schema(*, strict: bool = False) -> None:
                 'idx_perf_tasks_user_dataset_timestamp',
             ])
         existing_indexes = {
-            row[0] for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'index'"
-            ).fetchall()
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'").fetchall()
         }
         missing_indexes = [name for name in critical_indexes if name not in existing_indexes]
         if missing_indexes:
@@ -1083,8 +1085,10 @@ def backup_db(output_dir: str | None = None, keep: int = 5, reason: str = 'start
         # Retention: keep newest *keep* files per reason prefix, by mtime.
         # The snapshot just written is included (newest mtime → survives).
         backups = sorted(
-            (f for f in os.listdir(os.path.join(out_dir, 'backups'))
-             if f.startswith(f'evalscope_meta_{reason}_') and f.endswith('.db')),
+            (
+                f for f in os.listdir(os.path.join(out_dir, 'backups'))
+                if f.startswith(f'evalscope_meta_{reason}_') and f.endswith('.db')
+            ),
             key=lambda f: os.path.getmtime(os.path.join(out_dir, 'backups', f)),
         )
         for old in backups[:-keep]:
@@ -1161,7 +1165,7 @@ def _get_conn() -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 _TASK_ID_TABLES = ('eval_reports', 'perf_tasks', 'task_state')
-_TASK_OWNERSHIP_TABLES = _TASK_ID_TABLES + ('task_registry',)
+_TASK_OWNERSHIP_TABLES = _TASK_ID_TABLES + ('task_registry', )
 
 
 def _task_kind_for_type(task_type: str) -> str:
@@ -1190,18 +1194,14 @@ def _ensure_task_registry(
         return
     existing = conn.execute(
         'SELECT task_kind, user_id FROM task_registry WHERE task_id = ?',
-        (task_id,),
+        (task_id, ),
     ).fetchone()
     if existing is None:
         raise RuntimeError(f'Failed to register task_id {task_id!r}')
     if existing['task_kind'] != task_kind:
-        raise ValueError(
-            f'task_id {task_id!r} is already registered as {existing["task_kind"]}, not {task_kind}'
-        )
+        raise ValueError(f'task_id {task_id!r} is already registered as {existing["task_kind"]}, not {task_kind}')
     if int(existing['user_id']) != int(user_id):
-        raise PermissionError(
-            f'task_id {task_id!r} is already owned by user {existing["user_id"]}'
-        )
+        raise PermissionError(f'task_id {task_id!r} is already owned by user {existing["user_id"]}')
 
 
 def reserve_task_id(task_id: str, task_type: str, user_id: int) -> bool:
@@ -1244,7 +1244,7 @@ def release_task_id_reservation(task_id: str, user_id: int | None = None) -> boo
 
     def _op(conn: sqlite3.Connection) -> bool:
         for table in _TASK_ID_TABLES:
-            if conn.execute(f'SELECT 1 FROM {table} WHERE task_id = ? LIMIT 1', (task_id,)).fetchone():
+            if conn.execute(f'SELECT 1 FROM {table} WHERE task_id = ? LIMIT 1', (task_id, )).fetchone():
                 return False
         params: list[Any] = [task_id]
         owner_sql = ''
@@ -1268,10 +1268,10 @@ def task_id_exists(task_id: str) -> bool:
     within one table.
     """
     conn = _get_conn()
-    if conn.execute('SELECT 1 FROM task_registry WHERE task_id = ? LIMIT 1', (task_id,)).fetchone():
+    if conn.execute('SELECT 1 FROM task_registry WHERE task_id = ? LIMIT 1', (task_id, )).fetchone():
         return True
     for table in _TASK_ID_TABLES:
-        if conn.execute(f'SELECT 1 FROM {table} WHERE task_id = ? LIMIT 1', (task_id,)).fetchone():
+        if conn.execute(f'SELECT 1 FROM {table} WHERE task_id = ? LIMIT 1', (task_id, )).fetchone():
             return True
     return False
 
@@ -1330,9 +1330,7 @@ def write_owner_marker(task_dir: str, user_id: int) -> None:
             with open(owner_path) as f:
                 existing = int(f.read().strip())
             if existing != int(user_id):
-                raise PermissionError(
-                    f'task directory already belongs to user {existing}, not {int(user_id)}'
-                )
+                raise PermissionError(f'task directory already belongs to user {existing}, not {int(user_id)}')
         tmp = os.path.join(task_dir, '.owner.tmp')
         with open(tmp, 'w') as f:
             f.write(str(int(user_id)))
@@ -1371,7 +1369,8 @@ def checkpoint_db() -> dict:
         result = {'busy': row[0], 'log': row[1], 'checkpointed': row[2]}
         if result['checkpointed'] > 0:
             logger.debug(
-                'WAL checkpoint: %d pages moved, %d in log, %d busy', result['checkpointed'], result['log'], result['busy']
+                'WAL checkpoint: %d pages moved, %d in log, %d busy', result['checkpointed'], result['log'],
+                result['busy']
             )
         return result
     except Exception as e:
@@ -1419,7 +1418,7 @@ def _replace_eval_report_datasets(
         if score is None and len(names) == 1 and overall_score is not None:
             score = float(overall_score)
         values.append((task_id, int(user_id), name, score, position))
-    conn.execute('DELETE FROM eval_report_datasets WHERE task_id = ?', (task_id,))
+    conn.execute('DELETE FROM eval_report_datasets WHERE task_id = ?', (task_id, ))
     if values:
         conn.executemany(
             '''INSERT INTO eval_report_datasets
@@ -1448,6 +1447,7 @@ def upsert_eval_report(
     SELECT-then-UPDATE sequence. This keeps the invariant safe across multiple
     processes that may share the same SQLite file.
     """
+
     def _op(conn: sqlite3.Connection) -> None:
         _ensure_task_registry(conn, task_id, 'eval', user_id, timestamp)
         cursor = conn.execute(
@@ -1467,21 +1467,23 @@ def upsert_eval_report(
                    error_note = excluded.error_note
                WHERE eval_reports.user_id = excluded.user_id''',
             (
-                task_id, model_name, dataset_name, score, num_samples, timestamp,
+                task_id,
+                model_name,
+                dataset_name,
+                score,
+                num_samples,
+                timestamp,
                 json.dumps(dataset_scores, ensure_ascii=False) if dataset_scores else None,
                 eval_backend,
                 user_id,
-                has_errors, error_note,
+                has_errors,
+                error_note,
             ),
         )
         if cursor.rowcount == 0:
-            existing = conn.execute(
-                'SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id,)
-            ).fetchone()
+            existing = conn.execute('SELECT user_id FROM eval_reports WHERE task_id = ?', (task_id, )).fetchone()
             owner = existing['user_id'] if existing is not None else 'unknown'
-            raise PermissionError(
-                f'task_id {task_id!r} is already owned by user {owner}'
-            )
+            raise PermissionError(f'task_id {task_id!r} is already owned by user {owner}')
         _replace_eval_report_datasets(
             conn,
             task_id=task_id,
@@ -1574,10 +1576,10 @@ def query_eval_reports(
     _backend_where = 'AND eval_backend = ?' if backend else ''
     _backend_params = [backend] if backend else []
     avail_models = [
-        r[0] for r in conn.
-        execute(f'SELECT DISTINCT model_name FROM eval_reports '
-                f'WHERE model_name != "" AND user_id = ? {_backend_where} ORDER BY model_name',
-                [user_id, *_backend_params]).fetchall()
+        r[0] for r in conn.execute(
+            f'SELECT DISTINCT model_name FROM eval_reports '
+            f'WHERE model_name != "" AND user_id = ? {_backend_where} ORDER BY model_name', [user_id, *_backend_params]
+        ).fetchall()
     ]
     avail_datasets = [
         r[0] for r in conn.execute(
@@ -1639,13 +1641,14 @@ def query_eval_reports(
 
 
 def delete_eval_report(task_id: str, user_id: int | None = None) -> None:
+
     def _op(conn: sqlite3.Connection) -> None:
         if user_id is not None:
             conn.execute('DELETE FROM eval_report_datasets WHERE task_id = ? AND user_id = ?', (task_id, user_id))
             conn.execute('DELETE FROM eval_reports WHERE task_id = ? AND user_id = ?', (task_id, user_id))
         else:
-            conn.execute('DELETE FROM eval_report_datasets WHERE task_id = ?', (task_id,))
-            conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id,))
+            conn.execute('DELETE FROM eval_report_datasets WHERE task_id = ?', (task_id, ))
+            conn.execute('DELETE FROM eval_reports WHERE task_id = ?', (task_id, ))
 
     _write(_op)
 
@@ -1666,6 +1669,7 @@ def upsert_perf_task(
     user_id: int = 1,
 ) -> None:
     """Insert or update a perf task without allowing owner reassignment."""
+
     def _op(conn: sqlite3.Connection) -> None:
         _ensure_task_registry(conn, task_id, 'perf', user_id, timestamp)
         cursor = conn.execute(
@@ -1683,13 +1687,9 @@ def upsert_perf_task(
             (task_id, model, api, dataset, runs, int(has_report), timestamp, user_id),
         )
         if cursor.rowcount == 0:
-            existing = conn.execute(
-                'SELECT user_id FROM perf_tasks WHERE task_id = ?', (task_id,)
-            ).fetchone()
+            existing = conn.execute('SELECT user_id FROM perf_tasks WHERE task_id = ?', (task_id, )).fetchone()
             owner = existing['user_id'] if existing is not None else 'unknown'
-            raise PermissionError(
-                f'task_id {task_id!r} is already owned by user {owner}'
-            )
+            raise PermissionError(f'task_id {task_id!r} is already owned by user {owner}')
 
     _write(_op)
 
@@ -1702,15 +1702,15 @@ def cleanup_perf_tasks(output_dir: str, user_id: int | None = None) -> int:
 
     def _op(conn: sqlite3.Connection) -> int:
         if user_id is not None:
-            rows = conn.execute('SELECT task_id FROM perf_tasks WHERE user_id = ?', (user_id,)).fetchall()
+            rows = conn.execute('SELECT task_id FROM perf_tasks WHERE user_id = ?', (user_id, )).fetchall()
         else:
             rows = conn.execute('SELECT task_id FROM perf_tasks').fetchall()
         stale: list[str] = []
-        for (tid,) in rows:
+        for (tid, ) in rows:
             if not os.path.isdir(os.path.join(output_dir, tid)):
                 stale.append(tid)
         if stale:
-            conn.executemany('DELETE FROM perf_tasks WHERE task_id = ?', [(t,) for t in stale])
+            conn.executemany('DELETE FROM perf_tasks WHERE task_id = ?', [(t, ) for t in stale])
         return len(stale)
 
     return _write(_op)
@@ -1724,16 +1724,16 @@ def cleanup_eval_reports(output_dir: str, user_id: int | None = None) -> int:
 
     def _op(conn: sqlite3.Connection) -> int:
         if user_id is not None:
-            rows = conn.execute('SELECT task_id FROM eval_reports WHERE user_id = ?', (user_id,)).fetchall()
+            rows = conn.execute('SELECT task_id FROM eval_reports WHERE user_id = ?', (user_id, )).fetchall()
         else:
             rows = conn.execute('SELECT task_id FROM eval_reports').fetchall()
         stale: list[str] = []
-        for (tid,) in rows:
+        for (tid, ) in rows:
             if not os.path.isdir(os.path.join(output_dir, tid)):
                 stale.append(tid)
         if stale:
-            conn.executemany('DELETE FROM eval_report_datasets WHERE task_id = ?', [(t,) for t in stale])
-            conn.executemany('DELETE FROM eval_reports WHERE task_id = ?', [(t,) for t in stale])
+            conn.executemany('DELETE FROM eval_report_datasets WHERE task_id = ?', [(t, ) for t in stale])
+            conn.executemany('DELETE FROM eval_reports WHERE task_id = ?', [(t, ) for t in stale])
         return len(stale)
 
     return _write(_op)
@@ -1804,7 +1804,6 @@ def upsert_aigc_audio_report(output_dir: str, task_id: str, user_id: int = 1) ->
     # Metric-name mapping: config name -> results.json key.
     metric_key_map = {
         'clip_score': 'clip_score_mean',
-        'fvd': 'fvd',
         'lpips': 'lpips_mean',
     }
     score = 0.0
@@ -1902,16 +1901,15 @@ def query_perf_tasks(
 
     # Available filter values — scoped to user (no cross-tenant leakage)
     avail_models = [
-        r[0] for r in conn.
-        execute('SELECT DISTINCT model FROM perf_tasks '
-                'WHERE model != "" AND model != "N/A" AND user_id = ? ORDER BY model',
-                (user_id,)).fetchall()
+        r[0] for r in conn.execute(
+            'SELECT DISTINCT model FROM perf_tasks '
+            'WHERE model != "" AND model != "N/A" AND user_id = ? ORDER BY model', (user_id, )
+        ).fetchall()
     ]
     avail_datasets = [
         r[0] for r in conn.execute(
             'SELECT DISTINCT dataset FROM perf_tasks '
-            'WHERE dataset != "" AND dataset != "N/A" AND user_id = ? ORDER BY dataset',
-            (user_id,)
+            'WHERE dataset != "" AND dataset != "N/A" AND user_id = ? ORDER BY dataset', (user_id, )
         ).fetchall()
     ]
 
@@ -1942,11 +1940,12 @@ def query_perf_tasks(
 
 
 def delete_perf_task(task_id: str, user_id: int | None = None) -> None:
+
     def _op(conn: sqlite3.Connection) -> None:
         if user_id is not None:
             conn.execute('DELETE FROM perf_tasks WHERE task_id = ? AND user_id = ?', (task_id, user_id))
         else:
-            conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id,))
+            conn.execute('DELETE FROM perf_tasks WHERE task_id = ?', (task_id, ))
 
     _write(_op)
 
@@ -1998,9 +1997,7 @@ def update_batch_job(batch_id: str, **fields: Any) -> None:
     values['updated_at'] = utc_now_iso()
     assignments = ', '.join(f'{key} = ?' for key in values)
     params = [*values.values(), batch_id]
-    _write(lambda conn: conn.execute(
-        f'UPDATE batch_jobs SET {assignments} WHERE batch_id = ?', params
-    ))
+    _write(lambda conn: conn.execute(f'UPDATE batch_jobs SET {assignments} WHERE batch_id = ?', params))
 
 
 def update_batch_item(batch_id: str, row_index: int, **fields: Any) -> None:
@@ -2011,9 +2008,9 @@ def update_batch_item(batch_id: str, row_index: int, **fields: Any) -> None:
         return
     assignments = ', '.join(f'{key} = ?' for key in values)
     params = [*values.values(), batch_id, int(row_index)]
-    _write(lambda conn: conn.execute(
-        f'UPDATE batch_items SET {assignments} WHERE batch_id = ? AND row_index = ?', params
-    ))
+    _write(
+        lambda conn: conn.execute(f'UPDATE batch_items SET {assignments} WHERE batch_id = ? AND row_index = ?', params)
+    )
 
 
 def checkpoint_batch_item(
@@ -2065,9 +2062,7 @@ def checkpoint_batch_item(
     except (ValueError, BatchCheckpointError):
         raise
     except Exception as e:
-        raise BatchCheckpointError(
-            f'Failed to persist batch checkpoint {batch_id}/{row_index}'
-        ) from e
+        raise BatchCheckpointError(f'Failed to persist batch checkpoint {batch_id}/{row_index}') from e
 
 
 def get_batch_job(
@@ -2104,7 +2099,7 @@ def get_batch_job(
     job['items'] = [
         dict(item) for item in conn.execute(
             'SELECT * FROM batch_items WHERE batch_id = ? ORDER BY row_index',
-            (batch_id,),
+            (batch_id, ),
         ).fetchall()
     ]
     return job
@@ -2122,6 +2117,7 @@ def claim_batch_resume(
     Returns ``claimed``, ``running``, ``manifest_mismatch``, ``not_resumable``
     or ``not_found``.  The conditional update is the concurrency arbiter.
     """
+
     def _op(conn: sqlite3.Connection) -> str:
         if user_id is None:
             row = conn.execute(
@@ -2159,9 +2155,8 @@ def recover_interrupted_batches() -> int:
 
     def _op(conn: sqlite3.Connection) -> int:
         batch_ids = [
-            row['batch_id'] for row in conn.execute(
-                "SELECT batch_id FROM batch_jobs WHERE status IN ('running', 'cancelling')"
-            ).fetchall()
+            row['batch_id'] for row in
+            conn.execute("SELECT batch_id FROM batch_jobs WHERE status IN ('running', 'cancelling')").fetchall()
         ]
         if not batch_ids:
             return 0
@@ -2208,16 +2203,14 @@ def upsert_task_state(
         task_kind = _task_kind_for_type(task_type)
         registry = conn.execute(
             'SELECT task_kind, user_id FROM task_registry WHERE task_id = ?',
-            (task_id,),
+            (task_id, ),
         ).fetchone()
         if registry is None:
             effective_user_id = int(user_id) if int(user_id) > 0 else 1
             _ensure_task_registry(conn, task_id, task_kind, effective_user_id, now)
         else:
             if registry['task_kind'] != task_kind:
-                raise ValueError(
-                    f'task_id {task_id!r} is registered as {registry["task_kind"]}, not {task_kind}'
-                )
+                raise ValueError(f'task_id {task_id!r} is registered as {registry["task_kind"]}, not {task_kind}')
             effective_user_id = int(registry['user_id'])
         conn.execute(
             '''INSERT INTO task_state
@@ -2230,8 +2223,7 @@ def upsert_task_state(
                    pid_start_ticks = excluded.pid_start_ticks,
                    user_id = excluded.user_id,
                    updated_at = excluded.updated_at''',
-            (task_id, task_type, status, pid, model, effective_user_id,
-             pid_start_ticks, now, now),
+            (task_id, task_type, status, pid, model, effective_user_id, pid_start_ticks, now, now),
         )
 
     _write(_op)
@@ -2269,10 +2261,10 @@ def sweep_orphaned_tasks() -> list[dict]:
            ORDER BY started_at DESC'''
     ).fetchall()
     dead = [
-        r['task_id'] for r in rows
-        if (not r['pid'] or not _pid_alive(r['pid'])
-            or (r['pid_start_ticks'] is not None
-                and _process_start_ticks(r['pid']) != r['pid_start_ticks']))
+        r['task_id'] for r in rows if (
+            not r['pid'] or not _pid_alive(r['pid']) or
+            (r['pid_start_ticks'] is not None and _process_start_ticks(r['pid']) != r['pid_start_ticks'])
+        )
     ]
     if dead:
         for tid in dead:
@@ -2295,10 +2287,10 @@ def list_running_tasks() -> list[dict]:
            ORDER BY started_at DESC'''
     ).fetchall()
     return [
-        dict(r) for r in rows
-        if (r['pid'] and _pid_alive(r['pid'])
-            and r['pid_start_ticks'] is not None
-            and _process_start_ticks(r['pid']) == r['pid_start_ticks'])
+        dict(r) for r in rows if (
+            r['pid'] and _pid_alive(r['pid']) and r['pid_start_ticks'] is not None
+            and _process_start_ticks(r['pid']) == r['pid_start_ticks']
+        )
     ]
 
 
@@ -2331,8 +2323,10 @@ def _is_confirmed_stale_worker(pid: int, expected_start_ticks: int | None) -> bo
     A persisted PID may have been reused after the old worker exited. Never
     signal it unless procfs confirms both its start time and worker identity.
     """
-    if (pid <= 1 or expected_start_ticks is None or not _pid_alive(pid)
-            or _process_start_ticks(pid) != expected_start_ticks):
+    if (
+        pid <= 1 or expected_start_ticks is None or not _pid_alive(pid)
+        or _process_start_ticks(pid) != expected_start_ticks
+    ):
         return False
     try:
         if os.getpgid(pid) != pid:
@@ -2407,8 +2401,7 @@ def _terminate_stale_worker(
     remaining = _process_group_members(pid)
     if not remaining:
         return True
-    if any(group_members.get(member_pid) != start_ticks
-           for member_pid, start_ticks in remaining.items()):
+    if any(group_members.get(member_pid) != start_ticks for member_pid, start_ticks in remaining.items()):
         logger.error('Refusing to kill stale worker group %s after its identity changed', pid)
         return False
     try:
@@ -2446,29 +2439,25 @@ def recover_stale_tasks() -> list[str]:
     old_pid, old_start_ticks = _read_service_pid(pid_file)
 
     # A PID alone is not an identity: it may have been reused after a crash.
-    if (old_pid is not None and old_start_ticks is not None
-            and _pid_alive(old_pid)
-            and _process_start_ticks(old_pid) == old_start_ticks):
+    if (
+        old_pid is not None and old_start_ticks is not None and _pid_alive(old_pid)
+        and _process_start_ticks(old_pid) == old_start_ticks
+    ):
         logger.info(f'Previous service (PID {old_pid}) is still running — skipping stale task recovery.')
         return []
 
     conn = _get_conn()
-    rows = conn.execute(
-        "SELECT task_id, pid, pid_start_ticks FROM task_state WHERE status = 'running'"
-    ).fetchall()
+    rows = conn.execute("SELECT task_id, pid, pid_start_ticks FROM task_state WHERE status = 'running'").fetchall()
     if not rows:
         return []
     if old_pid is not None and old_start_ticks is None and _pid_alive(old_pid):
-        raise StaleWorkerRecoveryError(
-            f'Unable to verify legacy service PID {old_pid}; refusing stale worker recovery'
-        )
+        raise StaleWorkerRecoveryError(f'Unable to verify legacy service PID {old_pid}; refusing stale worker recovery')
 
     orphaned = []
     blocked = []
     for row in rows:
         pid = row['pid']
-        if (not pid or not _pid_alive(pid)
-                or _terminate_stale_worker(pid, row['pid_start_ticks'])):
+        if (not pid or not _pid_alive(pid) or _terminate_stale_worker(pid, row['pid_start_ticks'])):
             orphaned.append(row['task_id'])
         else:
             blocked.append(row['task_id'])
@@ -2481,9 +2470,7 @@ def recover_stale_tasks() -> list[str]:
         _mark_orphaned_tasks(orphaned)
         logger.info(f'Recovered {len(orphaned)} stale tasks from dead service (PID {old_pid}): {orphaned}')
     if blocked:
-        raise StaleWorkerRecoveryError(
-            f'Unable to fence stale workers for tasks: {", ".join(blocked)}'
-        )
+        raise StaleWorkerRecoveryError(f'Unable to fence stale workers for tasks: {", ".join(blocked)}')
     return orphaned
 
 
@@ -2504,7 +2491,7 @@ def cleanup_task_state(days: int = 7) -> int:
     def _op(conn: sqlite3.Connection) -> int:
         cur = conn.execute(
             "DELETE FROM task_state WHERE status IN ('orphaned', 'failed') AND updated_at < ?",
-            (cutoff,),
+            (cutoff, ),
         )
         return cur.rowcount
 
@@ -2697,7 +2684,8 @@ def backfill(output_dir: str) -> None:
         eval_skipped = 0
         # Pre-fetch existing task IDs that already have eval_backend set
         existing_done = {
-            r[0] for r in conn.execute("SELECT task_id FROM eval_reports WHERE eval_backend != ''").fetchall()
+            r[0]
+            for r in conn.execute("SELECT task_id FROM eval_reports WHERE eval_backend != ''").fetchall()
         }
         for rn in raw_reports:
             try:
@@ -2805,7 +2793,7 @@ def backfill(output_dir: str) -> None:
     try:
         rag_count = 0
         rag_skipped = 0
-        existing_rag = {r[0] for r in conn.execute("SELECT task_id FROM eval_reports").fetchall()}
+        existing_rag = {r[0] for r in conn.execute('SELECT task_id FROM eval_reports').fetchall()}
         for entry in sorted(os.listdir(output_dir)):
             if entry in existing_rag:
                 continue
@@ -3039,7 +3027,15 @@ def backfill(output_dir: str) -> None:
 # Compare reports CRUD                                                        #
 # --------------------------------------------------------------------------- #
 
-def save_compare_report(name: str, task_ids_json: str, task_count: int, backend: str = 'Perf', root_path: str = '', user_id: int = 1) -> int:
+
+def save_compare_report(
+    name: str,
+    task_ids_json: str,
+    task_count: int,
+    backend: str = 'Perf',
+    root_path: str = '',
+    user_id: int = 1
+) -> int:
     """Save a compare report and return its ID."""
 
     created_at = utc_now_iso()
@@ -3059,29 +3055,27 @@ def list_compare_reports(user_id: int = 1) -> list[dict]:
     conn = _get_conn()
     rows = conn.execute(
         'SELECT id, name, task_ids, created_at, task_count, backend, root_path FROM compare_reports WHERE user_id = ? ORDER BY created_at DESC',
-        (user_id,)
+        (user_id, )
     ).fetchall()
-    return [
-        {
-            'id': r[0],
-            'name': r[1],
-            'task_ids': r[2],
-            'created_at': r[3],
-            'task_count': r[4],
-            'backend': r[5] or 'Perf',
-            'root_path': r[6] or '',
-        }
-        for r in rows
-    ]
+    return [{
+        'id': r[0],
+        'name': r[1],
+        'task_ids': r[2],
+        'created_at': r[3],
+        'task_count': r[4],
+        'backend': r[5] or 'Perf',
+        'root_path': r[6] or '',
+    } for r in rows]
 
 
 def delete_compare_report(report_id: int, user_id: int | None = None) -> bool:
     """Delete a compare report by ID. Returns True if deleted."""
+
     def _op(conn: sqlite3.Connection) -> int:
         if user_id is not None:
             cur = conn.execute('DELETE FROM compare_reports WHERE id = ? AND user_id = ?', (report_id, user_id))
         else:
-            cur = conn.execute('DELETE FROM compare_reports WHERE id = ?', (report_id,))
+            cur = conn.execute('DELETE FROM compare_reports WHERE id = ?', (report_id, ))
         return cur.rowcount
 
     return _write(_op) > 0

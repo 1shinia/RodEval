@@ -1,16 +1,14 @@
 """Regression tests for AIGC upsert failure-flagging (config-driven).
 
 The original logic hardcoded clip_score_mean as THE primary metric, which
-mis-flagged img2img/txt2img runs configured with lpips only (and txt2video
-runs configured with fvd only, where fvd was actually produced). Expected
+mis-flagged img2img/txt2img runs configured with lpips only. Expected
 metrics must come from eval_config.eval.metrics in the task config.
 """
 import json
 import os
+import pytest
 import sqlite3
 import tempfile
-
-import pytest
 
 from evalscope.service import db as _db
 
@@ -63,10 +61,3 @@ def test_missing_clip_score_flagged(iso_db):
     assert _db.upsert_aigc_audio_report(iso_db, 't_video') is True
     has_errors, note = _flag(iso_db, 't_video')
     assert has_errors == 1 and 'clip_score' in note
-
-
-def test_fvd_present_not_flagged(iso_db):
-    """txt2video configured with fvd and fvd produced -> NOT flagged."""
-    _make_task(iso_db, 't_fvd', 'txt2video', {'fvd': 123.4}, ['fvd'])
-    assert _db.upsert_aigc_audio_report(iso_db, 't_fvd') is True
-    assert _flag(iso_db, 't_fvd') == (0, '')
