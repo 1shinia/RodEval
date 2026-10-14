@@ -76,7 +76,7 @@ class Txt2ImgModel(AIGCModelBase):
         if self.pipe is None:
             raise RuntimeError('Model not loaded. Call load() first.')
 
-        generator = torch.Generator(device=self.device).manual_seed(seed)
+        generator = torch.Generator(device=self.device).manual_seed(seed) if seed is not None else None
         images = []
         for prompt in prompts:
             logger.debug('Generating image for: %s...', prompt[:50])
@@ -84,8 +84,8 @@ class Txt2ImgModel(AIGCModelBase):
                 prompt,
                 width=width,
                 height=height,
-                num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale,
+                num_inference_steps=num_inference_steps if num_inference_steps is not None else 50,
+                guidance_scale=guidance_scale if guidance_scale is not None else 7.5,
                 negative_prompt=negative_prompt if negative_prompt else None,
                 generator=generator,
             )

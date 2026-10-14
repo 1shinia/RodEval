@@ -1,5 +1,5 @@
 """Pydantic configuration classes for AIGC evaluation."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Literal, Optional
 
 
@@ -57,10 +57,10 @@ class AIGCGenerateConfig(BaseArgument):
 
     width: int = Field(512, ge=256, le=2048, description='Image width')
     height: int = Field(512, ge=256, le=2048, description='Image height')
-    num_inference_steps: int = Field(50, ge=1, le=200, description='Number of inference steps')
-    guidance_scale: float = Field(7.5, ge=1.0, le=30.0, description='Guidance scale (CFG)')
+    num_inference_steps: Optional[int] = Field(50, ge=1, le=200, description='Number of inference steps')
+    guidance_scale: Optional[float] = Field(7.5, ge=1.0, le=30.0, description='Guidance scale (CFG)')
     negative_prompt: str = Field('', description='Negative prompt')
-    seed: int = Field(42, description='Random seed')
+    seed: Optional[int] = Field(42, description='Random seed')
 
     # Video-specific parameters
     num_frames: int = Field(16, ge=1, le=128, description='Number of frames (video only)')
@@ -77,7 +77,9 @@ class AIGCEvalConfig(BaseArgument):
         ['clip_score'],
         description='Evaluation metrics to compute (clip_score, fid, is, lpips)',
     )
-    prompt_dataset: str = Field('drawbench', description='Prompt dataset (drawbench, coco_captions, parti, custom, msr_vtt, msr_vtt_safe)')
+    prompt_dataset: str = Field(
+        'drawbench', description='Prompt dataset (drawbench, coco_captions, parti, custom, msr_vtt, msr_vtt_safe)'
+    )
     prompt_limit: int = Field(1, ge=1, le=10000, description='Number of prompts to evaluate')
     custom_prompt: Optional[str] = Field(None, description='Custom prompt for img2img (takes priority over dataset)')
     random_prompt: bool = Field(False, description='Randomly shuffle prompts before taking limit')
@@ -88,6 +90,28 @@ class AIGCEvalConfig(BaseArgument):
 
 class AIGCToolConfig(BaseArgument):
     """Top-level AIGC tool configuration."""
+
+    @model_validator(mode='before')
+    @classmethod
+    def image_api_defaults(cls, data):
+        if not isinstance(data, dict):
+            return data
+        tool = data.get('tool', 'txt2img')
+        model = data.get('model', {})
+        if tool == 'txt2img' and isinstance(model, dict) and model.get('api_base'):
+            data = dict(data)
+            generate = dict(data.get('generate') or {})
+            for name in ('num_inference_steps', 'guidance_scale', 'seed'):
+                generate.setdefault(name, None)
+            data['generate'] = generate
+        elif tool != 'txt2img':
+            generate = data.get('generate', {})
+            if isinstance(generate, dict) and any(
+                name in generate and generate[name] is None
+                for name in ('num_inference_steps', 'guidance_scale', 'seed')
+            ):
+                raise ValueError('非文生图模式的步数、引导系数和种子不能为 null')
+        return data
 
     tool: Literal['txt2img', 'txt2video', 'img2img'] = Field('txt2img', description='AIGC tool type')
     model: AIGCModelConfig = Field(..., description='Model configuration')

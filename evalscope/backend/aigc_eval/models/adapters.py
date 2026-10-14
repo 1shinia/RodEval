@@ -81,7 +81,12 @@ class AIGCApiAdapter(ABC):
                 },
             )
 
+        image_request_started = _time.monotonic() if params.get('tool', 'txt2img') == 'txt2img' else None
         response = requests.post(url, json=payload, headers=headers, timeout=300)
+        if image_request_started is not None:
+            image_request = getattr(self, 'last_image_request', None)
+            if image_request is not None:
+                image_request['request_seconds'] = _time.monotonic() - image_request_started
 
         # Allow subclass to retry on failure (e.g. size format fallback)
         if not response.ok:
@@ -298,6 +303,14 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
     async_poll_url, async_content_url.
     """
 
+    def generate(self, prompt: str, **params) -> bytes:
+        if params.get('tool', 'txt2img') != 'txt2img':
+            return super().generate(prompt, **params)
+        self.last_image_request = {}
+        result = super().generate(prompt, **params)
+        self.last_image_request['parameter_support'] = 'unconfirmed'
+        return result
+
     # 文生视频时长域（秒）：前端同区间，非法值明确报错而非静默替换
     VIDEO_DURATION_RANGE = (5, 15)
 
@@ -332,6 +345,10 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
             'model': self.model_name,
             'prompt': prompt,
         }
+
+        if tool == 'txt2img':
+            if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in (width, height)):
+                raise ValueError('文生图尺寸须为正整数像素')
 
         if tool == 'txt2video':
             # 网关契约（UniToken / new-api 系：POST {base}/video/generations）：
@@ -380,6 +397,14 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
             if std_name in payload:
                 payload[alias_name] = payload.pop(std_name)
 
+        if tool == 'txt2img':
+            self.last_image_request = {
+                'parameters': {
+                    key: value
+                    for key, value in payload.items()
+                    if key != 'prompt'
+                },
+            }
         return payload
 
     def _validate_video_duration(self, value: Any) -> int:
@@ -539,6 +564,8 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
                 self._redact_secrets(response.text)[:200],
             )
             return requests.post(url, json=retry_payload, headers=headers, timeout=300)
+        if params.get('tool', 'txt2img') == 'txt2img':
+            raise ValueError(f'文生图 API HTTP 400: {self._redact_secrets(response.text)[:1000]}')
         if params.get('tool') != 'txt2video' and any(kw in err_text for kw in ('size', 'resolution', 'invalid')):
             width = params.get('width', 1024)
             height = params.get('height', 1024)
@@ -1195,6 +1222,132 @@ class VolcengineVideoAdapter(AIGCApiAdapter):
 # ═══════════════════════════════════════════════════════════════════════
 
 
+class DashScopeImageAdapter(AIGCApiAdapter):
+    """百炼文生图：千问 2.0/万相 2.6 同步，早期万相异步。"""
+
+    LEGACY_MODELS = {
+        'wan2.5-t2i-preview',
+        'wan2.2-t2i-flash',
+        'wan2.2-t2i-plus',
+        'wanx2.1-t2i-turbo',
+        'wanx2.1-t2i-plus',
+        'wanx2.0-t2i-turbo',
+    }
+    QWEN_MODELS = {
+        'qwen-image-2.0',
+        'qwen-image-2.0-2026-03-03',
+        'qwen-image-2.0-pro',
+        'qwen-image-2.0-pro-2026-03-03',
+        'qwen-image-2.0-pro-2026-04-22',
+        'qwen-image-2.0-pro-2026-06-22',
+    }
+
+    def __init__(self, config):
+        super().__init__(config)
+        if self.model_name not in self.LEGACY_MODELS | self.QWEN_MODELS | {'wan2.6-t2i'}:
+            raise ValueError('未识别的百炼文生图模型；支持千问 2.0、万相 2.6/2.5/2.2/2.1/2.0 文生图模型')
+        self.legacy = self.model_name in self.LEGACY_MODELS
+        self.last_image_request: Dict[str, Any] = {}
+
+    def _resolve_url(self, tool):
+        if tool != 'txt2img':
+            raise ValueError('百炼图片适配器仅支持文生图')
+        base = self.api_base.rstrip('/')
+        if 'compatible-mode' in base:
+            raise ValueError('百炼文生图不能使用 compatible-mode，请填写域名/api/v1')
+        if not base.endswith('/api/v1'):
+            raise ValueError('百炼文生图 API 地址须以 /api/v1 结尾')
+        endpoint = ('text2image/image-synthesis' if self.legacy else 'multimodal-generation/generation')
+        return f'{base}/services/aigc/{endpoint}'
+
+    def _build_headers(self):
+        headers = super()._build_headers()
+        if self.legacy:
+            headers['X-DashScope-Async'] = 'enable'
+        return headers
+
+    def _build_payload(self, prompt, **params):
+        for name in ('num_inference_steps', 'guidance_scale'):
+            if params.get(name) is not None:
+                raise ValueError(f'百炼文生图不支持 {name}，请留空')
+        width, height = params.get('width', 1024), params.get('height', 1024)
+        if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in (width, height)):
+            raise ValueError('文生图尺寸须为正整数像素')
+        if self.model_name in ('wan2.6-t2i', 'wan2.5-t2i-preview'):
+            if not (1280 * 1280 <= width * height <= 1440 * 1440 and 0.25 <= width / height <= 4):
+                raise ValueError('万相 2.5/2.6 总像素须在 1280×1280～1440×1440，宽高比须在 1:4～4:1')
+        elif self.legacy:
+            if not all(512 <= v <= 1440 for v in (width, height)):
+                raise ValueError('万相早期模型宽高须在 512～1440')
+        elif not 512 * 512 <= width * height <= 2048 * 2048:
+            raise ValueError('千问 2.0 总像素须在 512×512～2048×2048')
+        parameters = {'size': f'{width}*{height}', 'n': 1}
+        seed = params.get('seed')
+        if seed is not None:
+            if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= 2147483647:
+                raise ValueError('百炼图片种子须为 0～2147483647 的整数')
+            parameters['seed'] = seed
+        input_data = ({
+            'prompt': prompt
+        } if self.legacy else {
+            'messages': [{
+                'role': 'user',
+                'content': [{
+                    'text': prompt
+                }]
+            }],
+        })
+        if params.get('negative_prompt'):
+            (input_data if self.legacy else parameters)['negative_prompt'] = params['negative_prompt']
+        self.last_image_request = {'parameters': {'model': self.model_name, **parameters}}
+        return {'model': self.model_name, 'input': input_data, 'parameters': parameters}
+
+    def _handle_retry(self, response, url, headers, payload, **params):
+        raise ValueError(f'百炼文生图 HTTP {response.status_code}: {self._redact_secrets(response.text)[:300]}')
+
+    def _is_async_response(self, data):
+        return bool((data.get('output') or {}).get('task_id'))
+
+    def _poll_async(self, data, post_url, headers):
+        task_id = data['output']['task_id']
+        poll_url = f'{self.api_base.rstrip("/")}/tasks/{task_id}'
+        poll_headers = {k: v for k, v in headers.items() if k.lower() != 'x-dashscope-async'}
+        deadline = _time.monotonic() + 2700
+        while True:
+            output = data.get('output') or {}
+            status = output.get('task_status')
+            if status == 'SUCCEEDED':
+                return data
+            if status in ('FAILED', 'CANCELED', 'UNKNOWN') or data.get('code'):
+                raise RuntimeError(f'百炼图片任务 {task_id} 失败: {self._redact_secrets(str(data))[:300]}')
+            if _time.monotonic() >= deadline:
+                raise TimeoutError(f'百炼图片任务 {task_id} 超时；请查询 {poll_url}，勿重复创建任务')
+            _time.sleep(10)
+            response = requests.get(poll_url, headers=poll_headers, timeout=30)
+            if not response.ok:
+                if response.status_code in (401, 403) or response.status_code < 429:
+                    raise RuntimeError(
+                        f'图片查询 HTTP {response.status_code}: '
+                        f'{self._redact_secrets(response.text)[:300]}'
+                    )
+                continue
+            data = response.json()
+
+    def _extract_bytes(self, data):
+        if data.get('code'):
+            raise ValueError(f'百炼图片错误: {self._redact_secrets(str(data))[:300]}')
+        output = data.get('output') or {}
+        urls = [item.get('url') for item in output.get('results', [])]
+        for choice in output.get('choices', []):
+            urls.extend(item.get('image') for item in choice.get('message', {}).get('content', []))
+        url = next((value for value in urls if value), None)
+        if not url:
+            raise ValueError('百炼图片响应缺少图片 URL')
+        response = requests.get(url, timeout=120)
+        response.raise_for_status()
+        return response.content
+
+
 def create_adapter(config: Dict[str, Any]) -> AIGCApiAdapter:
     """Factory: create the appropriate API adapter from model config.
 
@@ -1205,6 +1358,12 @@ def create_adapter(config: Dict[str, Any]) -> AIGCApiAdapter:
         AIGCApiAdapter subclass instance.
     """
     provider = config.get('provider', 'openai') or 'openai'
+
+    if config.get('tool', config.get('model_type')) == 'txt2img':
+        if provider == 'dashscope':
+            return DashScopeImageAdapter(config)
+        if provider not in ('openai', 'custom'):
+            raise ValueError('文生图当前支持 OpenAI 兼容和百炼提供商')
 
     if provider in ('openai', 'custom'):
         return OpenAICompatibleAdapter(config)

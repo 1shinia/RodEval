@@ -491,6 +491,10 @@ def _build_aigc_config(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
         },
     }
 
+    if config['tool'] == 'txt2img' and config['model'].get('api_base'):
+        for name in ('num_inference_steps', 'guidance_scale', 'seed'):
+            config['generate'][name] = data.get('generate', {}).get(name)
+
     return config
 
 

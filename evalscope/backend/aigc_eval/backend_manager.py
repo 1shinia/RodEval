@@ -124,6 +124,7 @@ class AIGCBackendManager(BackendManager):
             per_sample_results = []
 
             for i, prompt in enumerate(prompts):
+                generation_started = time.monotonic()
                 img = model.generate(
                     [prompt],
                     width=config.generate.width,
@@ -131,8 +132,9 @@ class AIGCBackendManager(BackendManager):
                     num_inference_steps=config.generate.num_inference_steps,
                     guidance_scale=config.generate.guidance_scale,
                     negative_prompt=config.generate.negative_prompt,
-                    seed=config.generate.seed + i,
+                    seed=config.generate.seed + i if config.generate.seed is not None else None,
                 )[0]
+                image_generation_seconds = time.monotonic() - generation_started
 
                 images.append(img)
 
@@ -150,6 +152,10 @@ class AIGCBackendManager(BackendManager):
                     'prompt': prompt,
                     'image_path': str(img_path.relative_to(output_dir)),
                     'thumbnail_path': str(thumb_path.relative_to(output_dir)),
+                    'actual_width': img.width,
+                    'actual_height': img.height,
+                    'image_generation_seconds': image_generation_seconds,
+                    'api_request': getattr(model._adapter, 'last_image_request', None),
                 }
 
                 if 'clip_score' in config.eval.metrics:

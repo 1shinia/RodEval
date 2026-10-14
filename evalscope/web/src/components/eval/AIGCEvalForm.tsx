@@ -11,9 +11,13 @@ interface Props {
 
 type AIGCTool = 'txt2img' | 'txt2video' | 'img2img'
 
-const IMAGE_DATASETS = [
+const TEXT_TO_IMAGE_DATASETS = [
   { value: 'drawbench', label: 'DrawBench (200 prompts)' },
   { value: 'parti', label: 'PartiPrompts (150 prompts)' },
+]
+
+const IMAGE_DATASETS = [
+  ...TEXT_TO_IMAGE_DATASETS,
   { value: 'custom', label: '自定义数据集' },
   { value: '', label: '不使用（仅用自定义提示词）' },
 ]
@@ -254,6 +258,10 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
   const [guidance, setGuidance] = useState('7.5')
 
   const [seed, setSeed] = useState('42')
+  // 文生图可选参数独立保存，避免切换工具改变其他模式的默认值。
+  const [imageSteps, setImageSteps] = useState('')
+  const [imageGuidance, setImageGuidance] = useState('')
+  const [imageSeed, setImageSeed] = useState('')
 
   // Video-specific params
   const [videoDuration, setVideoDuration] = useState('5')
@@ -388,6 +396,52 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       seed: Number(seed) || 42,
     }
 
+    if (tool === 'txt2img') {
+      const w = Number(width), h = Number(height)
+      if (!Number.isInteger(w) || !Number.isInteger(h) || w < 256 || h < 256 || w > 2048 || h > 2048) {
+        setErrors({ imageSize: '宽高须为 256～2048 的整数；具体模型支持的尺寸以服务端为准' })
+        return
+      }
+      const optional = { num_inference_steps: provider === 'dashscope' ? '' : imageSteps, guidance_scale: provider === 'dashscope' ? '' : imageGuidance, seed: imageSeed }
+      for (const [name, raw] of Object.entries(optional)) {
+        const value = Number(raw)
+        if (raw !== '' && (!Number.isFinite(value)
+          || (name !== 'guidance_scale' && !Number.isInteger(value))
+          || (name === 'num_inference_steps' && (value < 1 || value > 200))
+          || (name === 'guidance_scale' && (value < 1 || value > 30))
+          || (name === 'seed' && !Number.isSafeInteger(value)))) {
+          setErrors({ imageParams: '步数须为 1～200 的整数，引导系数须为 1～30，种子须为整数' })
+          return
+        }
+        generateConfig[name] = raw === '' ? null : value
+      }
+      if (provider === 'dashscope') {
+        if (!/^(qwen-image-2\.0(-2026-03-03|-pro(-2026-(03-03|04-22|06-22))?)?|wan2\.(6-t2i|5-t2i-preview|2-t2i-(plus|flash))|wanx2\.(1-t2i-(plus|turbo)|0-t2i-turbo))$/.test(model.trim())) {
+          setErrors({ model: '支持千问 2.0、万相 2.6/2.5/2.2/2.1/2.0 文生图模型' })
+          return
+        }
+        if (!apiBase.trim().endsWith('/api/v1') || apiBase.includes('compatible-mode')) {
+          setErrors({ apiBase: '百炼文生图请填写业务空间域名/api/v1' })
+          return
+        }
+        const pixels = w * h
+        const largeWan = ['wan2.6-t2i', 'wan2.5-t2i-preview'].includes(model.trim())
+        const validSize = largeWan ? pixels >= 1280 * 1280 && pixels <= 1440 * 1440 && w / h >= 0.25 && w / h <= 4
+          : model.startsWith('qwen-image') ? pixels >= 512 * 512 && pixels <= 2048 * 2048
+          : w >= 512 && w <= 1440 && h >= 512 && h <= 1440
+        if (!validSize) {
+          setErrors({ imageSize: largeWan ? '万相 2.5/2.6 总像素须在 1280×1280～1440×1440，宽高比 1:4～4:1' : '尺寸超出当前百炼模型支持范围' })
+          return
+        }
+        if (imageSeed !== '' && (Number(imageSeed) < 0 || Number(imageSeed) > 2147483647)) {
+          setErrors({ imageParams: '百炼种子须为 0～2147483647 的整数' })
+          return
+        }
+      }
+      generateConfig.width = w
+      generateConfig.height = h
+    }
+
     if (tool === 'txt2video') {
       const size = resolveVideoSize(videoResolution, videoAspectRatio)
       generateConfig.width = size.width
@@ -406,7 +460,8 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
     const evalConfig: Record<string, unknown> = {
       metrics,
-      prompt_dataset: promptDataset,
+      // 文生图只允许内置数据集，避免旧状态把已删除的选项提交到后端。
+      prompt_dataset: tool === 'txt2img' && promptDataset !== 'parti' ? 'drawbench' : promptDataset,
       prompt_limit: Number(promptLimit) || 1,
       random_prompt: randomPrompt,
     }
@@ -417,7 +472,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     if (customPrompt.trim()) {
       evalConfig.custom_prompt = customPrompt.trim()
     }
-    if (promptDataset === 'custom' && customDatasetPath.trim()) {
+    if (tool !== 'txt2img' && promptDataset === 'custom' && customDatasetPath.trim()) {
       evalConfig.custom_dataset_path = customDatasetPath.trim()
     }
 
@@ -459,7 +514,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
               if (errors.provider) setErrors(p => ({ ...p, provider: '' }))
               if (next === 'volcengine' && tool !== 'txt2video') setTool('txt2video')
             }} className={FORM_INPUT_CLASS}>
-              {PROVIDER_OPTIONS.map(p => (
+              {PROVIDER_OPTIONS.filter(p => tool !== 'txt2img' || p.value === 'openai' || p.value === 'dashscope').map(p => (
                 <option key={p.value} value={p.value}>{p.label}</option>
               ))}
             </select>
@@ -469,7 +524,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           <FormField label={t('eval.modelName')} required error={errors.model} className="md:col-span-2">
             <input value={model}
               onChange={e => { setModel(e.target.value.trimStart()); if (errors.model) setErrors(p => ({ ...p, model: '' })) }}
-              className={FORM_INPUT_CLASS} placeholder={currentProvider.modelPlaceholder} />
+              className={FORM_INPUT_CLASS} placeholder={tool === 'txt2img' && provider === 'dashscope' ? 'qwen-image-2.0-pro' : currentProvider.modelPlaceholder} />
           </FormField>
 
           <FormField label={t('eval.apiUrl')} required error={errors.apiBase} className="md:col-span-2">
@@ -506,28 +561,28 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
             </select>
           </FormField>
         </>) : (<>
-          <FormField label={t('aigc.width')} hint={t('aigc.sizeHint')}>
+          <FormField label={t('aigc.width')} hint={tool === 'txt2img' && provider === 'dashscope' ? '千问 2.0 总像素 512²～2048²；万相 2.5/2.6 建议 1280×1280；早期万相宽高 512～1440' : t('aigc.sizeHint')}>
             <input type="number" value={width}
               onChange={e => setWidth(e.target.value.replace(/[^0-9]/g, ''))}
               className={FORM_INPUT_CLASS} placeholder="1024" />
           </FormField>
-          <FormField label={t('aigc.height')} hint={t('aigc.sizeHint')}>
+          <FormField label={t('aigc.height')} hint={tool === 'txt2img' && provider === 'dashscope' ? '千问 2.0 总像素 512²～2048²；万相 2.5/2.6 建议 1280×1280；早期万相宽高 512～1440' : t('aigc.sizeHint')}>
             <input type="number" value={height}
               onChange={e => setHeight(e.target.value.replace(/[^0-9]/g, ''))}
               className={FORM_INPUT_CLASS} placeholder="1024" />
           </FormField>
         </>)}
 
-        {tool !== 'txt2video' && <FormField label={t('aigc.steps')}>
-          <input type="number" value={steps}
-            onChange={e => setSteps(e.target.value.replace(/[^0-9]/g, ''))}
-            className={FORM_INPUT_CLASS} placeholder="50" />
+        {(tool === 'img2img' || (tool === 'txt2img' && provider === 'openai')) && <FormField label={t('aigc.steps')} hint={tool === 'txt2img' ? '可选；留空不发送。仅在接口明确支持时填写（1～200）' : undefined}>
+          <input type="number" value={tool === 'txt2img' ? imageSteps : steps}
+            onChange={e => tool === 'txt2img' ? setImageSteps(e.target.value) : setSteps(e.target.value.replace(/[^0-9]/g, ''))}
+            className={FORM_INPUT_CLASS} placeholder={tool === 'txt2img' ? '留空' : '50'} />
         </FormField>}
 
-        {tool !== 'txt2video' && <FormField label={t('aigc.guidance')}>
-          <input type="number" value={guidance}
-            onChange={e => setGuidance(e.target.value)}
-            className={FORM_INPUT_CLASS} placeholder="7.5" step="0.1" />
+        {(tool === 'img2img' || (tool === 'txt2img' && provider === 'openai')) && <FormField label={t('aigc.guidance')} hint={tool === 'txt2img' ? '可选；留空不发送。仅在接口明确支持时填写（1～30）' : undefined}>
+          <input type="number" value={tool === 'txt2img' ? imageGuidance : guidance}
+            onChange={e => tool === 'txt2img' ? setImageGuidance(e.target.value) : setGuidance(e.target.value)}
+            className={FORM_INPUT_CLASS} placeholder={tool === 'txt2img' ? '留空' : '7.5'} step="0.1" />
         </FormField>}
 
         {tool === 'txt2video' && <FormField label="视频时长" hint={videoCap.durationHint} error={errors.duration}>
@@ -547,10 +602,10 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           )}
         </FormField>}
 
-        {(tool !== 'txt2video' || videoCap.seed) ? <FormField label={t('aigc.seed')}>
-          <input type="number" value={seed}
-            onChange={e => setSeed(e.target.value.replace(/[^0-9]/g, ''))}
-            className={FORM_INPUT_CLASS} placeholder="42" />
+        {(tool !== 'txt2video' || videoCap.seed) ? <FormField label={t('aigc.seed')} hint={tool === 'txt2img' ? (provider === 'dashscope' ? '可选；0～2147483647，留空由服务端随机生成；逐样本递增' : '可选；留空不发送。填写后逐样本递增，服务端是否采纳未确认') : undefined}>
+          <input type="number" value={tool === 'txt2img' ? imageSeed : seed}
+            onChange={e => tool === 'txt2img' ? setImageSeed(e.target.value) : setSeed(e.target.value.replace(/[^0-9]/g, ''))}
+            className={FORM_INPUT_CLASS} placeholder={tool === 'txt2img' ? '留空' : '42'} />
         </FormField> : null}
 
         {tool === 'img2img' && (
@@ -576,6 +631,9 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           </>
         )}
       </div>
+      {tool === 'txt2img' && (errors.imageSize || errors.imageParams) && (
+        <p className="text-sm text-[var(--error)]">{errors.imageSize || errors.imageParams}</p>
+      )}
 
       {tool === 'img2img' ? (
         <FormField label="自定义提示词" hint="描述你希望对参考图做的修改（必填）">
@@ -601,13 +659,13 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
 
       <FormField label={t('aigc.promptDataset')}>
         <select value={promptDataset} onChange={e => setPromptDataset(e.target.value)} className={FORM_INPUT_CLASS}>
-          {(tool === 'txt2video' ? VIDEO_DATASETS : IMAGE_DATASETS).map(ds => (
+          {(tool === 'txt2video' ? VIDEO_DATASETS : tool === 'txt2img' ? TEXT_TO_IMAGE_DATASETS : IMAGE_DATASETS).map(ds => (
             <option key={ds.value} value={ds.value}>{ds.label}</option>
           ))}
         </select>
       </FormField>
 
-      {promptDataset === 'custom' && (
+      {tool !== 'txt2img' && promptDataset === 'custom' && (
         <FormField label="自定义数据集路径">
           <input value={customDatasetPath}
             onChange={e => setCustomDatasetPath(e.target.value)}

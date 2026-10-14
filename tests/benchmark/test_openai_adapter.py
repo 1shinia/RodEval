@@ -11,9 +11,8 @@
 import base64
 import json
 import logging
-from unittest import mock
-
 import pytest
+from unittest import mock
 
 from evalscope.backend.aigc_eval.models.adapters import (
     AIGCApiAdapter,
@@ -166,8 +165,10 @@ def test_image_size_fallback_survives_the_video_guard():
     payload = adapter._build_payload('x', tool='txt2img', width=1280, height=720)
     rejected = fake_resp(400, text='{"error":{"message":"size is not supported"}}')
     with mock.patch('requests.post', return_value=fake_resp(200)) as post:
-        adapter._handle_retry(rejected, POST_URL, {}, payload, tool='txt2img', width=1280, height=720)
-    assert post.call_args.kwargs['json']['size'] == '720p'
+        with pytest.raises(ValueError, match='size is not supported'):
+            adapter._handle_retry(rejected, POST_URL, {}, payload, tool='txt2img', width=1280, height=720)
+    post.assert_not_called()
+    assert payload['size'] == '1280x720'
 
 
 # ── 轮询预算 ─────────────────────────────────────────────────────────
