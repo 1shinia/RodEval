@@ -172,10 +172,12 @@ class AIGCBackendManager(BackendManager):
             # Compute aggregate metrics
             metrics = {}
             if 'clip_score' in config.eval.metrics:
+                from .metrics.clip_score import CLIP_SCORE_META
                 scores = [r['clip_score'] for r in per_sample_results]
                 metrics['clip_score_mean'] = sum(scores) / len(scores)
                 metrics['clip_score_min'] = min(scores)
                 metrics['clip_score_max'] = max(scores)
+                metrics['clip_score_meta'] = CLIP_SCORE_META  # 口径随结果落盘（0~1 余弦）
                 logger.info(f'CLIP Score: mean={metrics["clip_score_mean"]:.4f}')
 
             if 'lpips' in config.eval.metrics:
@@ -318,9 +320,11 @@ class AIGCBackendManager(BackendManager):
             # Compute aggregate metrics
             metrics = {}
             if 'clip_score' in config.eval.metrics:
+                from .metrics.clip_score import CLIP_SCORE_META
                 scores = [r.get('clip_score', 0) for r in per_sample_results if 'clip_score' in r]
                 if scores:
                     metrics['clip_score_mean'] = sum(scores) / len(scores)
+                    metrics['clip_score_meta'] = CLIP_SCORE_META  # 口径随结果落盘（0~1 余弦）
                     logger.info(f'CLIP Score: mean={metrics["clip_score_mean"]:.4f}')
 
             # Save results
@@ -476,10 +480,12 @@ class AIGCBackendManager(BackendManager):
             # Compute aggregate metrics
             metrics = {}
             if 'clip_score' in config.eval.metrics:
+                from .metrics.clip_score import CLIP_SCORE_META
                 scores = [r['clip_score'] for r in per_sample_results]
                 metrics['clip_score_mean'] = sum(scores) / len(scores)
                 metrics['clip_score_min'] = min(scores)
                 metrics['clip_score_max'] = max(scores)
+                metrics['clip_score_meta'] = CLIP_SCORE_META  # 口径随结果落盘（0~1 余弦）
                 logger.info(f'CLIP Score: mean={metrics["clip_score_mean"]:.4f}')
 
             if 'lpips' in config.eval.metrics:

@@ -500,6 +500,7 @@ const en: Dict = {
     tabRAG: 'RAG',
     tabAIGC: 'AIGC',
     tabAudio: 'Audio',
+    type: 'Type',
     confirmDelete: 'Are you sure you want to delete "${name}"? This cannot be undone.',
   },
   reportDetail: {
@@ -1180,6 +1181,7 @@ const zh: Dict = {
     tabRAG: 'RAG',
     tabAIGC: 'AIGC',
     tabAudio: 'AUDIO',
+    type: '类型',
     confirmDelete: '确定要删除 "${name}" 吗？此操作不可撤销。',
   },
   reportDetail: {

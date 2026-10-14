@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import ReportFiltersBar, { type ReportFilters } from '@/components/reports/ReportFilters'
 import CompareBar from '@/components/reports/CompareBar'
+import { useLocale } from '@/contexts/LocaleContext'
 import { EmptyState } from '@/pages/ReportsLayout'
 
 interface AudioReportSummary {
@@ -41,6 +42,7 @@ function primaryScore(r: AudioReportSummary): number {
 
 export default function AudioReportsTab() {
   const navigate = useNavigate()
+  const { t } = useLocale()
 
   const [allReports, setAllReports] = useState<AudioReportSummary[]>([])
   const [loading, setLoading] = useState(false)
@@ -174,7 +176,7 @@ export default function AudioReportsTab() {
         availableModels={availableModels}
         availableDatasets={availableDatasets}
         onChange={setFilters}
-        datasetLabel="类型"
+        datasetLabel={t('reports.type')}
       />
 
       {loading ? (
@@ -200,7 +202,7 @@ export default function AudioReportsTab() {
                     />
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">任务 ID</th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">类型</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.type')}</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">模型</th>
                   <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">创建时间</th>

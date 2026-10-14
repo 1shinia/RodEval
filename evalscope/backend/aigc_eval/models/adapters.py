@@ -10,6 +10,7 @@ and async polling. Returns raw media bytes; model classes handle PIL/frame conve
 """
 
 import base64
+import copy
 import json
 import logging
 import re
@@ -35,6 +36,18 @@ class AIGCApiAdapter(ABC):
     Subclasses implement the 'wire protocol' for a specific provider:
     URL construction, payload format, response extraction, async polling.
     """
+
+    # ── 异步轮询预算（本默认实现服务 OpenAI 兼容来源；两个原生供应商子类各自覆盖）──
+    # 视频单条生成常需数分钟（排队 + 推理），旧的 60×5s=300s 上限会把成功任务误判为失败；
+    # 这里与 DashScope / Volcengine 同源取 15s × 180 = 45 分钟。
+    POLL_INTERVAL_SECONDS = 15
+    POLL_TIMEOUT_SECONDS = 2700
+    POLL_ERROR_BODY_CHARS = 300  # 非 2xx 轮询回显响应体的截断长度
+    # 状态词大小写不敏感（网关有 SUCCEEDED / Success / finished 等写法）
+    SUCCESS_STATUSES = ('completed', 'succeeded', 'success', 'finished', 'done')
+    FAILURE_STATUSES = ('failed', 'failure', 'error', 'cancelled', 'canceled', 'expired')
+    FATAL_POLL_STATUSES = (401, 403)  # 鉴权/权限类不会自愈：立即失败
+    POLL_NOT_FOUND_GRACE = 3  # 连续 404 达该次数即判为轮询地址配错，不再空转到超时
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -118,40 +131,105 @@ class AIGCApiAdapter(ABC):
         return response
 
     def _poll_async(self, data: Dict[str, Any], post_url: str, headers: Dict[str, str]) -> Dict[str, Any]:
-        """Poll an async task until complete. Returns the final response data.
+        """轮询异步任务直到终态，返回最终响应数据（供 _extract_bytes 取媒体）。
 
-        Subclass must override for providers with custom polling logic.
-        Default: simple /{task_id} polling with 5s interval."""
+        默认实现服务 OpenAI 兼容来源（DashScope / Volcengine 各自覆盖为原生协议）：
+
+        * 状态词归一：大小写不敏感，并覆盖 success / finished 等同义终态词
+        * 非 2xx 轮询回显脱敏后的响应体；401/403 立即失败，连续 404 判为查询地址配错
+        * 超时错误带 task_id / 最后状态 / 查询 URL，便于人工复查而不必重建任务
+        * 创建响应即终态时同样走 _fetch_async_content（该网关可能只给内容模板地址）
+        """
+        data = self._unwrap_response(data)
         task_id = data.get('task_id', data.get('id', ''))
-        status = data.get('status', '')
+        status = self._normalize_status(data.get('status', ''))
         logger.info('Async task %s: status=%s', task_id, status)
 
-        if status in ('completed', 'succeeded', 'done'):
-            return data
+        if status in self.SUCCESS_STATUSES:
+            return self._fetch_async_content(data, task_id, headers)
 
         poll_url = self._resolve_poll_url(post_url, task_id)
-        max_attempts = 60  # 5 minutes max
+        max_attempts = max(1, self.POLL_TIMEOUT_SECONDS // self.POLL_INTERVAL_SECONDS)
+        last_status = status
+        not_found_streak = 0
+        logger.info(
+            'Polling %s every %ds, up to %d min',
+            task_id,
+            self.POLL_INTERVAL_SECONDS,
+            self.POLL_TIMEOUT_SECONDS // 60,
+        )
 
         for attempt in range(max_attempts):
-            _time.sleep(5)
+            _time.sleep(self.POLL_INTERVAL_SECONDS)
             resp = requests.get(poll_url, headers=headers, timeout=30)
             if not resp.ok:
-                logger.warning('Poll %d: HTTP %d', attempt + 1, resp.status_code)
+                logger.warning(
+                    'Poll %d: HTTP %d body=%s',
+                    attempt + 1,
+                    resp.status_code,
+                    self._redact_secrets(resp.text)[:self.POLL_ERROR_BODY_CHARS],
+                )
+                # 创建任务已用同一密钥成功，轮询再遇鉴权拒绝不会自愈：立即失败并回显原因。
+                if resp.status_code in self.FATAL_POLL_STATUSES:
+                    raise RuntimeError(
+                        f'OpenAI 兼容异步轮询被拒（不可重试，task_id={task_id}）：'
+                        f'HTTP {resp.status_code} {self._poll_error_detail(resp.text)}。'
+                        '请确认该 api_key 有效、且已开通对应视频模型的查询权限。'
+                    )
+                if resp.status_code == 404:
+                    not_found_streak += 1
+                    if not_found_streak >= self.POLL_NOT_FOUND_GRACE:
+                        raise RuntimeError(
+                            f'异步任务查询地址连续 {not_found_streak} 次 404'
+                            f'（task_id={task_id}）：{poll_url}。该网关的查询地址与创建地址不同形，'
+                            '请用配置项 async_poll_url 指定（支持 {id} 占位，'
+                            '如 "video/generations/{id}"）。'
+                        )
+                else:
+                    not_found_streak = 0
                 continue
-            data = resp.json()
-            # Unwrap common API wrappers: {code, message, data: {...}}
-            data = self._unwrap_response(data)
-            status = data.get('status', '')
-            progress = data.get('progress', 0)
-            logger.info('Task %s: status=%s progress=%d%%', task_id, status, progress)
+            not_found_streak = 0
+            data = self._unwrap_response(resp.json())
+            status = self._normalize_status(data.get('status', ''))
+            last_status = status or last_status
+            logger.info('Task %s: status=%s progress=%s%%', task_id, status, data.get('progress', 0))
 
-            if status in ('completed', 'succeeded', 'done'):
+            if status in self.SUCCESS_STATUSES:
                 logger.info('Task %s completed', task_id)
                 return self._fetch_async_content(data, task_id, headers)
-            elif status in ('failed', 'error', 'cancelled'):
-                raise RuntimeError(f'Task {task_id} failed: {data}')
+            if status in self.FAILURE_STATUSES:
+                detail = self._task_failure_detail(data)
+                logger.error('Task %s failed: %s', task_id, detail)
+                raise RuntimeError(f'Task {task_id} failed: {detail}')
 
-        raise TimeoutError(f'Task {task_id} did not complete within {max_attempts * 5}s')
+        raise TimeoutError(
+            f'Task {task_id} did not complete within {self.POLL_TIMEOUT_SECONDS}s '
+            f'(last status={last_status}). 任务可能仍在供应商侧生成，可用 '
+            f'"GET {poll_url}" 手工复查结果，请勿重复创建任务。'
+        )
+
+    @staticmethod
+    def _normalize_status(status: Any) -> str:
+        """状态词归一：网关大小写混用（SUCCEEDED / Success / In_Progress），统一小写去空白。"""
+        return str(status or '').strip().lower()
+
+    @staticmethod
+    def _task_failure_detail(data: Dict[str, Any]) -> str:
+        """从失败响应里取出可读原因（code + message），脱敏截断后交给用户与日志。"""
+        error = data.get('error')
+        if isinstance(error, dict):
+            code = error.get('code') or ''
+            message = error.get('message') or error.get('msg') or ''
+        elif error:
+            code, message = '', str(error)
+        else:
+            code, message = '', ''
+        if not message:
+            message = data.get('message') or data.get('reason') or data.get('fail_reason') or ''
+        detail = ' '.join(str(part) for part in (code, message) if part)
+        if not detail:
+            detail = 'keys=' + ','.join(str(key) for key in data.keys())
+        return _SECRET_RE.sub('***', detail)[:300]
 
     def _resolve_poll_url(self, post_url: str, task_id: str) -> str:
         """Build the polling URL from the POST URL and task ID.
@@ -220,6 +298,9 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
     async_poll_url, async_content_url.
     """
 
+    # 文生视频时长域（秒）：前端同区间，非法值明确报错而非静默替换
+    VIDEO_DURATION_RANGE = (5, 15)
+
     # ── URL resolution ────────────────────────────────────────────
 
     def _resolve_url(self, tool: str) -> str:
@@ -253,16 +334,30 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
         }
 
         if tool == 'txt2video':
-            # Preserve the legacy Unitoken/Seedance video contract. Resolution
-            # and ratio are opt-in because not every OpenAI-compatible gateway
-            # accepts those fields.
-            payload['n'] = 1
-            payload['size'] = f'{width}x{height}'
-            payload['duration'] = max(int(params.get('duration', 5)), 5)
-            if params.get('resolution'):
-                payload['resolution'] = params['resolution']
-            if params.get('ratio'):
-                payload['ratio'] = params['ratio']
+            # 网关契约（UniToken / new-api 系：POST {base}/video/generations）：
+            # resolution、ratio、duration 必须落在 metadata 里；顶层同名字段和 size
+            # 会被网关忽略，缺少 metadata.resolution 时直接 400 "resolution is required"。
+            # 字段依据（2026-10 核对官方文档 unitoken.apifox.cn → API文档/视频生成）：
+            #   metadata{content 必需, ratio 必需, resolution 必需(480p/720p/1080p/4k，默认720p),
+            #            duration 可选(默认5), generate_audio 必需(Seedance 2.0 系列/1.5 pro),
+            #            watermark 可选}
+            # 文生视频没有参考素材：content 留空数组，网关会自行补 text 段。
+            duration = self._validate_video_duration(params.get('duration'))
+            resolution = str(params.get('resolution') or _w_h_to_resolution(width, height)).strip().lower()
+            ratio = str(params.get('ratio') or _wh_to_aspect_ratio(width, height)).strip()
+            payload['metadata'] = {
+                'content': [],
+                'resolution': resolution,
+                'ratio': ratio,
+                'duration': duration,
+                'generate_audio': bool(params.get('generate_audio', False)),
+            }
+            seed = params.get('seed')
+            if seed is not None:
+                # 种子支持度因网关而异（图片侧的 seed 走顶层，视频按契约只能落在 metadata）：
+                # 网关认识就生效、不认识多半随 metadata 被忽略；若网关明确以 400 点名 seed，
+                # 由 _handle_retry 去掉该字段重发一次 —— 「网关不支持种子」不该拖垮整批视频生成。
+                payload['metadata']['seed'] = seed
         else:
             payload['n'] = 1
             payload['size'] = f'{width}x{height}'
@@ -286,6 +381,26 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
                 payload[alias_name] = payload.pop(std_name)
 
         return payload
+
+    def _validate_video_duration(self, value: Any) -> int:
+        """文生视频时长必须是 5~15 的整数秒（前端同区间）。
+
+        非法值明确报错而非静默替换：静默 clamp 会让「我填了 3 秒」在结果里变成 5 秒，
+        评测数据无法解释；超出网关能力范围的值应由用户看到错误后自己改。
+        """
+        low, high = self.VIDEO_DURATION_RANGE
+        raw = 5 if value is None or value == '' else value
+        invalid = isinstance(raw, bool) or (isinstance(raw, float) and not raw.is_integer())
+        if not invalid:
+            try:
+                duration = int(raw)
+            except (TypeError, ValueError):
+                invalid = True
+        if invalid:
+            raise ValueError(f'文生视频时长须为 {low}~{high} 的整数秒，收到 {value!r}')
+        if not low <= duration <= high:  # type: ignore[possibly-undefined]
+            raise ValueError(f'文生视频时长须为 {low}~{high} 的整数秒，收到 {value!r}')
+        return duration
 
     # ── Response extraction ───────────────────────────────────────
 
@@ -315,6 +430,9 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
             result = data['result']
             item = result if isinstance(result,
                                         dict) else (result[0] if isinstance(result, list) and len(result) > 0 else {})
+        elif 'result_url' in data:
+            # 网关轮询终态：{code,message,data:{status:"SUCCESS", result_url:"..."}}
+            item = {'url': data['result_url']}
         else:
             raise ValueError(
                 f'Unexpected API response format: keys={list(data.keys())}. '
@@ -324,15 +442,33 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
         if 'b64_json' in item:
             return base64.b64decode(item['b64_json'])
         if 'url' in item:
-            resp = requests.get(item['url'], timeout=120)
-            resp.raise_for_status()
-            return resp.content
+            return self._download_media(item['url'])
         if 'video_url' in item:
-            resp = requests.get(item['video_url'], timeout=120)
-            resp.raise_for_status()
-            return resp.content
+            return self._download_media(item['video_url'])
 
         raise ValueError(f'Cannot extract media from response: keys={list(item.keys())}')
+
+    def _download_media(self, url: str) -> bytes:
+        """下载成品媒体字节。
+
+        先裸 GET（兼容预签名直链 / CDN）；401/403 表示内容端点要求鉴权
+        （部分 OpenAI 兼容网关的 /content 类地址如此），此时带上 Authorization 重试一次，
+        失败则把状态码与脱敏响应体写进错误信息，而不是抛一个无上下文的 HTTPError。
+        """
+        resp = requests.get(url, timeout=120)
+        if resp.status_code in (401, 403) and self.api_key:
+            logger.info('Media download HTTP %d, retrying with Authorization header', resp.status_code)
+            retry = requests.get(url, headers={'Authorization': f'Bearer {self.api_key}'}, timeout=120)
+            if retry.ok:
+                return retry.content
+            logger.warning(
+                'Media download failed: HTTP %d body=%s',
+                retry.status_code,
+                self._redact_secrets(retry.text)[:200],
+            )
+            resp = retry
+        resp.raise_for_status()
+        return resp.content
 
     def _extract_by_path(self, data: Dict[str, Any], path: str) -> bytes:
         """Simple dot-notation path extraction: 'data.0.b64_json'."""
@@ -355,6 +491,10 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
         return current  # type: ignore
 
     # ── Async polling ─────────────────────────────────────────────
+
+    def _is_async_response(self, data: Dict[str, Any]) -> bool:
+        """兼容 {code, message, data: {task_id, status}} 包裹形态的网关。"""
+        return super()._is_async_response(self._unwrap_response(data))
 
     def _resolve_poll_url(self, post_url: str, task_id: str) -> str:
         """Use custom async_poll_url template if configured."""
@@ -379,44 +519,34 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
     # ── Retry ─────────────────────────────────────────────────────
 
     def _handle_retry(self, response, url: str, headers: dict, payload: dict, **params) -> requests.Response:
-        """Retry a legacy size-related 400 with a resolution-only payload."""
-        if response.status_code == 400:
-            err_text = response.text.lower()
-            if params.get('tool') == 'txt2video' and ('size' in err_text or 'resolution' in err_text):
-                width = params.get('width', 1024)
-                height = params.get('height', 1024)
-                alt = _w_h_to_resolution(width, height)
-                if payload.get('size') != alt:
-                    retry_payload = dict(payload)
-                    retry_payload.pop('size', None)
-                    retry_payload['resolution'] = alt
-                    retry_payload.pop('ratio', None)
-                    logger.info('Request size=%s rejected (400), retrying with resolution=%s', payload.get('size'), alt)
-                    logger.info(
-                        'Video fallback payload: %s',
-                        {
-                            key: value
-                            for key, value in retry_payload.items()
-                            if key != 'prompt'
-                        },
-                    )
-                    retry_response = requests.post(url, json=retry_payload, headers=headers, timeout=300)
-                    if not retry_response.ok:
-                        logger.warning(
-                            'Video fallback request failed: HTTP %d, response=%s',
-                            retry_response.status_code,
-                            retry_response.text[:2000],
-                        )
-                    return retry_response
-            elif any(kw in err_text for kw in ('size', 'resolution', 'invalid')):
-                width = params.get('width', 1024)
-                height = params.get('height', 1024)
-                alt = _w_h_to_resolution(width, height)
-                logger.info('Size %s rejected (400), retrying with %s', payload.get('size'), alt)
-                payload['size'] = alt
-                return requests.post(url, json=payload, headers=headers, timeout=300)
-            else:
-                logger.warning('API request failed with HTTP 400: %s', response.text[:1000])
+        """两处窄口兜底，只为不让可选字段拖垮整批评测；其余 400 一律原样上抛。
+
+        - 视频 seed：支持度因网关而异（有的原样透传给上游并生效，有的 400 拒绝未知字段）。
+          仅在服务端**自己点名 seed** 时去掉该字段重发一次，实现「不支持则静默失效，不影响出片」。
+        - 图片 size：个别网关只认「720p」这类档位而非 WxH，按宽高推导后重发一次。
+          图片专用——视频的 size 网关从不解析（旧实现把「顶层 size 被拒」改成「顶层 resolution」
+          再发一次，两次请求对网关等价，只会掩盖真实错误，视频 400 必须原样回显）。
+        """
+        if response.status_code != 400:
+            return response
+        err_text = response.text.lower()
+        metadata = payload.get('metadata') or {}
+        if params.get('tool') == 'txt2video' and 'seed' in err_text and metadata.get('seed') is not None:
+            retry_payload = copy.deepcopy(payload)
+            retry_payload['metadata'].pop('seed')
+            logger.warning(
+                '网关不接受 seed，去掉该字段重发一次（响应：%s）',
+                self._redact_secrets(response.text)[:200],
+            )
+            return requests.post(url, json=retry_payload, headers=headers, timeout=300)
+        if params.get('tool') != 'txt2video' and any(kw in err_text for kw in ('size', 'resolution', 'invalid')):
+            width = params.get('width', 1024)
+            height = params.get('height', 1024)
+            alt = _w_h_to_resolution(width, height)
+            logger.info('Size %s rejected (400), retrying with %s', payload.get('size'), alt)
+            payload['size'] = alt
+            return requests.post(url, json=payload, headers=headers, timeout=300)
+        logger.warning('API request failed with HTTP 400: %s', self._redact_secrets(response.text)[:1000])
         return response
 
 

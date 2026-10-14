@@ -5,6 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FORM_PATH = REPO_ROOT / 'evalscope/web/src/components/eval/AIGCEvalForm.tsx'
 ADAPTERS_PATH = REPO_ROOT / 'evalscope/backend/aigc_eval/models/adapters.py'
+PROMPT_LOADER_PATH = REPO_ROOT / 'evalscope/backend/aigc_eval/datasets/prompt_loader.py'
 
 
 def _video_form_branch(source: str) -> str:
@@ -73,6 +74,42 @@ def test_video_provider_specific_controls_are_scoped_to_supported_providers():
     # compatible-mode 是 OpenAI 兼容入口，无视频合成端点（实测 404），必须提示改用 /api/v1
     assert 'compatibleModeVideoBase(apiBase)' in source
     assert 'compatible-mode 是 OpenAI 兼容入口' in source
+
+
+def test_video_prompt_dataset_defaults_to_safe_set():
+    """文生视频默认走安全版内置提示词。
+
+    默认 prompt_limit=1 只取首条 → 首条必须零风险，否则一句话就撞供应商风控、整任务失败
+    （实测原版首条 'A soccer player scoring...' 被方舟判 copyright restrictions）。
+    """
+    source = FORM_PATH.read_text(encoding='utf-8')
+    loader = PROMPT_LOADER_PATH.read_text(encoding='utf-8')
+
+    assert "{ value: 'msr_vtt_safe', label: '内置视频提示词·安全版 (80 prompts)' }" in source
+    assert "{ value: 'msr_vtt', label: '内置视频提示词·原版 (80 prompts)' }" in source
+    assert "setPromptDataset('msr_vtt_safe')" in source
+    assert "setPromptDataset('msr_vtt')" not in source, '默认值不得回退到基线集合'
+    assert "'msr_vtt_safe': _SAFE_VIDEO_CATEGORY_ORDER" in loader
+    # 下拉里每个内置值都必须有后端分支，避免选了就 ValueError
+    for value in sorted(set(re.findall(r"value: '(msr_vtt[a-z_]*)'", source))):
+        assert f"'{value}':" in loader, f'后端缺少数据集分支 {value}'
+
+
+def test_video_dataset_dropdown_has_only_builtin_sets():
+    """视频数据集下拉只留两个内置集合。
+
+    单条提示词已有「自定义提示词」入口（其优先级高于数据集），所以「自定义数据集 /
+    不使用（仅用自定义提示词）」是冗余入口，前端删除；后端保留 custom/空值分支，
+    以便复现历史任务配置与 API 直连调用。
+    """
+    source = FORM_PATH.read_text(encoding='utf-8')
+    loader = PROMPT_LOADER_PATH.read_text(encoding='utf-8')
+    block = source[source.index('const VIDEO_DATASETS'):source.index('const TEXT_TO_IMAGE_METRICS')]
+
+    assert "'msr_vtt_safe'" in block and "'msr_vtt'" in block
+    assert "value: 'custom'" not in block
+    assert "value: ''" not in block
+    assert "dataset_name == 'custom'" in loader, '后端兼容分支不得一并删除'
 
 
 def test_volcengine_tiers_match_backend_capability_table():

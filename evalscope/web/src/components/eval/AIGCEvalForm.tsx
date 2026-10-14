@@ -19,9 +19,11 @@ const IMAGE_DATASETS = [
 ]
 
 const VIDEO_DATASETS = [
-  { value: 'msr_vtt', label: '内置视频提示词 (80 prompts)' },
-  { value: 'custom', label: '自定义数据集' },
-  { value: '', label: '不使用（仅用自定义提示词）' },
+  // 安全版为默认：同条数/同类别，仅把版权·危险·未成年语义换成同类中性场景，并前置零风险场景
+  { value: 'msr_vtt_safe', label: '内置视频提示词·安全版 (80 prompts)' },
+  { value: 'msr_vtt', label: '内置视频提示词·原版 (80 prompts)' },
+  // 视频不再暴露「自定义数据集 / 不使用」：单条提示词走上方的「自定义提示词」，
+  // 后端仍兼容 custom / 空值（历史任务配置与 API 直连可复现）
 ]
 
 const TEXT_TO_IMAGE_METRICS = [
@@ -34,7 +36,7 @@ const IMAGE_TO_IMAGE_METRICS = [
 ]
 
 const VIDEO_METRICS = [
-  { value: 'clip_score', label: 'CLIP Score (文本-视频对齐)' },
+  { value: 'clip_score', label: 'CLIP Score' },
 ]
 
 // ── 视频生成能力表 ────────────────────────────────────────────────────
@@ -56,6 +58,8 @@ interface VideoCapability {
   durationHint: string
   /** 该模型可选的时长（秒，字符串）。空数组 = 无法枚举（如 OpenAI 兼容透传），回退自由输入 */
   durations: string[]
+  /** 自由输入时长的合法区间（秒）：仅 OpenAI 兼容来源需要（其余来源时长均为枚举下拉） */
+  durationRange?: [number, number]
   /** 模型 id 是否可被识别（false 时后端必报错，前端直接拦住） */
   known: boolean
 }
@@ -172,6 +176,7 @@ function videoCapability(provider: string, model: string): VideoCapability {
     seed: true,
     durationHint: '限支持5～15 秒整数',
     durations: [],
+    durationRange: [5, 15],
     known: true,
   }
 }
@@ -225,7 +230,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     setTool(newTool)
     if (newTool !== 'txt2video' && provider === 'volcengine') setProvider('openai')
     if (newTool === 'txt2video') {
-      setPromptDataset('msr_vtt')
+      setPromptDataset('msr_vtt_safe')
       setMetrics(['clip_score'])
     } else if (newTool === 'img2img') {
       setPromptDataset('')
@@ -360,6 +365,18 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         : '未识别的火山引擎视频模型（支持 doubao-seedance-2-5 / 2-0 系列 / 1-0 系列）'
       setErrors(newErrors)
       return
+    }
+    // OpenAI 兼容来源的时长是自由输入：先按区间拦住，给出可读错误；
+    // 后端同样显式报错、不静默改值（填 3 秒不会被悄悄跑成 5 秒）。
+    if (tool === 'txt2video' && cap.durationRange) {
+      const [low, high] = cap.durationRange
+      const rawDuration = videoDurationValue === '' ? String(low) : videoDurationValue
+      const parsedDuration = Number(rawDuration)
+      if (!Number.isInteger(parsedDuration) || parsedDuration < low || parsedDuration > high) {
+        newErrors.duration = `时长须为 ${low}～${high} 的整数秒（当前填的是 ${rawDuration}）`
+        setErrors(newErrors)
+        return
+      }
     }
 
     const generateConfig: Record<string, unknown> = {
@@ -513,7 +530,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
             className={FORM_INPUT_CLASS} placeholder="7.5" step="0.1" />
         </FormField>}
 
-        {tool === 'txt2video' && <FormField label="视频时长" hint={videoCap.durationHint}>
+        {tool === 'txt2video' && <FormField label="视频时长" hint={videoCap.durationHint} error={errors.duration}>
           {durationOptions.length > 0 ? (
             <select value={videoDurationValue} onChange={e => setVideoDuration(e.target.value)}
               className={FORM_INPUT_CLASS}>
@@ -521,8 +538,12 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
             </select>
           ) : (
             <input type="number" value={videoDuration}
-              onChange={e => setVideoDuration(e.target.value.replace(/[^0-9]/g, ''))}
-              className={FORM_INPUT_CLASS} step="1" placeholder="5" />
+              onChange={e => {
+                setVideoDuration(e.target.value.replace(/[^0-9]/g, ''))
+                if (errors.duration) setErrors(p => ({ ...p, duration: '' }))
+              }}
+              className={FORM_INPUT_CLASS} step="1" placeholder="5"
+              min={videoCap.durationRange?.[0]} max={videoCap.durationRange?.[1]} />
           )}
         </FormField>}
 

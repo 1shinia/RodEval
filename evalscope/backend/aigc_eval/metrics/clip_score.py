@@ -23,6 +23,16 @@ logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 # 默认使用本地已缓存的中文 CLIP 模型（对中文 prompt 语义匹配更好，文本支持 512 token）
 _DEFAULT_MODEL_ID = 'AI-ModelScope/chinese-clip-vit-base-patch16'
 
+# 口径元信息：随每次结果一起落盘，避免把「余弦 0~1」误读成百分制。
+# 历史分界：2026-08-17（commit 5082c0e9）之前取 HF CLIP 的 logits_per_image（≈余弦×logit_scale≈100，
+# 故数值在 20~40），之后换成本地中文 CLIP 并改为归一化点积（纯余弦）。
+# 模型与标尺同时变了，跨该日期的分数不可直接比较；db.py 的历史回填也用 `score>1 → /100` 归一到 0~1。
+CLIP_SCORE_META = {
+    'model': _DEFAULT_MODEL_ID,
+    'scale': 'cosine (0~1)',
+    'note': '图文余弦相似度，非百分制；2026-08-17 前为 openai/clip-vit-base-patch32 的 logits_per_image 口径，不可与现数据直接比较',
+}
+
 # 已知本地缓存路径（modelscope 缓存根被自定义到 /data）
 _KNOWN_LOCAL_PATHS = (
     '/data/modelscope/hub/models/AI-ModelScope/chinese-clip-vit-base-patch16',

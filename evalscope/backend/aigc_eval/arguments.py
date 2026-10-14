@@ -77,7 +77,7 @@ class AIGCEvalConfig(BaseArgument):
         ['clip_score'],
         description='Evaluation metrics to compute (clip_score, fid, is, lpips)',
     )
-    prompt_dataset: str = Field('drawbench', description='Prompt dataset (drawbench, coco_captions, parti, custom)')
+    prompt_dataset: str = Field('drawbench', description='Prompt dataset (drawbench, coco_captions, parti, custom, msr_vtt, msr_vtt_safe)')
     prompt_limit: int = Field(1, ge=1, le=10000, description='Number of prompts to evaluate')
     custom_prompt: Optional[str] = Field(None, description='Custom prompt for img2img (takes priority over dataset)')
     random_prompt: bool = Field(False, description='Randomly shuffle prompts before taking limit')

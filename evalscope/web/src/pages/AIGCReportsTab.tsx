@@ -175,7 +175,7 @@ export default function AIGCReportsTab() {
         availableModels={availableModels}
         availableDatasets={availableDatasets}
         onChange={setFilters}
-        datasetLabel="类型"
+        datasetLabel={t('reports.type')}
       />
 
       {loading ? (
@@ -201,7 +201,7 @@ export default function AIGCReportsTab() {
                     />
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.taskId')}</th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">类型</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.type')}</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelName')}</th>
                   <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.totalImages')}</th>
                   <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>

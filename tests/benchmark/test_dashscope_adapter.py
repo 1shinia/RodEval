@@ -213,7 +213,9 @@ def test_volcengine_poll_timeout_reports_last_status_and_recheck_url():
     assert '/contents/generations/tasks/cgt-1' in msg
 
 
-def test_openai_video_payload_uses_legacy_size_and_explicit_duration():
+def test_openai_video_payload_nests_metadata_and_derives_defaults():
+    """网关契约：metadata 唯一被解析，顶层 size/n/resolution 网关都不读
+    （实测该形态返回 400 "resolution is required"）。"""
     adapter = OpenAICompatibleAdapter({
         'api_base': 'https://api.example.test/v1',
         'api_key': 'sk-test',
@@ -226,11 +228,14 @@ def test_openai_video_payload_uses_legacy_size_and_explicit_duration():
         height=720,
         duration=10,
     )
-    assert payload['n'] == 1
-    assert payload['size'] == '1280x720'
-    assert payload['duration'] == 10
-    assert 'resolution' not in payload
-    assert 'ratio' not in payload
+    assert set(payload) == {'model', 'prompt', 'metadata'}
+    assert payload['metadata'] == {
+        'content': [],
+        'resolution': '720p',
+        'ratio': '16:9',
+        'duration': 10,
+        'generate_audio': False,
+    }
 
 
 def test_openai_video_payload_preserves_explicit_resolution_and_ratio():
@@ -248,9 +253,10 @@ def test_openai_video_payload_preserves_explicit_resolution_and_ratio():
         resolution='720p',
         ratio='16:9',
     )
-    assert payload['resolution'] == '720p'
-    assert payload['ratio'] == '16:9'
-    assert payload['duration'] == 10
+    assert payload['metadata']['resolution'] == '720p'
+    assert payload['metadata']['ratio'] == '16:9'
+    assert payload['metadata']['duration'] == 10
+    assert 'resolution' not in payload and 'size' not in payload and 'n' not in payload
 
 
 def test_openai_image_payload_forwards_generation_parameters():
