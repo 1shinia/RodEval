@@ -1,4 +1,5 @@
-import { useState, type SyntheticEvent } from 'react'
+import { useId, useState, type SyntheticEvent } from 'react'
+import { useLocale } from '@/contexts/LocaleContext'
 
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
@@ -13,50 +14,52 @@ type AudioTool = 'asr' | 'tts'
 
 const PROVIDER_OPTIONS: { value: string; label: string; apiPlaceholder: string; modelPlaceholder: string; defaultVoice: string; voices: { value: string; label: string }[] }[] = [
   {
-    value: 'openai', label: 'OpenAI 兼容', apiPlaceholder: 'https://api.openai.com/v1', modelPlaceholder: 'whisper-1 / tts-1',
+    value: 'openai', label: 'providerOpenai', apiPlaceholder: 'https://api.openai.com/v1', modelPlaceholder: 'whisper-1 / tts-1',
     defaultVoice: 'alloy',
     voices: [
-      { value: 'alloy', label: 'Alloy (中性)' },
-      { value: 'echo', label: 'Echo (男声)' },
-      { value: 'fable', label: 'Fable (英式)' },
-      { value: 'onyx', label: 'Onyx (深沉)' },
-      { value: 'nova', label: 'Nova (女声)' },
-      { value: 'shimmer', label: 'Shimmer (轻快)' },
+      { value: 'alloy', label: 'voiceAlloy' },
+      { value: 'echo', label: 'voiceEcho' },
+      { value: 'fable', label: 'voiceFable' },
+      { value: 'onyx', label: 'voiceOnyx' },
+      { value: 'nova', label: 'voiceNova' },
+      { value: 'shimmer', label: 'voiceShimmer' },
     ],
   },
   {
-    value: 'dashscope', label: 'DashScope (百炼)', apiPlaceholder: 'https://dashscope.aliyuncs.com/api/v1', modelPlaceholder: 'qwen-audio-asr / cosyvoice-v3.5-flash / sambert-zhichu-v1',
+    value: 'dashscope', label: 'providerDashscope', apiPlaceholder: 'https://dashscope.aliyuncs.com/api/v1', modelPlaceholder: 'qwen-audio-asr / cosyvoice-v3.5-flash / sambert-zhichu-v1',
     defaultVoice: 'longxiaochun',
     voices: [
-      { value: 'longxiaochun', label: 'longxiaochun (龙小春·女声)' },
-      { value: 'longbella', label: 'longbella (龙贝拉·女声)' },
-      { value: 'longcheng', label: 'longcheng (龙成·男声)' },
-      { value: 'longxiaoxia', label: 'longxiaoxia (龙小夏·女声)' },
-      { value: 'longxiaoqi', label: 'longxiaoqi (龙小七·男声)' },
-      { value: 'longyue', label: 'longyue (龙悦·女声)' },
-      { value: 'longfeiyu', label: 'longfeiyu (龙飞宇·男声)' },
-      { value: 'zhichu', label: 'zhichu (知厨·男声)' },
-      { value: 'zhixiaobai', label: 'zhixiaobai (知小白·女声)' },
-      { value: 'zhiluo', label: 'zhiluo (知萝·女声)' },
-      { value: 'zhiyu', label: 'zhiyu (知语·女声)' },
+      { value: 'longxiaochun', label: 'voiceLongxiaochun' },
+      { value: 'longbella', label: 'voiceLongbella' },
+      { value: 'longcheng', label: 'voiceLongcheng' },
+      { value: 'longxiaoxia', label: 'voiceLongxiaoxia' },
+      { value: 'longxiaoqi', label: 'voiceLongxiaoqi' },
+      { value: 'longyue', label: 'voiceLongyue' },
+      { value: 'longfeiyu', label: 'voiceLongfeiyu' },
+      { value: 'zhichu', label: 'voiceZhichu' },
+      { value: 'zhixiaobai', label: 'voiceZhixiaobai' },
+      { value: 'zhiluo', label: 'voiceZhiluo' },
+      { value: 'zhiyu', label: 'voiceZhiyu' },
     ],
   },
   {
-    value: 'volcengine', label: '火山方舟', apiPlaceholder: 'https://ark.cn-beijing.volces.com/api/v3', modelPlaceholder: 'doubao-xxx',
+    value: 'volcengine', label: 'providerVolcengine', apiPlaceholder: 'https://ark.cn-beijing.volces.com/api/v3', modelPlaceholder: 'doubao-xxx',
     defaultVoice: 'zh_female_qingxin',
     voices: [
-      { value: 'zh_female_qingxin', label: 'zh_female_qingxin (清新·女声)' },
-      { value: 'zh_male_chunhou', label: 'zh_male_chunhou (醇厚·男声)' },
+      { value: 'zh_female_qingxin', label: 'voiceQingxin' },
+      { value: 'zh_male_chunhou', label: 'voiceChunhou' },
     ],
   },
 ]
 
 const METRICS_OPTIONS = [
-  { value: 'wer', label: 'WER (词错误率)' },
-  { value: 'cer', label: 'CER (字错误率)' },
+  { value: 'wer', label: 'metricWer' },
+  { value: 'cer', label: 'metricCer' },
 ]
 
 export default function AudioEvalForm({ onSubmit, disabled }: Props) {
+  const { t } = useLocale()
+  const audioFileInputId = useId()
   const [tool, setTool] = useState<AudioTool>('asr')
 
   const handleToolChange = (newTool: AudioTool) => {
@@ -121,13 +124,13 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
 
-    if (!model.trim()) newErrors.model = '请输入模型名称'
-    if (!apiBase.trim()) newErrors.apiBase = '请输入 API URL'
-    if (!apiKey.trim()) newErrors.apiKey = '请输入 API Key'
+    if (!model.trim()) newErrors.model = t('evalAudioExtra.modelRequired')
+    if (!apiBase.trim()) newErrors.apiBase = t('evalAudioExtra.apiUrlRequired')
+    if (!apiKey.trim()) newErrors.apiKey = t('evalAudioExtra.apiKeyRequired')
 
     // ASR requires audio file
     if (tool === 'asr' && !audioBase64) {
-      newErrors.audio = '请上传音频文件'
+      newErrors.audio = t('evalAudioExtra.audioRequired')
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -187,22 +190,22 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Tool Selector */}
       <div className="flex items-center gap-3 border-b border-[var(--border-md)] pb-4">
-        <span className="text-sm font-medium text-[var(--text)]">功能类型</span>
+        <span className="text-sm font-medium text-[var(--text)]">{t('evalAudioExtra.toolType')}</span>
         <select value={tool} onChange={e => handleToolChange(e.target.value as AudioTool)} className={FORM_INPUT_CLASS + ' !w-auto'}>
-          <option value="asr">ASR (语音识别)</option>
-          <option value="tts">TTS (语音合成)</option>
+          <option value="asr">{t('evalAudioExtra.asrOption')}</option>
+          <option value="tts">{t('evalAudioExtra.ttsOption')}</option>
         </select>
       </div>
 
 
       {/* Model Configuration */}
       <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2">
-        模型配置
+        {t('aigc.modelConfig')}
       </h4>
 
       <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <FormField label="API 提供商">
+        <FormField label={t('evalAudioExtra.apiProvider')}>
           <select value={provider} onChange={e => {
             const newProvider = e.target.value
             setProvider(newProvider)
@@ -210,24 +213,24 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
             if (p) setVoice(p.defaultVoice)
           }} className={FORM_INPUT_CLASS}>
             {PROVIDER_OPTIONS.map(p => (
-              <option key={p.value} value={p.value}>{p.label}</option>
+              <option key={p.value} value={p.value}>{t(`evalAudioExtra.${p.label}`)}</option>
             ))}
           </select>
         </FormField>
 
-        <FormField label="模型名称" required error={errors.model}>
+        <FormField label={t('eval.ragModelName')} required error={errors.model}>
           <input value={model}
             onChange={e => { setModel(e.target.value.trimStart()); if (errors.model) setErrors(p => ({ ...p, model: '' })) }}
             className={FORM_INPUT_CLASS} placeholder={currentProvider.modelPlaceholder} />
         </FormField>
 
-        <FormField label="API URL" required error={errors.apiBase} className="md:col-span-2">
+        <FormField label={t('evalAudioExtra.apiUrl')} required error={errors.apiBase} className="md:col-span-2">
           <input value={apiBase}
             onChange={e => { setApiBase(e.target.value); if (errors.apiBase) setErrors(p => ({ ...p, apiBase: '' })) }}
             className={FORM_INPUT_CLASS} placeholder={currentProvider.apiPlaceholder} />
         </FormField>
 
-        <FormField label="API Key" required error={errors.apiKey}>
+        <FormField label={t('eval.ragApiKey')} required error={errors.apiKey}>
           <input type="password" value={apiKey}
             onChange={e => { setApiKey(e.target.value); if (errors.apiKey) setErrors(p => ({ ...p, apiKey: '' })) }}
             className={FORM_INPUT_CLASS} placeholder="sk-..." />
@@ -236,11 +239,11 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
 
       {tool !== 'asr' && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <FormField label="语言">
+        <FormField label={t('eval.ragLanguage')}>
           <select value={language} onChange={e => setLanguage(e.target.value)} className={FORM_INPUT_CLASS}>
-            <option value="zh">中文</option>
-            <option value="en">英文</option>
-            <option value="auto">自动检测</option>
+            <option value="zh">{t('evalAudioExtra.languageChinese')}</option>
+            <option value="en">{t('evalAudioExtra.languageEnglish')}</option>
+            <option value="auto">{t('evalAudioExtra.languageAuto')}</option>
           </select>
         </FormField>
       </div>
@@ -251,31 +254,34 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
       {tool === 'asr' && (
         <>
           <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2">
-            ASR 语音识别
+            {t('evalAudioExtra.asrTitle')}
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label="音频文件" required error={errors.audio}>
+            <FormField label={t('evalAudioExtra.audioFile')} required error={errors.audio}>
               <div className="flex items-center gap-3">
-                <input type="file" accept="audio/*"
-                  onChange={handleAudioChange}
-                  className={`${FORM_INPUT_CLASS} file:mr-3 file:px-3 file:py-1 file:rounded file:border-0 file:bg-[var(--accent)] file:text-white file:text-sm file:cursor-pointer`} />
+                <input id={audioFileInputId} type="file" accept="audio/*"
+                  onChange={handleAudioChange} className="peer sr-only" />
+                <label htmlFor={audioFileInputId}
+                  className="inline-flex cursor-pointer rounded bg-[var(--accent)] px-3 py-1 text-sm text-white peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--accent)]">
+                  {t('evalAudioExtra.chooseFile')}
+                </label>
+                <span className="text-sm text-[var(--text-muted)]" aria-live="polite">
+                  {audioFileName || t('evalAudioExtra.noFileChosen')}
+                </span>
               </div>
-              {audioFileName && (
-                <p className="text-xs text-[var(--text-muted)] mt-1">已选择: {audioFileName}</p>
-              )}
             </FormField>
 
-            <FormField label="参考文本（用于 WER/CER 对比）" hint="留空则只做识别，不计算指标">
+            <FormField label={t('evalAudioExtra.referenceText')} hint={t('evalAudioExtra.referenceTextHint')}>
               <textarea value={referenceText}
                 onChange={e => setReferenceText(e.target.value)}
                 className={FORM_INPUT_CLASS} rows={2}
-                placeholder="请输入标准参考文本..." />
+                placeholder={t('evalAudioExtra.referenceTextPlaceholder')} />
             </FormField>
           </div>
 
           {/* ASR Metrics */}
           <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2">
-            评估指标
+            {t('aigc.metrics')}
           </h4>
           <div className="flex gap-6">
             {METRICS_OPTIONS.map(({ value, label }) => (
@@ -285,7 +291,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
                     prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
                   )}
                   className="accent-[var(--accent)]" />
-                <span className="text-sm text-[var(--text)]">{label}</span>
+                <span className="text-sm text-[var(--text)]">{t(`evalAudioExtra.${label}`)}</span>
               </label>
             ))}
           </div>
@@ -296,10 +302,10 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
       {tool === 'tts' && (
         <>
           <h4 className="text-sm font-medium text-[var(--text)] border-b border-[var(--border-md)] pb-2">
-            TTS 语音合成
+            {t('evalAudioExtra.ttsTitle')}
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <FormField label="语音音色">
+            <FormField label={t('evalAudioExtra.voice')}>
               <input
                 type="text"
                 value={voice}
@@ -310,12 +316,12 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
               />
               <datalist id="voice-suggestions">
                 {currentProvider.voices.map(v => (
-                  <option key={v.value} value={v.value}>{v.label}</option>
+                  <option key={v.value} value={v.value}>{t(`evalAudioExtra.${v.label}`)}</option>
                 ))}
               </datalist>
             </FormField>
 
-            <FormField label="输出格式">
+            <FormField label={t('evalAudioExtra.outputFormat')}>
               <select value={audioFormat} onChange={e => setAudioFormat(e.target.value)} className={FORM_INPUT_CLASS}>
                 <option value="mp3">MP3</option>
                 <option value="wav">WAV</option>
@@ -323,7 +329,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
               </select>
             </FormField>
 
-            <FormField label="语速">
+            <FormField label={t('evalAudioExtra.speed')}>
               <input type="range" min="0.25" max="4.0" step="0.25"
                 value={speed} onChange={e => setSpeed(e.target.value)}
                 className="w-full accent-[var(--accent)]" />
@@ -336,17 +342,17 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={asrEnabled} onChange={e => setAsrEnabled(e.target.checked)}
                 className="w-4 h-4 rounded accent-[var(--accent)]" />
-              <span className="text-sm font-medium text-[var(--text)]">ASR 闭环评估</span>
-              <span className="text-xs text-[var(--text-dim)]">TTS 生成后自动用 ASR 转写，计算 WER/CER</span>
+              <span className="text-sm font-medium text-[var(--text)]">{t('evalAudioExtra.asrClosedLoop')}</span>
+              <span className="text-xs text-[var(--text-dim)]">{t('evalAudioExtra.asrClosedLoopHint')}</span>
             </label>
             {asrEnabled && (
               <div className="mt-2 grid grid-cols-2 gap-3">
-                <FormField label="ASR 模型">
+                <FormField label={t('evalAudioExtra.asrModel')}>
                   <input type="text" value={asrModelName} onChange={e => setAsrModelName(e.target.value)}
                     className={FORM_INPUT_CLASS}
                     placeholder="paraformer-realtime-v2" />
                 </FormField>
-                <FormField label="ASR API URL" hint="默认继承TTS的API URL">
+                <FormField label={t('evalAudioExtra.asrApiUrl')} hint={t('evalAudioExtra.asrApiUrlHint')}>
                   <input type="text" value={asrApiBase} onChange={e => setAsrApiBase(e.target.value)}
                     className={FORM_INPUT_CLASS}
                     placeholder="https://ws-dwy81zmcwutmk6py.cn-beijing.maas.aliyuncs.com/api/v1" />
@@ -355,7 +361,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
             )}
             {asrEnabled && (
               <div className="mt-2">
-                <FormField label="ASR API Key" hint="使用云端ASR时必填；本地whisper可留空">
+                <FormField label={t('evalAudioExtra.asrApiKey')} hint={t('evalAudioExtra.asrApiKeyHint')}>
                   <input type="password" value={asrApiKey} onChange={e => setAsrApiKey(e.target.value)}
                     className={FORM_INPUT_CLASS}
                     placeholder="sk-..." />
@@ -371,7 +377,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
                         prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
                       )}
                       className="accent-[var(--accent)]" />
-                    <span className="text-sm text-[var(--text)]">{label}</span>
+                    <span className="text-sm text-[var(--text)]">{t(`evalAudioExtra.${label}`)}</span>
                   </label>
                 ))}
               </div>
@@ -380,25 +386,25 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
 
           {/* TTS Prompts */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label="提示词数据集">
+            <FormField label={t('aigc.promptDataset')}>
               <select value={promptDataset} onChange={e => setPromptDataset(e.target.value)} className={FORM_INPUT_CLASS}>
-                <option value="builtin">内置测试文本 (10 条)</option>
-                <option value="custom">自定义数据集</option>
+                <option value="builtin">{t('evalAudioExtra.builtinPrompts')}</option>
+                <option value="custom">{t('evalAudioExtra.customDataset')}</option>
               </select>
             </FormField>
 
-            <FormField label="提示词数量">
+            <FormField label={t('evalAudioExtra.promptCount')}>
               <input type="number" min="1" max="1000"
                 value={promptLimit} onChange={e => { const v = Math.max(1, Number(e.target.value)); setPromptLimit(String(v)) }}
                 className={FORM_INPUT_CLASS} />
             </FormField>
           </div>
 
-          <FormField label="自定义提示词（可选）" hint="留空则使用数据集">
+          <FormField label={t('evalAudioExtra.customPrompt')} hint={t('evalAudioExtra.customPromptHint')}>
             <textarea value={customPrompt}
               onChange={e => setCustomPrompt(e.target.value)}
               className={FORM_INPUT_CLASS} rows={2}
-              placeholder="请输入要合成的文本..." />
+              placeholder={t('evalAudioExtra.customPromptPlaceholder')} />
           </FormField>
         </>
       )}
@@ -406,7 +412,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
       {/* Submit Button */}
       <div className="flex justify-end pt-2 border-t border-[var(--border-md)]">
         <Button type="submit" variant="primary" disabled={disabled}>
-          {disabled ? '运行中...' : '开始评估'}
+          {disabled ? t('evalAudioExtra.running') : t('eval.startEval')}
         </Button>
       </div>
     </form>

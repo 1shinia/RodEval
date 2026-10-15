@@ -78,13 +78,13 @@ export default function LLMReportsTab() {
       setAvailableModels(res.filters.available_models)
       setAvailableDatasets(res.filters.available_datasets)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load reports'
+      const msg = err instanceof Error ? err.message : t('reports.loadFailed')
       setError(msg)
       toast.error(msg)
     } finally {
       setLoading(false)
     }
-  }, [rootPath, debouncedSearch, filters.models, filters.datasets, filters.scoreMin, filters.scoreMax, filters.sortBy, filters.sortOrder, page])
+  }, [rootPath, debouncedSearch, filters.models, filters.datasets, filters.scoreMin, filters.scoreMax, filters.sortBy, filters.sortOrder, page, t])
 
   useEffect(() => { fetchReports() }, [fetchReports])
   useEffect(() => { setPage(1) }, [debouncedSearch, filters.models, filters.datasets, filters.scoreMin, filters.scoreMax, filters.sortBy, filters.sortOrder])
@@ -190,7 +190,7 @@ export default function LLMReportsTab() {
       {loading ? (
         <div className="flex flex-col gap-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
       ) : reports.length === 0 ? (
-        <EmptyState icon={<ScanSearch size={40} />} title="暂无模型评估报告" subtitle="完成评估后，报告将显示在这里" />
+        <EmptyState icon={<ScanSearch size={40} />} title={t('reports.noModelReports')} subtitle={t('reports.modelReportsHint')} />
       ) : (
         <>
           <div className="rounded-[var(--radius)] border border-[var(--border)] overflow-hidden">
@@ -205,13 +205,13 @@ export default function LLMReportsTab() {
                       className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
                     />
                   </th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">任务 ID</th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">模型</th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">数据集</th>
-                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">样本数</th>
-                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">创建时间</th>
-                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">操作</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.taskId')}</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.filters.model')}</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.filters.dataset')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.samples')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.evaluationScore')}</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.createdAt')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -233,10 +233,10 @@ export default function LLMReportsTab() {
   {report.score.toFixed(4)}
   {report.has_errors ? (
     <span
-      title={report.error_note || '失败/不完整结果'}
+      title={report.error_note || t('reports.incompleteResult')}
       className="ml-1.5 inline-flex items-center rounded px-1 py-px text-[10px] font-medium text-white bg-amber-500/90 align-middle cursor-help"
     >
-      失败
+      {t('reports.failed')}
     </span>
   ) : null}
 </td>
@@ -245,9 +245,9 @@ export default function LLMReportsTab() {
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="outline" size="sm" onClick={() => handleView(report)}>
                           <Eye size={14} />
-                          查看
+                          {t('common.view')}
                         </Button>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(report.name) }} className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title="删除">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(report.name) }} className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title={t('common.delete')}>
                           <Trash2 size={14} />
                         </button>
                       </div>

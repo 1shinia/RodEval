@@ -105,7 +105,7 @@ export default function TaskMonitor({
           className="btn-glow"
         >
           <PlayCircle size={14} />
-          续跑
+          {t('evalSharedExtra.resume')}
         </Button>
       )}
 

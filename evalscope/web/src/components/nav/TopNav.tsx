@@ -68,9 +68,9 @@ export default function TopNav() {
     { to: '/reports', icon: <ClipboardCheck size={18} />, label: t('nav.evalReports'), preload: preloadDefaultReportsRoute },
     { to: '/perf', icon: <Activity size={18} />, label: t('nav.perf') },
     { to: '/perf-reports', icon: <BarChart4 size={18} />, label: t('nav.perfReports') },
-    { to: '/compare', icon: <GitCompareArrows size={18} />, label: '模型对比' },
+    { to: '/compare', icon: <GitCompareArrows size={18} />, label: t('nav.modelComparison') },
     { to: '/benchmarks', icon: <Medal size={18} />, label: t('nav.benchmarks') },
-    { to: '/leaderboard', icon: <Trophy size={18} />, label: '评测榜单' },
+    { to: '/leaderboard', icon: <Trophy size={18} />, label: t('nav.leaderboard') },
   ]
 
   return (

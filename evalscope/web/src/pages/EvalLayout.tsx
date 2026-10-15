@@ -43,6 +43,8 @@ const MODES: { mode: EvalMode; label: string }[] = [
 
 export default function EvalLayout() {
   const { t } = useLocale()
+  const tRef = useRef(t)
+  tRef.current = t
   const location = useLocation()
   const queryParams = useQueryParams()
   const initialDataset = queryParams.get('dataset') ?? null
@@ -149,9 +151,9 @@ export default function EvalLayout() {
         document.execCommand('copy')
         document.body.removeChild(ta)
       }
-      toast.success('日志已复制')
+      toast.success(tRef.current('evalSharedExtra.logCopied'))
     } catch {
-      toast.error('复制失败')
+      toast.error(tRef.current('evalSharedExtra.copyFailed'))
     }
   }, [getDisplayLog])
 
@@ -212,18 +214,18 @@ export default function EvalLayout() {
 
         if (status === TASK_STATUSES.COMPLETED) {
           sessionStorage.removeItem('evalBatchId')
-          toast.success(`批量评估完成：${state.completed} 个模型全部成功`)
+          toast.success(tRef.current('evalSharedExtra.batchDone', { count: state.completed }))
         } else if (status === TASK_STATUSES.PARTIAL_SUCCESS) {
           sessionStorage.removeItem('evalBatchId')
-          toast.warning(`批量评估部分完成：${state.completed} 成功，${state.errors} 失败`)
+          toast.warning(tRef.current('evalSharedExtra.batchPartial', { count: state.completed, errors: state.errors }))
         } else if (status === TASK_STATUSES.FAILED || status === TASK_STATUSES.ORPHANED) {
-          toast.error('批量评估失败，请查看错误详情')
+          toast.error(tRef.current('evalSharedExtra.batchFailed'))
         } else if (status === TASK_STATUSES.STOPPED) {
-          toast.info(`批量评估已停止：${state.completed} 完成，可从断点继续`)
+          toast.info(tRef.current('evalSharedExtra.batchStopped', { count: state.completed }))
         }
       } catch {
         if (isCurrent()) {
-          toast.warning('批量状态暂不可用，正在重试')
+          toast.warning(tRef.current('evalSharedExtra.batchRetry'))
           pollRef.current = setTimeout(poll, 5000)
         }
       }
@@ -244,7 +246,7 @@ export default function EvalLayout() {
 
     try {
       const launched = await launchEvalBatch(batchId, sharedConfig)
-      toast.info(`批量评估已启动，共 ${launched.total} 个模型`)
+      toast.info(tRef.current('evalSharedExtra.batchStarted', { count: launched.total }))
       monitorBatch(batchId)
     } catch (e) {
       toast.error(String(e))
@@ -263,7 +265,7 @@ export default function EvalLayout() {
       batchFileRef.current = file
       batchConfigRef.current = sharedConfig
       setBatchRunning(true)
-      toast.info('批量评估已从断点继续')
+      toast.info(tRef.current('evalSharedExtra.batchResumed'))
       monitorBatch(batchId)
     } catch (e) {
       setBatchError(String(e))
@@ -295,7 +297,7 @@ export default function EvalLayout() {
     if (!batchId) return
     try {
       await stopEvalBatch(batchId)
-      toast.info('正在停止批量评估...')
+      toast.info(tRef.current('evalSharedExtra.batchStopping'))
     } catch (e) {
       toast.error(String(e))
     }

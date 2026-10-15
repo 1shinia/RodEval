@@ -12,8 +12,8 @@ interface Props {
 type AIGCTool = 'txt2img' | 'txt2video' | 'img2img'
 
 const TEXT_TO_IMAGE_DATASETS = [
-  { value: 'drawbench', label: 'DrawBench (200 prompts)' },
-  { value: 'parti', label: 'PartiPrompts (150 prompts)' },
+  { value: 'drawbench', label: 'evalAigcExtra.drawbench' },
+  { value: 'parti', label: 'evalAigcExtra.parti' },
 ]
 
 const IMAGE_DATASETS = [
@@ -22,22 +22,22 @@ const IMAGE_DATASETS = [
 
 const VIDEO_DATASETS = [
   // 安全版为默认：同条数/同类别，仅把版权·危险·未成年语义换成同类中性场景，并前置零风险场景
-  { value: 'msr_vtt_safe', label: '内置视频提示词·安全版 (80 prompts)' },
-  { value: 'msr_vtt', label: '内置视频提示词·原版 (80 prompts)' },
+  { value: 'msr_vtt_safe', label: 'evalAigcExtra.videoSafe' },
+  { value: 'msr_vtt', label: 'evalAigcExtra.videoOriginal' },
   // 视频不再暴露「自定义数据集 / 不使用」：单条提示词走上方的「自定义提示词」，
   // 后端仍兼容 custom / 空值（历史任务配置与 API 直连可复现）
 ]
 
 const TEXT_TO_IMAGE_METRICS = [
-  { value: 'clip_score', label: 'CLIP Score' },
+  { value: 'clip_score', label: 'evalAigcExtra.clipScore' },
 ]
 
 const IMAGE_TO_IMAGE_METRICS = [
-  { value: 'clip_score', label: 'CLIP Score（仅衡量文本相关性）' },
+  { value: 'clip_score', label: 'evalAigcExtra.clipTextOnly' },
 ]
 
 const VIDEO_METRICS = [
-  { value: 'clip_score', label: 'CLIP Score' },
+  { value: 'clip_score', label: 'evalAigcExtra.clipScore' },
 ]
 
 // ── 视频生成能力表 ────────────────────────────────────────────────────
@@ -69,23 +69,23 @@ interface VideoCapability {
 const intRange = (low: number, high: number) => Array.from({ length: high - low + 1 }, (_, i) => String(low + i))
 
 const RATIO_LABELS: Record<string, string> = {
-  '16:9': '16:9 (横屏)',
-  '9:16': '9:16 (竖屏)',
-  '1:1': '1:1 (方形)',
-  '4:3': '4:3 (传统)',
-  '3:4': '3:4 (竖版)',
-  '21:9': '21:9 (超宽)',
+  '16:9': 'evalAigcExtra.ratioLandscape',
+  '9:16': 'evalAigcExtra.ratioPortrait',
+  '1:1': 'evalAigcExtra.ratioSquare',
+  '4:3': 'evalAigcExtra.ratioClassic',
+  '3:4': 'evalAigcExtra.ratioVertical',
+  '21:9': 'evalAigcExtra.ratioUltrawide',
 }
 
 const TIER_LABELS: Record<string, string> = {
-  '480p': '480P (标清)',
-  '720p': '720P (高清)',
-  '1080p': '1080P (全高清)',
+  '480p': 'evalAigcExtra.tier480',
+  '720p': 'evalAigcExtra.tier720',
+  '1080p': 'evalAigcExtra.tier1080',
 }
 
 const KLING_TIER_LABELS: Record<string, string> = {
-  '720p': '720P (标准 std)',
-  '1080p': '1080P (专业 pro)',
+  '720p': 'evalAigcExtra.kling720',
+  '1080p': 'evalAigcExtra.kling1080',
 }
 
 /** 火山方舟文生视频画幅比（官方可选值；adaptive 不暴露给用户，仅后端放行） */
@@ -126,19 +126,19 @@ function volcengineCapability(model: string): VideoCapability {
     known: true,
   })
   if (name.startsWith('doubao-seedance-2-5')) {
-    return build(['480p', '720p', '1080p'], '限支持4～30 秒整数', intRange(4, 30))
+    return build(['480p', '720p', '1080p'], 'evalAigcExtra.duration4To30', intRange(4, 30))
   }
   if (name.startsWith('doubao-seedance-2-0-fast') || name.startsWith('doubao-seedance-2-0-mini')) {
-    return build(['480p', '720p'], '限支持4～15 秒整数（该模型分辨率仅 480P/720P）', intRange(4, 15))
+    return build(['480p', '720p'], 'evalAigcExtra.duration4To15Limited', intRange(4, 15))
   }
   if (name.startsWith('doubao-seedance-2-0')) {
-    return build(['480p', '720p', '1080p'], '限支持4～15 秒整数', intRange(4, 15))
+    return build(['480p', '720p', '1080p'], 'evalAigcExtra.duration4To15', intRange(4, 15))
   }
   if (name.startsWith('doubao-seedance-1-0')) {
-    return build(['480p', '720p', '1080p'], '限支持2～12 秒整数', intRange(2, 12))
+    return build(['480p', '720p', '1080p'], 'evalAigcExtra.duration2To12', intRange(2, 12))
   }
   // 未识别的火山模型：不猜参数形态（后端同样报错）
-  return { ...build(['480p', '720p'], '未识别的火山视频模型', ['5']), known: false }
+  return { ...build(['480p', '720p'], 'evalAigcExtra.unknownVolcHint', ['5']), known: false }
 }
 
 function videoCapability(provider: string, model: string): VideoCapability {
@@ -152,19 +152,19 @@ function videoCapability(provider: string, model: string): VideoCapability {
         defaultTier: '1080p',
         defaultRatio: '16:9',
         seed: false, // kling 不支持 seed
-        durationHint: '限支持3～15 秒整数',
+        durationHint: 'evalAigcExtra.duration3To15',
         durations: intRange(3, 15),
         known: true,
       }
     }
-    if (name.startsWith('wan2.7')) return wanCapability(['720p', '1080p'], '限支持2～15 秒整数', '1080p', intRange(2, 15))
-    if (name.startsWith('wan2.6')) return wanCapability(['720p', '1080p'], '限支持2～15 秒整数', '1080p', intRange(2, 15))
-    if (name.startsWith('wan2.5')) return wanCapability(['480p', '720p', '1080p'], '该模型只支持 5 或 10 秒', '1080p', ['5', '10'])
-    if (name.startsWith('wan2.2')) return wanCapability(['480p', '1080p'], '该模型时长固定为 5 秒', '1080p', ['5'])
-    if (name.includes('t2v-turbo')) return wanCapability(['480p', '720p'], '该模型时长固定为 5 秒', '720p', ['5'])
-    if (name.includes('t2v-plus')) return wanCapability(['720p'], '该模型时长固定为 5 秒', '720p', ['5'])
+    if (name.startsWith('wan2.7')) return wanCapability(['720p', '1080p'], 'evalAigcExtra.duration2To15', '1080p', intRange(2, 15))
+    if (name.startsWith('wan2.6')) return wanCapability(['720p', '1080p'], 'evalAigcExtra.duration2To15', '1080p', intRange(2, 15))
+    if (name.startsWith('wan2.5')) return wanCapability(['480p', '720p', '1080p'], 'evalAigcExtra.duration5Or10', '1080p', ['5', '10'])
+    if (name.startsWith('wan2.2')) return wanCapability(['480p', '1080p'], 'evalAigcExtra.duration5', '1080p', ['5'])
+    if (name.includes('t2v-turbo')) return wanCapability(['480p', '720p'], 'evalAigcExtra.duration5', '720p', ['5'])
+    if (name.includes('t2v-plus')) return wanCapability(['720p'], 'evalAigcExtra.duration5', '720p', ['5'])
     // 未识别的百炼视频模型：不猜参数形态（后端会明确报错）
-    return { ...wanCapability(['720p', '1080p'], '限支持2～15 秒整数', '1080p', intRange(2, 15)), known: false }
+    return { ...wanCapability(['720p', '1080p'], 'evalAigcExtra.duration2To15', '1080p', intRange(2, 15)), known: false }
   }
   if (provider === 'volcengine') return volcengineCapability(model)
   // OpenAI 兼容：分辨率/画幅比原样透传（时长无法枚举，保留自由输入）
@@ -175,7 +175,7 @@ function videoCapability(provider: string, model: string): VideoCapability {
     defaultTier: '720p',
     defaultRatio: '16:9',
     seed: true,
-    durationHint: '限支持5～15 秒整数',
+    durationHint: 'evalAigcExtra.duration5To15',
     durations: [],
     durationRange: [5, 15],
     known: true,
@@ -194,15 +194,15 @@ const compatibleModeVideoBase = (base: string) =>
 
 const PROVIDER_OPTIONS: { value: 'openai' | 'dashscope' | 'volcengine'; label: string; apiPlaceholder: string; modelPlaceholder: string }[] = [
   {
-    value: 'openai', label: 'OpenAI 兼容',
+    value: 'openai', label: 'evalAigcExtra.openai',
     apiPlaceholder: 'https://api.example.com/v1', modelPlaceholder: 'stable-diffusion-v1-5',
   },
   {
-    value: 'dashscope', label: 'DashScope (百炼)',
+    value: 'dashscope', label: 'evalAigcExtra.dashscope',
     apiPlaceholder: 'https://dashscope.aliyuncs.com/api/v1', modelPlaceholder: 'kling/kling-v3-omni-video-generation',
   },
   {
-    value: 'volcengine', label: '火山引擎',
+    value: 'volcengine', label: 'evalAigcExtra.volcengine',
     apiPlaceholder: 'https://ark.cn-beijing.volces.com/api/v3', modelPlaceholder: 'doubao-seedance-2-0-260128',
   },
 ]
@@ -318,7 +318,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       return
     }
     if (file.size > 10 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp', 'image/bmp'].includes(file.type)) {
-      setErrors(previous => ({ ...previous, referenceImage: '参考图仅支持 PNG、JPEG、WEBP、BMP，大小不超过 10 MB' }))
+      setErrors(previous => ({ ...previous, referenceImage: t('evalAigcExtra.referenceFormatError') }))
       return
     }
     const reader = new FileReader()
@@ -329,7 +329,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         setErrors(previous => ({ ...previous, referenceImage: '' }))
       }
     }
-    reader.onerror = () => setErrors(previous => ({ ...previous, referenceImage: '参考图读取失败，请重新选择' }))
+    reader.onerror = () => setErrors(previous => ({ ...previous, referenceImage: t('evalAigcExtra.referenceReadError') }))
     reader.readAsDataURL(file)
   }
 
@@ -337,29 +337,29 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
 
-    if (!model.trim()) newErrors.model = 'Required'
-    if (!apiBase.trim()) newErrors.apiBase = 'Required'
-    if (!apiKey.trim()) newErrors.apiKey = 'Required'
+    if (!model.trim()) newErrors.model = t('evalAigcExtra.required')
+    if (!apiBase.trim()) newErrors.apiBase = t('evalAigcExtra.required')
+    if (!apiKey.trim()) newErrors.apiKey = t('evalAigcExtra.required')
 
     if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return }
     if (tool === 'img2img') {
-      if (!referenceImageBase64) newErrors.referenceImage = errors.referenceImage || '请先上传有效参考图并等待读取完成'
-      if (!customPrompt.trim()) newErrors.customPrompt = '请输入图生图编辑指令'
+      if (!referenceImageBase64) newErrors.referenceImage = errors.referenceImage || t('evalAigcExtra.referenceRequired')
+      if (!customPrompt.trim()) newErrors.customPrompt = t('evalAigcExtra.editPromptRequired')
       if (provider === 'dashscope' && !/^qwen-image-2\.0(?:-pro)?(?:-\d{4}-\d{2}-\d{2})?$/.test(model.trim())) {
-        newErrors.model = '百炼图生图仅支持 qwen-image-2.0 / qwen-image-2.0-pro'
+        newErrors.model = t('evalAigcExtra.editModelError')
       }
       if (provider === 'dashscope' && (!apiBase.trim().replace(/\/$/, '').endsWith('/api/v1') || apiBase.includes('compatible-mode'))) {
-        newErrors.apiBase = '百炼图生图请填写业务空间域名/api/v1'
+        newErrors.apiBase = t('evalAigcExtra.editBaseError')
       }
       const w = Number(width), h = Number(height)
       if (!Number.isInteger(w) || !Number.isInteger(h) || w < 256 || h < 256 || w > 2048 || h > 2048
         || (provider === 'dashscope' && (w * h < 512 * 512 || w * h > 2048 * 2048))) {
         newErrors.imageSize = provider === 'dashscope'
-          ? '千问图像编辑总像素须在 512×512～2048×2048，宽高为 256～2048 整数'
-          : '宽高须为 256～2048 的整数；具体模型支持的尺寸以接口为准'
+          ? t('evalAigcExtra.editSizeError')
+          : t('evalAigcExtra.imageSizeApiError')
       }
       if (provider === 'dashscope' && imageSeed !== '' && (!Number.isSafeInteger(Number(imageSeed)) || Number(imageSeed) < 0 || Number(imageSeed) > 2147483647)) {
-        newErrors.imageParams = '百炼图生图种子须为 0～2147483647 的整数'
+        newErrors.imageParams = t('evalAigcExtra.editSeedError')
       }
 
       if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return }
@@ -374,19 +374,19 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       provider,
     }
     if (provider === 'volcengine' && tool !== 'txt2video') {
-      newErrors.provider = '火山引擎当前仅支持文生视频'
+      newErrors.provider = t('evalAigcExtra.volcVideoOnly')
       setErrors(newErrors)
       return
     }
     // 百炼地址必须选 DashScope 提供商，否则必 404（见 needsDashscopeProvider 注释）
     if (tool === 'txt2video' && needsDashscopeProvider(provider, apiBase)) {
-      newErrors.provider = '百炼文生视频请把「API 提供商」选为 DashScope (百炼)：OpenAI 兼容协议会请求 /video/generations，百炼无此端点（必 404）'
+      newErrors.provider = t('evalAigcExtra.dashscopeProviderError')
       setErrors(newErrors)
       return
     }
     // compatible-mode 是 OpenAI 兼容入口，没有视频合成端点（见 compatibleModeVideoBase 注释）
     if (tool === 'txt2video' && compatibleModeVideoBase(apiBase)) {
-      newErrors.apiBase = '文生视频请把 api_base 改成 {你的域名}/api/v1：compatible-mode 是 OpenAI 兼容入口，无视频合成端点（必 404）'
+      newErrors.apiBase = t('evalAigcExtra.videoBaseError')
       setErrors(newErrors)
       return
     }
@@ -395,8 +395,8 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     const cap = videoCapability(provider, model)
     if (tool === 'txt2video' && !cap.known) {
       newErrors.model = provider === 'dashscope'
-        ? '未识别的 DashScope 视频模型（支持 wan2.7/2.6/2.5/2.2/2.1-t2v-*、kling-v3 系列）'
-        : '未识别的火山引擎视频模型（支持 doubao-seedance-2-5 / 2-0 系列 / 1-0 系列）'
+        ? t('evalAigcExtra.unknownDashscopeModel')
+        : t('evalAigcExtra.unknownVolcModel')
       setErrors(newErrors)
       return
     }
@@ -407,7 +407,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       const rawDuration = videoDurationValue === '' ? String(low) : videoDurationValue
       const parsedDuration = Number(rawDuration)
       if (!Number.isInteger(parsedDuration) || parsedDuration < low || parsedDuration > high) {
-        newErrors.duration = `时长须为 ${low}～${high} 的整数秒（当前填的是 ${rawDuration}）`
+        newErrors.duration = t('evalAigcExtra.durationError', { low, high, rawDuration })
         setErrors(newErrors)
         return
       }
@@ -431,7 +431,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           || (name === 'num_inference_steps' && (value < 1 || value > 200))
           || (name === 'guidance_scale' && (value < 1 || value > 30))
           || (name === 'seed' && !Number.isSafeInteger(value)))) {
-          setErrors({ imageParams: '步数须为 1～200 的整数，引导系数须为 1～30，种子须为整数' })
+          setErrors({ imageParams: t('evalAigcExtra.imageParamsError') })
           return
         }
         generateConfig[name] = raw === '' ? null : value
@@ -441,16 +441,16 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
     if (tool === 'txt2img') {
       const w = Number(width), h = Number(height)
       if (!Number.isInteger(w) || !Number.isInteger(h) || w < 256 || h < 256 || w > 2048 || h > 2048) {
-        setErrors({ imageSize: '宽高须为 256～2048 的整数；具体模型支持的尺寸以服务端为准' })
+        setErrors({ imageSize: t('evalAigcExtra.imageSizeServerError') })
         return
       }
       if (provider === 'dashscope') {
         if (!/^(qwen-image-2\.0(-2026-03-03|-pro(-2026-(03-03|04-22|06-22))?)?|wan2\.(6-t2i|5-t2i-preview|2-t2i-(plus|flash))|wanx2\.(1-t2i-(plus|turbo)|0-t2i-turbo))$/.test(model.trim())) {
-          setErrors({ model: '支持千问 2.0、万相 2.6/2.5/2.2/2.1/2.0 文生图模型' })
+          setErrors({ model: t('evalAigcExtra.imageModelError') })
           return
         }
         if (!apiBase.trim().endsWith('/api/v1') || apiBase.includes('compatible-mode')) {
-          setErrors({ apiBase: '百炼文生图请填写业务空间域名/api/v1' })
+          setErrors({ apiBase: t('evalAigcExtra.imageBaseError') })
           return
         }
         const pixels = w * h
@@ -459,11 +459,11 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           : model.startsWith('qwen-image') ? pixels >= 512 * 512 && pixels <= 2048 * 2048
           : w >= 512 && w <= 1440 && h >= 512 && h <= 1440
         if (!validSize) {
-          setErrors({ imageSize: largeWan ? '万相 2.5/2.6 总像素须在 1280×1280～1440×1440，宽高比 1:4～4:1' : '尺寸超出当前百炼模型支持范围' })
+          setErrors({ imageSize: largeWan ? t('evalAigcExtra.wanSizeError') : t('evalAigcExtra.dashscopeSizeError') })
           return
         }
         if (imageSeed !== '' && (Number(imageSeed) < 0 || Number(imageSeed) > 2147483647)) {
-          setErrors({ imageParams: '百炼种子须为 0～2147483647 的整数' })
+          setErrors({ imageParams: t('evalAigcExtra.seedError') })
           return
         }
       }
@@ -531,7 +531,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
         <>
-          <FormField label="API 提供商" className="md:col-span-2">
+          <FormField label={t('evalAigcExtra.apiProvider')} className="md:col-span-2">
             <select value={provider} onChange={e => {
               const next = e.target.value as typeof provider
               setProvider(next)
@@ -539,7 +539,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
               if (next === 'volcengine' && tool !== 'txt2video') setTool('txt2video')
             }} className={FORM_INPUT_CLASS}>
               {PROVIDER_OPTIONS.filter(p => tool === 'txt2video' || p.value === 'openai' || p.value === 'dashscope').map(p => (
-                <option key={p.value} value={p.value}>{p.label}</option>
+                <option key={p.value} value={p.value}>{t(p.label)}</option>
               ))}
             </select>
             {errors.provider && <span className="text-xs text-[var(--error)] mt-1">{errors.provider}</span>}
@@ -574,46 +574,46 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       </h4>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {tool === 'txt2video' ? (<>
-          <FormField label="分辨率">
+          <FormField label={t('evalAigcExtra.resolution')}>
             <select value={videoResolution} onChange={e => setVideoResolution(e.target.value)} className={FORM_INPUT_CLASS}>
-              {videoCap.tiers.map(tier => <option key={tier.value} value={tier.value}>{tier.label}</option>)}
+              {videoCap.tiers.map(tier => <option key={tier.value} value={tier.value}>{t(tier.label)}</option>)}
             </select>
           </FormField>
-          <FormField label="画幅比">
+          <FormField label={t('evalAigcExtra.aspectRatio')}>
             <select value={videoAspectRatio} onChange={e => setVideoAspectRatio(e.target.value)} className={FORM_INPUT_CLASS}>
-              {videoRatios.map(value => <option key={value} value={value}>{RATIO_LABELS[value] ?? value}</option>)}
+              {videoRatios.map(value => <option key={value} value={value}>{RATIO_LABELS[value] ? t(RATIO_LABELS[value]) : value}</option>)}
             </select>
           </FormField>
         </>) : (<>
-          <FormField label={t('aigc.width')} hint={tool === 'txt2img' && provider === 'dashscope' ? '千问 2.0 总像素 512²～2048²；万相 2.5/2.6 建议 1280×1280；早期万相宽高 512～1440' : t('aigc.sizeHint')}>
+          <FormField label={t('aigc.width')} hint={tool === 'txt2img' && provider === 'dashscope' ? t('evalAigcExtra.imageSizeHint') : t('aigc.sizeHint')}>
             <input type="number" value={width}
               onChange={e => setWidth(e.target.value.replace(/[^0-9]/g, ''))}
               className={FORM_INPUT_CLASS} placeholder="1024" />
           </FormField>
-          <FormField label={t('aigc.height')} hint={tool === 'txt2img' && provider === 'dashscope' ? '千问 2.0 总像素 512²～2048²；万相 2.5/2.6 建议 1280×1280；早期万相宽高 512～1440' : t('aigc.sizeHint')}>
+          <FormField label={t('aigc.height')} hint={tool === 'txt2img' && provider === 'dashscope' ? t('evalAigcExtra.imageSizeHint') : t('aigc.sizeHint')}>
             <input type="number" value={height}
               onChange={e => setHeight(e.target.value.replace(/[^0-9]/g, ''))}
               className={FORM_INPUT_CLASS} placeholder="1024" />
           </FormField>
         </>)}
 
-        {(tool === 'img2img' || tool === 'txt2img') && provider === 'openai' && <FormField label={t('aigc.steps')} hint='可选；留空不发送。仅在接口明确支持时填写（1～200）'>
+        {(tool === 'img2img' || tool === 'txt2img') && provider === 'openai' && <FormField label={t('aigc.steps')} hint={t('evalAigcExtra.stepsHint')}>
           <input type="number" value={imageSteps}
             onChange={e => setImageSteps(e.target.value)}
-            className={FORM_INPUT_CLASS} placeholder="留空" />
+            className={FORM_INPUT_CLASS} placeholder={t('evalAigcExtra.leaveBlank')} />
         </FormField>}
 
-        {(tool === 'img2img' || tool === 'txt2img') && provider === 'openai' && <FormField label={t('aigc.guidance')} hint='可选；留空不发送。仅在接口明确支持时填写（1～30）'>
+        {(tool === 'img2img' || tool === 'txt2img') && provider === 'openai' && <FormField label={t('aigc.guidance')} hint={t('evalAigcExtra.guidanceHint')}>
           <input type="number" value={imageGuidance}
             onChange={e => setImageGuidance(e.target.value)}
-            className={FORM_INPUT_CLASS} placeholder="留空" step="0.1" />
+            className={FORM_INPUT_CLASS} placeholder={t('evalAigcExtra.leaveBlank')} step="0.1" />
         </FormField>}
 
-        {tool === 'txt2video' && <FormField label="视频时长" hint={videoCap.durationHint} error={errors.duration}>
+        {tool === 'txt2video' && <FormField label={t('evalAigcExtra.videoDuration')} hint={t(videoCap.durationHint)} error={errors.duration}>
           {durationOptions.length > 0 ? (
             <select value={videoDurationValue} onChange={e => setVideoDuration(e.target.value)}
               className={FORM_INPUT_CLASS}>
-              {durationOptions.map(value => <option key={value} value={value}>{value} 秒</option>)}
+              {durationOptions.map(value => <option key={value} value={value}>{t('evalAigcExtra.seconds', { value })}</option>)}
             </select>
           ) : (
             <input type="number" value={videoDuration}
@@ -626,15 +626,15 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
           )}
         </FormField>}
 
-        {(tool !== 'txt2video' || videoCap.seed) ? <FormField label={t('aigc.seed')} hint={tool !== 'txt2video' ? (provider === 'dashscope' ? '可选；0～2147483647，留空由服务端随机生成；逐样本递增' : '可选；留空不发送。填写后逐样本递增，服务端是否采纳未确认') : undefined}>
+        {(tool !== 'txt2video' || videoCap.seed) ? <FormField label={t('aigc.seed')} hint={tool !== 'txt2video' ? (provider === 'dashscope' ? t('evalAigcExtra.dashscopeSeedHint') : t('evalAigcExtra.openaiSeedHint')) : undefined}>
           <input type="number" value={tool !== 'txt2video' ? imageSeed : seed}
             onChange={e => tool !== 'txt2video' ? setImageSeed(e.target.value) : setSeed(e.target.value.replace(/[^0-9]/g, ''))}
-            className={FORM_INPUT_CLASS} placeholder={tool !== 'txt2video' ? '留空' : '42'} />
+            className={FORM_INPUT_CLASS} placeholder={tool !== 'txt2video' ? t('evalAigcExtra.leaveBlank') : '42'} />
         </FormField> : null}
 
 
         {tool === 'img2img' && (
-          <FormField label="参考图" hint="PNG、JPEG、WEBP、BMP，文件不超过 10 MB" error={errors.referenceImage}>
+          <FormField label={t('evalAigcExtra.referenceImage')} hint={t('evalAigcExtra.referenceHint')} error={errors.referenceImage}>
             <input
               type="file"
               accept="image/png,image/jpeg,image/webp,image/bmp"
@@ -643,7 +643,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
             />
             {referenceImageName && (
               <span className="text-xs text-[var(--text-secondary)] mt-1 block">
-                已选择: {referenceImageName}
+                {t('evalAigcExtra.selected')} {referenceImageName}
               </span>
             )}
           </FormField>
@@ -657,18 +657,18 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
         <p className="text-sm text-[var(--error)]">{errors.imageSize || errors.imageParams}</p>
       )}
       {tool === 'img2img' ? (
-        <FormField label="自定义提示词" hint="描述你希望对参考图做的修改（必填）" error={errors.customPrompt}>
+        <FormField label={t('evalAigcExtra.customPrompt')} hint={t('evalAigcExtra.editPromptHint')} error={errors.customPrompt}>
           <textarea value={customPrompt}
             onChange={e => setCustomPrompt(e.target.value)}
             className={FORM_INPUT_CLASS + ' h-20 resize-none'}
-            placeholder="例如：把背景换成海边日落，保持人物不变..." />
+            placeholder={t('evalAigcExtra.editPromptPlaceholder')} />
         </FormField>
       ) : (
-        <FormField label="自定义提示词（可选）" hint="留空则使用下方选择的数据集">
+        <FormField label={t('evalAigcExtra.customPromptOptional')} hint={t('evalAigcExtra.customPromptHint')}>
           <textarea value={customPrompt}
             onChange={e => setCustomPrompt(e.target.value)}
             className={FORM_INPUT_CLASS + ' h-20 resize-none'}
-            placeholder={tool === 'txt2video' ? '例如：一架无人机飞过雪山湖泊上空，航拍视角...' : '例如：一只小狗坐在窗台上看着夕阳，温暖的色调...'} />
+            placeholder={tool === 'txt2video' ? t('evalAigcExtra.videoPromptPlaceholder') : t('evalAigcExtra.imagePromptPlaceholder')} />
         </FormField>
       )}
 
@@ -682,7 +682,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
       <FormField label={t('aigc.promptDataset')}>
         <select value={promptDataset} onChange={e => setPromptDataset(e.target.value)} className={FORM_INPUT_CLASS}>
           {(tool === 'txt2video' ? VIDEO_DATASETS : tool === 'txt2img' ? TEXT_TO_IMAGE_DATASETS : IMAGE_DATASETS).map(ds => (
-            <option key={ds.value} value={ds.value}>{ds.label}</option>
+            <option key={ds.value} value={ds.value}>{t(ds.label)}</option>
           ))}
         </select>
       </FormField>
@@ -698,7 +698,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
             <input type="checkbox" checked={randomPrompt}
               onChange={e => setRandomPrompt(e.target.checked)}
               className="accent-[var(--accent)]" />
-            随机抽取
+            {t('evalAigcExtra.randomSample')}
           </label>
         </div>
       </FormField>
@@ -720,7 +720,7 @@ export default function AIGCEvalForm({ onSubmit, disabled }: Props) {
                     setMetrics(next)
                   }}
                   className="accent-[var(--accent)]" />
-                {m.label}
+                {t(m.label)}
               </label>
             )
           })}

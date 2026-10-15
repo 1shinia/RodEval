@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useLocale } from '@/contexts/LocaleContext'
 import Select from '@/components/ui/Select'
@@ -9,8 +9,13 @@ import { Trophy } from 'lucide-react'
 import type { LbMeta, LbColumn, LbPeriodOption, LlmLeaderboard, MmLeaderboard } from '@/api/leaderboard'
 import { getLeaderboardMeta, getLlmLeaderboard, getBoard } from '@/api/leaderboard'
 
+const englishLabel = (label: string | null | undefined, fallback: string) =>
+  label && !/[\u3400-\u9fff]/u.test(label) ? label : fallback
+
 export default function LeaderboardPage() {
-  const { locale } = useLocale()
+  const { locale, t } = useLocale()
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t }, [t])
   const [searchParams] = useSearchParams()
   const urlType = searchParams.get('type') ?? 'llm'
 
@@ -30,7 +35,7 @@ export default function LeaderboardPage() {
         setMeta(m)
         setLlmPeriod((p) => p || m.default_llm || '')
       })
-      .catch((e) => { toast.error(e instanceof Error ? e.message : '加载榜单失败') })
+      .catch((e) => { toast.error(e instanceof Error ? e.message : tRef.current('leaderboardExtra.loadFailed')) })
       .finally(() => setLoading(false))
   }, [])
 
@@ -42,8 +47,8 @@ export default function LeaderboardPage() {
 
   // 榜单类型选项（llm 在最前，其余按后端返回顺序）
   const typeOptions: LbPeriodOption[] = useMemo(
-    () => (meta?.boards ?? []).map((b) => ({ value: b.id, label: b.label })),
-    [meta],
+    () => (meta?.boards ?? []).map((b) => ({ value: b.id, label: locale === 'en' ? englishLabel(b.label_en, b.id) : b.label })),
+    [meta, locale],
   )
 
   // 当前 OSS 榜（非 llm）的注册项与页签
@@ -51,7 +56,10 @@ export default function LeaderboardPage() {
     () => (validType === 'llm' ? null : (meta?.boards.find((b) => b.id === validType) ?? null)),
     [meta, validType],
   )
-  const ossTabs: LbPeriodOption[] = useMemo(() => currentBoard?.tabs ?? [], [currentBoard])
+  const ossTabs: LbPeriodOption[] = useMemo(
+    () => (currentBoard?.tabs ?? []).map((tab) => ({ ...tab, label: locale === 'en' ? englishLabel(tab.label_en, tab.value) : tab.label })),
+    [currentBoard, locale],
+  )
 
   // 当前有效页签：所选页签对当前榜单无效时回退到该榜第一个（渲染期派生）
   const ossTab = useMemo(() => {
@@ -80,14 +88,14 @@ export default function LeaderboardPage() {
           setLlm(d)
           setCategory((c) => (d.tabs?.some((t) => t.key === c) ? c : d.tabs?.[0]?.key ?? ''))
         })
-        .catch((e) => { toast.error(e instanceof Error ? e.message : '加载 LLM 榜单失败') })
+        .catch((e) => { toast.error(e instanceof Error ? e.message : tRef.current('leaderboardExtra.loadLlmFailed')) })
       return () => { stale = true }
     }
     if (validType !== 'llm' && ossTab) {
       let stale = false
       getBoard(validType, ossTab)
         .then((d) => { if (!stale) setOss(d) })
-        .catch((e) => { toast.error(e instanceof Error ? e.message : '加载榜单失败') })
+        .catch((e) => { toast.error(e instanceof Error ? e.message : tRef.current('leaderboardExtra.loadFailed')) })
       return () => { stale = true }
     }
     return undefined
@@ -115,7 +123,7 @@ export default function LeaderboardPage() {
       const isNum = sample !== undefined
       return {
         key: c.key,
-        label: locale === 'zh' ? c.zh || c.en : c.en || c.zh,
+        label: locale === 'zh' ? c.zh || c.en : englishLabel(c.en, c.key),
         sortable: isNum,
         render: (row: Record<string, unknown>) => {
           const v = row[c.key]
@@ -148,21 +156,21 @@ export default function LeaderboardPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="flex items-center gap-2 text-xl font-semibold">
           <Trophy size={20} className="text-[var(--accent)]" />
-          评测榜单
+          {t('nav.leaderboard')}
         </h1>
       </div>
 
       {/* 下拉框：榜单类型 / 分类维度(LLM) / 时间段(LLM) / 子榜单(其余) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 flex-wrap">
         <div className="w-44">
-          <Select label="榜单类型" options={typeOptions} value={validType} onChange={changeType} />
+          <Select label={t('leaderboardExtra.boardType')} options={typeOptions} value={validType} onChange={changeType} />
         </div>
 
         {validType === 'llm' && (
           <div className="w-44">
             <Select
-              label="分类维度"
-              options={llmTabs.map((t) => ({ value: t.key, label: locale === 'zh' ? t.zh : t.en }))}
+              label={t('leaderboardExtra.category')}
+              options={llmTabs.map((tab) => ({ value: tab.key, label: locale === 'zh' ? tab.zh : englishLabel(tab.en, tab.key) }))}
               value={category || undefined}
               onChange={setCategory}
             />
@@ -171,23 +179,23 @@ export default function LeaderboardPage() {
 
         {validType === 'llm' && llmPeriods.length > 0 && (
           <div className="w-56">
-            <Select label="时间段" options={llmPeriods} value={llmPeriod} onChange={changePeriod} />
+            <Select label={t('leaderboardExtra.period')} options={llmPeriods} value={llmPeriod} onChange={changePeriod} />
           </div>
         )}
 
         {validType !== 'llm' && ossTabs.length > 0 && (
           <div className="w-56">
-            <Select label="榜单" options={ossTabs} value={ossTab} onChange={setRawOssTab} />
+            <Select label={t('leaderboardExtra.boardTab')} options={ossTabs} value={ossTab} onChange={setRawOssTab} />
           </div>
         )}
 
         {validType === 'llm' && llm && (
           <div className="flex items-center gap-2 pt-5 text-xs text-[var(--text-muted)]">
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent-dim)] text-[var(--accent)]">
-              {llmTabs.length} 个分类维度
+              {t('leaderboardExtra.categoryCount', { count: llmTabs.length })}
             </span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-card2)] text-[var(--text-muted)]">
-              {activeCols.length} 列
+              {t('leaderboardExtra.columnCount', { count: activeCols.length })}
             </span>
           </div>
         )}
@@ -215,7 +223,7 @@ export default function LeaderboardPage() {
       {/* 空态 */}
       {meta && rows.length === 0 && !loading && (
         <div className="text-center py-16 text-sm text-[var(--text-muted)]">
-          未找到榜单数据（可能缺少 OpenCompass 快照）
+          {t('leaderboardExtra.noData')}
         </div>
       )}
     </div>

@@ -46,6 +46,8 @@ function applyThinkingMode(config: Record<string, unknown>, mode: ThinkingMode) 
 
 export default function LLMEvalForm({ context }: Props) {
   const { t } = useLocale()
+  const tRef = useRef(t)
+  tRef.current = t
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const { onSubmit, disabled, initialDataset, onApiKeyChange, isBatch, batchRunning, batchState,
@@ -165,7 +167,7 @@ export default function LLMEvalForm({ context }: Props) {
         setBenchmarkNames(names)
         setSandboxDatasets(needsSandbox)
       })
-      .catch((e) => { toast.error(e instanceof Error ? e.message : 'Failed to load benchmarks') })
+      .catch((e) => { toast.error(e instanceof Error ? e.message : tRef.current('evalLlmExtra.benchmarksLoadFailed')) })
   }, [])
 
   useEffect(() => {
@@ -228,18 +230,18 @@ export default function LLMEvalForm({ context }: Props) {
     const selected = datasets.split(',').map(s => s.trim()).filter(Boolean)
     const needsSandbox = selected.some(ds => sandboxDatasets.has(ds))
     if (needsSandbox && !useSandbox) {
-      toast.warning('所选数据集需要 Docker 沙箱环境，测试结果可能不准确')
+      toast.warning(t('evalLlmExtra.sandboxWarning'))
     }
 
     // Batch mode: delegate to onBatchSubmit
     if (isBatch) {
       const resumable = batchState?.status === 'stopped' && batchState.resumable
-      if (!resumable && !batchInfo?.batch_id) { toast.error('请先上传模型列表文件'); return }
+      if (!resumable && !batchInfo?.batch_id) { toast.error(t('perf.errCsvRequired')); return }
       const dsList = datasets.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
-      if (!dsList.length) { toast.error('请先填写测试数据集'); return }
+      if (!dsList.length) { toast.error(t('evalLlmExtra.datasetsRequired')); return }
       // 本地数据集：批量路径此前不带 hub / path（shared 与后端合并白名单里都没有这两个键），
       // 会被静默丢弃并按默认 hub 去拉数据 —— 这里与单模型路径对齐。
-      if (isLocalDataset && !datasetPath.trim()) { toast.error('本地数据集需要填写数据集路径'); return }
+      if (isLocalDataset && !datasetPath.trim()) { toast.error(t('evalLlmExtra.localPathRequired')); return }
       const dsArgs: Record<string, unknown> = {}
       if (isLocalDataset) {
         for (const ds of dsList) dsArgs[ds] = { local_path: datasetPath.trim() }
@@ -247,7 +249,7 @@ export default function LLMEvalForm({ context }: Props) {
       if (datasetArgs.trim()) {
         // 此前这里把 JSON 文本原样当字符串发出，后端 TaskConfig.dataset_args 需要的是对象
         try { Object.assign(dsArgs, JSON.parse(datasetArgs) as Record<string, unknown>) }
-        catch { toast.error('数据集参数 JSON 格式不正确'); return }
+        catch { toast.error(t('evalLlmExtra.datasetArgsInvalidJson')); return }
       }
       // 生成参数 / 裁判模型 / 系统提示词必须用单模型那套「嵌套」形状，否则后端静默忽略：
       //  ・TaskConfig 没有顶层 temperature/top_p/max_tokens/top_k ⇒ 平铺发送无效（批量采样参数此前就是这么失效的）
@@ -299,7 +301,7 @@ export default function LLMEvalForm({ context }: Props) {
           fileInputRef.current?.click()
         }
       } else {
-        if (!batchInfo?.batch_id) { toast.error('请先上传模型列表文件'); return }
+        if (!batchInfo?.batch_id) { toast.error(t('perf.errCsvRequired')); return }
         onBatchSubmit(batchInfo.batch_id, shared)
       }
       return
@@ -307,14 +309,14 @@ export default function LLMEvalForm({ context }: Props) {
 
     const newErrors: Record<string, string> = {}
 
-    if (!model.trim()) newErrors.model = 'Required'
-    if (!apiUrl.trim()) newErrors.apiUrl = 'Required'
-    if (!apiKey.trim()) newErrors.apiKey = 'Required'
+    if (!model.trim()) newErrors.model = t('perf.required')
+    if (!apiUrl.trim()) newErrors.apiUrl = t('perf.required')
+    if (!apiKey.trim()) newErrors.apiKey = t('perf.required')
     if (isLocalDataset) {
-      if (!datasetPath.trim()) newErrors.datasetPath = 'Required'
-      if (!datasets.trim()) newErrors.datasets = 'Required'
+      if (!datasetPath.trim()) newErrors.datasetPath = t('perf.required')
+      if (!datasets.trim()) newErrors.datasets = t('perf.required')
     } else {
-      if (!datasets.trim()) newErrors.datasets = 'Required'
+      if (!datasets.trim()) newErrors.datasets = t('perf.required')
     }
 
     // URL format
@@ -322,10 +324,10 @@ export default function LLMEvalForm({ context }: Props) {
       try {
         const u = new URL(apiUrl.trim())
         if (!['http:', 'https:'].includes(u.protocol)) {
-          newErrors.apiUrl = 'URL 必须以 http:// 或 https:// 开头'
+          newErrors.apiUrl = t('perf.errUrlScheme')
         }
       } catch {
-        newErrors.apiUrl = 'URL 格式不正确'
+        newErrors.apiUrl = t('perf.errUrlInvalid')
       }
     }
 
@@ -333,33 +335,33 @@ export default function LLMEvalForm({ context }: Props) {
     const checkPositiveInt = (val: string, key: string, label: string) => {
       if (val) {
         const n = Number(val)
-        if (!Number.isInteger(n) || n < 1) newErrors[key] = `${label} 必须为正整数`
+        if (!Number.isInteger(n) || n < 1) newErrors[key] = t('perf.errPosInt', { label })
       }
     }
-    checkPositiveInt(limit, 'limit', '样本数')
-    checkPositiveInt(evalBatchSize, 'evalBatchSize', '批大小')
-    checkPositiveInt(repeats, 'repeats', '重复次数')
-    checkPositiveInt(timeout, 'timeout', '超时时间')
+    checkPositiveInt(limit, 'limit', t('evalLlmExtra.sampleCount'))
+    checkPositiveInt(evalBatchSize, 'evalBatchSize', t('eval.batchSize'))
+    checkPositiveInt(repeats, 'repeats', t('evalLlmExtra.repeatCount'))
+    checkPositiveInt(timeout, 'timeout', t('evalLlmExtra.timeoutLabel'))
 
     if (temperature) {
-      const t = Number(temperature)
-      if (isNaN(t) || t < 0 || t > 2) newErrors.temperature = '温度范围 0~2'
+      const temp = Number(temperature)
+      if (isNaN(temp) || temp < 0 || temp > 2) newErrors.temperature = t('evalLlmExtra.temperatureRange')
     }
     if (topP) {
       const p = Number(topP)
-      if (isNaN(p) || p < 0 || p > 1) newErrors.topP = 'Top P 范围 0~1'
+      if (isNaN(p) || p < 0 || p > 1) newErrors.topP = t('evalLlmExtra.topPRange')
     }
     if (maxTokens) {
       const m = Number(maxTokens)
-      if (!Number.isInteger(m) || m < 1) newErrors.maxTokens = '最大 Token 数必须为正整数'
+      if (!Number.isInteger(m) || m < 1) newErrors.maxTokens = t('perf.errPosInt', { label: t('eval.maxTokens') })
     }
     if (topK) {
       const k = Number(topK)
-      if (!Number.isInteger(k) || k < 1) newErrors.topK = 'Top K 必须为正整数'
+      if (!Number.isInteger(k) || k < 1) newErrors.topK = t('perf.errPosInt', { label: t('eval.topK') })
     }
 
     if (datasetArgs) {
-      try { JSON.parse(datasetArgs) } catch { newErrors.datasetArgs = 'JSON 格式不正确' }
+      try { JSON.parse(datasetArgs) } catch { newErrors.datasetArgs = t('perf.invalidJson') }
     }
 
     if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return }
@@ -436,16 +438,16 @@ export default function LLMEvalForm({ context }: Props) {
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* ── 测试模式切换 ── */}
       <div className="flex items-center gap-6">
-        <label className={`${FORM_LABEL_CLASS} !mb-0`}>测试模式</label>
+        <label className={`${FORM_LABEL_CLASS} !mb-0`}>{t('perf.testMode')}</label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="radio" name="batch" checked={!isBatch}
             onChange={() => setBatchMode(false)} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">单模型测试</span>
+          <span className="text-sm text-[var(--text)]">{t('perf.modeSingle')}</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="radio" name="batch" checked={isBatch}
             onChange={() => setBatchMode(true)} className="accent-[var(--accent)]" />
-          <span className="text-sm text-[var(--text)]">批量测试</span>
+          <span className="text-sm text-[var(--text)]">{t('perf.modeBatch')}</span>
         </label>
       </div>
 
@@ -456,21 +458,21 @@ export default function LLMEvalForm({ context }: Props) {
             <a href={getEvalTemplateDownloadUrl()} download="eval_model_list_template.csv"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-dim)]/10 transition-colors">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              下载模板
+              {t('perf.downloadTemplate')}
             </a>
             <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
             <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={disabled || batchRunning}>
-              选择文件
+              {t('perf.selectFile')}
             </Button>
             {batchFile && (
               <Button type="button" variant="primary" onClick={handleBatchUpload} disabled={disabled || batchUploading || batchRunning}>
-                {batchUploading ? '上传中...' : '上传文件'}
+                {batchUploading ? t('perf.uploading') : t('perf.uploadFile')}
               </Button>
             )}
           </div>
           {batchError && <p className="text-xs text-[var(--danger)]">{batchError}</p>}
           {batchInfo && (
-            <p className="text-xs text-[var(--green)]">✓ 上传成功，共 {batchInfo.model_count} 个模型：{batchInfo.models.join(', ')}</p>
+            <p className="text-xs text-[var(--green)]">{t('evalLlmExtra.uploadSuccess', { count: batchInfo.model_count, models: batchInfo.models.join(', ') })}</p>
           )}
         </div>
       )}
@@ -574,7 +576,7 @@ export default function LLMEvalForm({ context }: Props) {
               <input type="checkbox" checked={randomSample}
                 onChange={e => setRandomSample(e.target.checked)}
                 className="accent-[var(--accent)]" />
-              随机抽取
+              {t('evalLlmExtra.randomSample')}
             </label>
           </div>
         </FormField>
@@ -614,7 +616,7 @@ export default function LLMEvalForm({ context }: Props) {
               </label>
               <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] cursor-pointer">
                 <input type="checkbox" checked={useSandbox} onChange={(e) => setUseSandbox(e.target.checked)} className="accent-[var(--accent)]" />
-                Docker 沙箱
+                {t('evalLlmExtra.dockerSandbox')}
               </label>
             </div>
             {/* A. 模型生成参数 */}
@@ -693,12 +695,12 @@ export default function LLMEvalForm({ context }: Props) {
                 className={FORM_INPUT_CLASS} placeholder="42" />
             </FormField>
             <div className="md:col-span-3">
-              <label className={FORM_LABEL_CLASS}>System Prompt</label>
+              <label className={FORM_LABEL_CLASS}>{t('prediction.systemPrompt')}</label>
               <textarea value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 className={`${FORM_INPUT_CLASS} h-16 resize-y`}
-                placeholder="只输出一个词作为答案，禁止任何解释。" />
-              <p className="mt-1 text-xs text-[var(--text-muted)]">提示词模板，会注入到所有数据集中。留空则使用数据集默认值。</p>
+                placeholder={t('evalLlmExtra.systemPromptPlaceholder')} />
+              <p className="mt-1 text-xs text-[var(--text-muted)]">{t('evalLlmExtra.systemPromptHint')}</p>
             </div>
             <div className="md:col-span-3">
               <label className={FORM_LABEL_CLASS}>{t('eval.datasetArgs')}</label>
@@ -747,7 +749,7 @@ export default function LLMEvalForm({ context }: Props) {
 
       <Button type="submit" variant="primary" disabled={disabled || batchUploading} className="btn-glow">
         {isBatch
-          ? (batchState?.status === 'stopped' && batchState.resumable ? '继续批量评估' : '开始批量评估')
+          ? (batchState?.status === 'stopped' && batchState.resumable ? t('evalLlmExtra.resumeBatch') : t('evalLlmExtra.startBatch'))
           : t('eval.startEval')}
       </Button>
 
@@ -755,15 +757,15 @@ export default function LLMEvalForm({ context }: Props) {
       {batchRunning && batchState && batchState.status === 'running' && (
         <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium">批量评估中：{batchState.completed}/{batchState.total}</h3>
+            <h3 className="text-sm font-medium">{t('evalLlmExtra.batchProgress', { completed: batchState.completed, total: batchState.total })}</h3>
             <button type="button" onClick={onBatchStop}
-              className="px-2 py-1 text-xs rounded border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger)]/10">停止</button>
+              className="px-2 py-1 text-xs rounded border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger)]/10">{t('perf.stop')}</button>
           </div>
           <div className="w-full bg-[var(--bg)] rounded-full h-2 mb-2">
             <div className="bg-[var(--accent)] h-2 rounded-full transition-all" style={{ width: `${batchState.total > 0 ? (batchState.completed / batchState.total) * 100 : 0}%` }} />
           </div>
-          {batchState.current_model && <p className="text-xs text-[var(--text-muted)]">当前: {batchState.current_model}</p>}
-          {batchState.errors > 0 && <p className="text-xs text-[var(--danger)] mt-1">{batchState.errors} 个失败</p>}
+          {batchState.current_model && <p className="text-xs text-[var(--text-muted)]">{t('perf.currentModel', { model: batchState.current_model })}</p>}
+          {batchState.errors > 0 && <p className="text-xs text-[var(--danger)] mt-1">{t('perf.failureCount', { n: batchState.errors })}</p>}
         </div>
       )}
 
@@ -772,16 +774,16 @@ export default function LLMEvalForm({ context }: Props) {
         <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card2)]">
           <h3 className="text-sm font-medium mb-2">
             {batchState.status === TASK_STATUSES.COMPLETED
-              ? '批量评估完成'
+              ? t('evalLlmExtra.batchCompleted')
               : batchState.status === TASK_STATUSES.PARTIAL_SUCCESS
-                ? '批量评估部分完成'
+                ? t('evalLlmExtra.batchPartial')
                 : batchState.status === TASK_STATUSES.FAILED
-                  ? '批量评估失败'
-                  : '批量评估已停止'}：
-            {batchState.completed} 成功
-            {batchState.errors > 0 && <span className="text-[var(--danger)]">，{batchState.errors} 失败</span>}
+                  ? t('evalLlmExtra.batchFailed')
+                  : t('evalLlmExtra.batchStopped')}{': '}
+            {t('perf.successCount', { n: batchState.completed })}
+            {batchState.errors > 0 && <span className="text-[var(--danger)]">{', '}{t('perf.failureCount', { n: batchState.errors })}</span>}
           </h3>
-          <p className="text-xs text-[var(--text-muted)] mb-2">点击模型查看对应日志</p>
+          <p className="text-xs text-[var(--text-muted)] mb-2">{t('perf.clickModelLogs')}</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {batchState.results.map((r) => (
               <div key={r.task_id}

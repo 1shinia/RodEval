@@ -3,11 +3,13 @@ import { api } from './client'
 export interface LbPeriodOption {
   value: string
   label: string
+  label_en?: string
 }
 
 export interface LbBoardOption {
   id: string
   label: string
+  label_en?: string
   tabs?: LbPeriodOption[]
 }
 

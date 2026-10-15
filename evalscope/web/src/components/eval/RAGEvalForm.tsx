@@ -69,10 +69,10 @@ const RAGAS_METRICS = [
 ]
 
 const LANG_OPTIONS: [string, string][] = [
-  ['eng', '英语'], ['zho', '中文'], ['deu', '德语'],
-  ['fra', '法语'], ['spa', '西班牙语'], ['ita', '意大利语'],
-  ['jpn', '日语'], ['kor', '韩语'], ['ara', '阿拉伯语'],
-  ['rus', '俄语'], ['por', '葡萄牙语'],
+  ['eng', 'languageEnglish'], ['zho', 'languageChinese'], ['deu', 'languageGerman'],
+  ['fra', 'languageFrench'], ['spa', 'languageSpanish'], ['ita', 'languageItalian'],
+  ['jpn', 'languageJapanese'], ['kor', 'languageKorean'], ['ara', 'languageArabic'],
+  ['rus', 'languageRussian'], ['por', 'languagePortuguese'],
 ]
 
 export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Props) {
@@ -169,10 +169,10 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
 
     if (ragTool === 'ragas') {
       const ragasErrors: Record<string, string> = {}
-      if (!ragasTestset.trim()) ragasErrors.ragasTestset = 'Required'
-      if (!ragasLlmModel.trim()) ragasErrors.ragasLlmModel = 'Required'
-      if (!ragasEmbModel.trim()) ragasErrors.ragasEmbModel = 'Required'
-      if (ragasMetrics.length === 0) ragasErrors.ragasMetrics = 'Select at least one metric'
+      if (!ragasTestset.trim()) ragasErrors.ragasTestset = t('perf.required')
+      if (!ragasLlmModel.trim()) ragasErrors.ragasLlmModel = t('perf.required')
+      if (!ragasEmbModel.trim()) ragasErrors.ragasEmbModel = t('perf.required')
+      if (ragasMetrics.length === 0) ragasErrors.ragasMetrics = t('evalRagExtra.metricRequired')
       if (Object.keys(ragasErrors).length > 0) {
         setErrors(ragasErrors)
         return
@@ -233,13 +233,13 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
     const apiBase = ragApiBase.trim()
     const apiKey = ragApiKey.trim()
     const mtebErrors: Record<string, string> = {}
-    if (!modelName) mtebErrors.ragModelPath = 'Required'
-    if (!apiBase) mtebErrors.ragApiBase = 'Required for API models'
-    if (!apiKey) mtebErrors.ragApiKey = 'Required for API models'
+    if (!modelName) mtebErrors.ragModelPath = t('perf.required')
+    if (!apiBase) mtebErrors.ragApiBase = t('evalRagExtra.requiredForApiModels')
+    if (!apiKey) mtebErrors.ragApiKey = t('evalRagExtra.requiredForApiModels')
     if (ragBatchSize) {
       const batchSize = Number(ragBatchSize)
       if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 20) {
-        mtebErrors.ragBatchSize = '必须是 1～20 的正整数'
+        mtebErrors.ragBatchSize = t('evalRagExtra.batchSizeError')
       }
     }
     if (Object.keys(mtebErrors).length > 0) {
@@ -286,12 +286,12 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* RAG Tool Selector */}
       <div className="flex items-center gap-3 border-b border-[var(--border-md)] pb-4">
-        <span className="text-sm font-medium text-[var(--text)]">RAG Tool</span>
+        <span className="text-sm font-medium text-[var(--text)]">{t('evalRagExtra.tool')}</span>
         <select value={ragTool} onChange={e => setRagTool(e.target.value as RAGTool)} className={FORM_INPUT_CLASS + ' !w-auto'}>
-          <option value="embedding">MTEB Embedding</option>
-          <option value="reranker">MTEB Reranker</option>
+          <option value="embedding">{t('evalRagExtra.toolEmbedding')}</option>
+          <option value="reranker">{t('evalRagExtra.toolReranker')}</option>
           <option value="ragas">RAGAS</option>
-          <option value="clip">CLIP Benchmark</option>
+          <option value="clip">{t('evalRagExtra.toolClip')}</option>
         </select>
       </div>
 
@@ -307,21 +307,21 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
             <FormField label={t('eval.apiUrl')} required error={errors.ragApiBase}>
               <input value={ragApiBase}
                 onChange={e => { setRagApiBase(e.target.value); if (errors.ragApiBase) setErrors(p => ({ ...p, ragApiBase: '' })) }}
-                className={inputClass(errors.ragApiBase)} placeholder="https://api.openai.com/v1（自动追加 /embeddings，无需手动填写）" />
+                className={inputClass(errors.ragApiBase)} placeholder={t('evalRagExtra.embeddingApiPlaceholder')} />
             </FormField>
             <FormField label={t('eval.apiKey')} required error={errors.ragApiKey}>
               <input type="password" value={ragApiKey}
                 onChange={e => { setRagApiKey(e.target.value); if (errors.ragApiKey) setErrors(p => ({ ...p, ragApiKey: '' })) }}
-                className={inputClass(errors.ragApiKey)} placeholder="请输入 API Key" />
+                className={inputClass(errors.ragApiKey)} placeholder={t('evalRagExtra.apiKeyPlaceholder')} />
             </FormField>
             <FormField label={t('eval.ragBatchSize')} error={errors.ragBatchSize}>
               <input type="number" value={ragBatchSize}
                 onChange={e => setRagBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
-                className={inputClass(errors.ragBatchSize)} placeholder="默认20，上限20" min={1} max={20} />
+                className={inputClass(errors.ragBatchSize)} placeholder={t('evalRagExtra.batchSizePlaceholder')} min={1} max={20} />
             </FormField>
 
             {isAdmin && (
-              <FormField label="数据集来源">
+              <FormField label={t('eval.datasetHub')}>
                 <select value={ragDataHub} onChange={e => setRagDataHub(e.target.value)} className={FORM_INPUT_CLASS}>
                   <option value="huggingface">HuggingFace</option>
                 </select>
@@ -395,26 +395,26 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
                         setRagLanguages(next.join(', '))
                       }}
                       className={`px-2 py-1 text-xs rounded-full border transition-colors cursor-pointer ${selected ? 'bg-[var(--accent)] text-white border-[var(--accent)]' : 'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--accent-dim)]'}`}>
-                      {label} ({code})
+                      {t(`evalRagExtra.${label}`)} ({code})
                     </button>
                   )
                 })}
               </div>
               <input value={ragLanguages}
                 onChange={e => setRagLanguages(e.target.value)}
-                className={`${FORM_INPUT_CLASS} text-xs`} placeholder="或手动输入其他语言代码（逗号分隔）" />
+                className={`${FORM_INPUT_CLASS} text-xs`} placeholder={t('evalRagExtra.languageCodesPlaceholder')} />
             </FormField>
 
             <FormField label={t('eval.ragLimit')} hint={t('eval.ragLimitHint')}>
               <div className="flex items-center gap-3">
                 <input type="number" value={ragLimit}
                   onChange={e => setRagLimit(e.target.value.replace(/[^0-9]/g, ''))}
-                  className={FORM_INPUT_CLASS + ' flex-1'} placeholder="全量" />
+                  className={FORM_INPUT_CLASS + ' flex-1'} placeholder={t('evalSharedExtra.allSamples')} />
                 <label className="flex items-center gap-1.5 text-sm text-[var(--text)] whitespace-nowrap cursor-pointer">
                   <input type="checkbox" checked={ragRandomSample}
                     onChange={e => setRagRandomSample(e.target.checked)}
                     className="accent-[var(--accent)]" />
-                  随机抽取
+                  {t('evalRagExtra.randomSample')}
                 </label>
               </div>
             </FormField>
@@ -444,10 +444,10 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
               </div>
               {ragTwoStage && (
                 <div className="mt-3 p-4 rounded-[var(--radius)] border border-[var(--accent-dim)] bg-[var(--bg-card)]">
-                  <FormField label="Encoder 模型（Stage 1）">
+                  <FormField label={t('evalRagExtra.encoderStageOne')}>
                     <input value={ragEncoderModel}
                       onChange={e => setRagEncoderModel(e.target.value)}
-                      className={FORM_INPUT_CLASS} placeholder="选择或输入 Embedding 模型"
+                      className={FORM_INPUT_CLASS} placeholder={t('evalRagExtra.encoderPlaceholder')}
                       list="encoder-models" />
                     <datalist id="encoder-models">
                       <option value="BAAI/bge-large-zh-v1.5" />
@@ -580,7 +580,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
             <FormField label={t('eval.clipLimit')}>
               <input type="number" value={clipLimit}
                 onChange={e => setClipLimit(e.target.value.replace(/[^0-9]/g, ''))}
-                className={FORM_INPUT_CLASS} placeholder="全量" />
+                className={FORM_INPUT_CLASS} placeholder={t('evalSharedExtra.allSamples')} />
             </FormField>
           </div>
 

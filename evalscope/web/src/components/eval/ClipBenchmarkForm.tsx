@@ -1,5 +1,6 @@
 import { useState, type SyntheticEvent } from 'react'
 import Button from '@/components/ui/Button'
+import { useLocale } from '@/contexts/LocaleContext'
 import FormField from '@/components/ui/FormField'
 import { FORM_INPUT_CLASS, inputClass } from '@/components/ui/formStyles'
 
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function ClipBenchmarkForm({ onSubmit, disabled }: Props) {
+  const { t } = useLocale()
   const [modelPath, setModelPath] = useState('')
   const [apiBase, setApiBase] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -20,8 +22,8 @@ export default function ClipBenchmarkForm({ onSubmit, disabled }: Props) {
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
-    if (!modelPath.trim()) newErrors.modelPath = 'Required'
-    if (!datasets.trim()) newErrors.datasets = 'Required'
+    if (!modelPath.trim()) newErrors.modelPath = t('perf.required')
+    if (!datasets.trim()) newErrors.datasets = t('perf.required')
     if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return }
     setErrors({})
 
@@ -51,40 +53,40 @@ export default function ClipBenchmarkForm({ onSubmit, disabled }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <FormField label="Model Path / Name" required error={errors.modelPath}>
+        <FormField label={t('evalSharedExtra.clipModelPath')} required error={errors.modelPath}>
           <input value={modelPath}
             onChange={(e) => { setModelPath(e.target.value); if (errors.modelPath) setErrors(p => ({ ...p, modelPath: '' })) }}
             className={inputClass(errors.modelPath)} placeholder="openai/clip-vit-base-patch32" />
         </FormField>
-        <FormField label="API Base URL (optional)">
+        <FormField label={t('evalSharedExtra.clipApiBase')}>
           <input value={apiBase}
             onChange={e => setApiBase(e.target.value)}
             className={FORM_INPUT_CLASS} placeholder="https://api.openai.com/v1" />
         </FormField>
-        <FormField label="API Key (optional)">
+        <FormField label={t('evalSharedExtra.clipApiKey')}>
           <input type="password" value={apiKey}
             onChange={e => setApiKey(e.target.value)}
             className={FORM_INPUT_CLASS} placeholder="sk-..." />
         </FormField>
-        <FormField label="Datasets" required error={errors.datasets}>
+        <FormField label={t('evalSharedExtra.clipDatasets')} required error={errors.datasets}>
           <input value={datasets}
             onChange={(e) => { setDatasets(e.target.value); if (errors.datasets) setErrors(p => ({ ...p, datasets: '' })) }}
             className={inputClass(errors.datasets)} placeholder="flickr30k, msr-vtt" />
         </FormField>
-        <FormField label="Batch Size">
+        <FormField label={t('eval.batchSize')}>
           <input type="number" value={batchSize}
             onChange={e => setBatchSize(e.target.value.replace(/[^0-9]/g, ''))}
             className={FORM_INPUT_CLASS} placeholder="128" />
         </FormField>
-        <FormField label="Limit">
+        <FormField label={t('evalSharedExtra.clipLimit')}>
           <input type="number" value={limit}
             onChange={e => setLimit(e.target.value.replace(/[^0-9]/g, ''))}
-            className={FORM_INPUT_CLASS} placeholder="全量" />
+            className={FORM_INPUT_CLASS} placeholder={t('evalSharedExtra.allSamples')} />
         </FormField>
       </div>
 
       <Button type="submit" variant="primary" disabled={disabled} className="btn-glow !mt-6">
-        Start CLIP Evaluation
+        {t('evalSharedExtra.clipStart')}
       </Button>
     </form>
   )

@@ -1,5 +1,6 @@
 import { GitCompareArrows } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import { useLocale } from '@/contexts/LocaleContext'
 import { useCompare } from '@/contexts/CompareContext'
 
 interface CompareBarProps {
@@ -23,6 +24,7 @@ export default function CompareBar({
   loading,
   compareUrl,
 }: CompareBarProps) {
+  const { t } = useLocale()
   const { setCompareSelection } = useCompare()
 
   const handleCompare = () => {
@@ -35,7 +37,7 @@ export default function CompareBar({
   return (
     <div className="sticky top-0 z-20 flex items-center gap-3 px-4 py-2.5 rounded-[var(--radius)] border border-[var(--accent)] bg-[var(--accent-dim)] shadow-[var(--shadow)]">
       <span className="text-sm font-medium text-[var(--accent)]">
-        已选 {selected.length} / {totalCount}
+        {t('reports.selected')} {selected.length} / {totalCount}
       </span>
       <button
         type="button"
@@ -43,7 +45,7 @@ export default function CompareBar({
         disabled={loading}
         className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors cursor-pointer disabled:opacity-50"
       >
-        {selected.length >= totalCount ? '取消全选' : `全选 (${totalCount})`}
+        {selected.length >= totalCount ? t('reports.deselectAll') : `${t('reports.selectAll')} (${totalCount})`}
       </button>
       {hasSelection && (
         <button
@@ -51,13 +53,13 @@ export default function CompareBar({
           onClick={onClear}
           className="text-xs text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors cursor-pointer"
         >
-          清除
+          {t('reports.clearSelection')}
         </button>
       )}
       <div className="flex-1" />
       <Button size="sm" onClick={handleCompare} disabled={!hasSelection}>
         <GitCompareArrows size={14} />
-        对比
+        {t('reports.compare')}
       </Button>
     </div>
   )

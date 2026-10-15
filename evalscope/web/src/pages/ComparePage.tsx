@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
 import { useCompare } from '@/contexts/CompareContext'
@@ -13,16 +13,17 @@ import Breadcrumb from '@/components/ui/Breadcrumb'
 
 // Module-level cache so benchmark descriptions survive component remounts
 // (e.g. navigating to /compare, opening in new tab, etc.)
-let _benchDescsCache: Record<string, string> | null = null
-let _benchDescsPromise: Promise<Record<string, string>> | null = null
+type BenchDescs = Record<string, { zh: string; en: string }>
+let _benchDescsCache: BenchDescs | null = null
+let _benchDescsPromise: Promise<BenchDescs> | null = null
 
-function loadBenchDescs(): Promise<Record<string, string>> {
+function loadBenchDescs(): Promise<BenchDescs> {
   if (_benchDescsCache) return Promise.resolve(_benchDescsCache)
   if (_benchDescsPromise) return _benchDescsPromise
   _benchDescsPromise = listBenchmarks(undefined, true).then((b) => {
-    const m: Record<string, string> = {}
+    const m: BenchDescs = {}
     for (const e of [...(b.text || []), ...(b.multimodal || []), ...(b.rag || [])]) {
-      m[e.name] = e.description?.zh?.full || e.description?.en?.full || ''
+      m[e.name] = { zh: e.description?.zh?.full || '', en: e.description?.en?.full || '' }
     }
     _benchDescsCache = m
     return m
@@ -77,7 +78,9 @@ function modelBg(idx: number): string {
 // ------------------------------------------------------------------ //
 
 export default function ComparePage() {
-  const { t } = useLocale()
+  const { locale, t } = useLocale()
+  const translate = useRef(t)
+  useEffect(() => { translate.current = t }, [t])
   const qp = useQueryParams()
   const { selection, clearCompareSelection } = useCompare()
   const { rootPath: ctxRootPath, setRootPath, loadMultiReports, loading } = useReports()
@@ -116,7 +119,7 @@ export default function ComparePage() {
     loadMultiReports(reportNames)
       .then((list) => { setReports(list); setDataLoaded(true) })
       .catch((e) => {
-        toast.error(e instanceof Error ? e.message : t('common.loadFailed'))
+        toast.error(e instanceof Error ? e.message : translate.current('common.loadFailed'))
         setDataLoaded(true)
       })
   }, [reportNames, loadMultiReports])
@@ -266,7 +269,7 @@ export default function ComparePage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PRED_PAGE_SIZE))
 
   // ── Benchmarks for dataset descriptions (module-cached, survives remounts) ──
-  const [benchDescs, setBenchDescs] = useState<Record<string, string>>(() => _benchDescsCache || {})
+  const [benchDescs, setBenchDescs] = useState<BenchDescs>(() => _benchDescsCache || {})
   useEffect(() => {
     if (_benchDescsCache) return
     loadBenchDescs().then(setBenchDescs).catch(() => {})
@@ -284,7 +287,7 @@ export default function ComparePage() {
         }
       }
     }
-    return { name: ds, desc: match || '' }
+    return { name: ds, desc: locale === 'en' ? match?.en || '' : match?.zh || match?.en || '' }
   })
 
   // Capability analysis
@@ -297,6 +300,14 @@ export default function ComparePage() {
     '指令遵循': ['ifeval', 'alpaca_eval', 'arena_hard', 'eq_bench', 'general_arena'],
     '综合推理': ['bbh', 'arc_challenge', 'musr', 'zebralogicbench'],
     '视觉理解': ['general_vqa', 'ai2d', 'chartqa', 'mmmu', 'cmmmu', 'math_vista', 'math_vision', 'mm_bench', 'seed_bench', 'hallusion_bench', 'real_world_qa'],
+  }
+  const capDimLabels: Record<string, string> = {
+    '综合知识': t('compareExtra.capGeneralKnowledge'),
+    '数学推理': t('compareExtra.capMathReasoning'),
+    '代码能力': t('compareExtra.capCoding'),
+    '指令遵循': t('compareExtra.capInstructionFollowing'),
+    '综合推理': t('compareExtra.capGeneralReasoning'),
+    '视觉理解': t('compareExtra.capVisualUnderstanding'),
   }
   const capScores: { dim: string; models: { name: string; score: number | null }[] }[] = []
   for (const [dim, keywords] of Object.entries(CAP_DIMS)) {
@@ -339,16 +350,16 @@ export default function ComparePage() {
       <Breadcrumb items={[{ label: t('reports.title'), href: '/reports' }, { label: t('compare.title') }]} />
 
       <div className="flex items-center justify-between">
-        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => clearCompareSelection()}>← 返回列表</Button>
+        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => clearCompareSelection()}>← {t('compareExtra.backToList')}</Button>
         <Button size="md" onClick={async () => {
           const name = reportNames.map((n) => parseReportName(n).model || n).join(' vs ').slice(0, 80)
           try {
             await saveCompareReport(name, reportNames, 'LLM', rootPath)
-            toast.success('报告已保存')
+            toast.success(t('compareExtra.reportSaved'))
           } catch (e) {
-            toast.error(e instanceof Error ? e.message : '保存失败')
+            toast.error(e instanceof Error ? e.message : t('compareExtra.saveFailed'))
           }
-        }}>保存报告</Button>
+        }}>{t('compareExtra.saveReport')}</Button>
       </div>
 
       {/* Selected Models */}
@@ -360,7 +371,7 @@ export default function ComparePage() {
               label={displayNames[name] ?? (parseReportName(name).model || name)}
             />
           ))}
-          <span className="text-xs text-[var(--text-muted)] ml-auto">共 {reportNames.length} 个模型</span>
+          <span className="text-xs text-[var(--text-muted)] ml-auto">{t('compareExtra.modelCount', { count: reportNames.length })}</span>
         </div>
       </Card>
 
@@ -421,11 +432,11 @@ export default function ComparePage() {
       {/* Capability Analysis */}
       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
         <div className="flex items-center border-b border-[var(--border)] px-5 py-3">
-          <h3 className="type-label-xs">能力分析</h3>
+          <h3 className="type-label-xs">{t('compareExtra.capabilityAnalysis')}</h3>
         </div>
         <div className="p-4 flex flex-col gap-3">
           {capScores.length === 0 && (
-            <p className="text-sm text-[var(--text-muted)]">当前选取的数据集暂无能力维度覆盖</p>
+            <p className="text-sm text-[var(--text-muted)]">{t('compareExtra.noCapabilityCoverage')}</p>
           )}
           {capScores.length > 0 && capScores.map(({ dim, models }) => {
               const sorted = models.filter((m) => m.score != null).sort((a, b) => (b.score || 0) - (a.score || 0))
@@ -435,18 +446,18 @@ export default function ComparePage() {
               const rest = sorted.filter((m) => m.score !== bestScore)
               return (
                 <div key={dim} className="text-sm text-[var(--text)]">
-                  在<span className="font-semibold">{dim}</span>方面，
+                  {t('compareExtra.inDimension')}<span className="font-semibold">{capDimLabels[dim]}</span>{t('compareExtra.dimensionSuffix')}
                   {tied.length === sorted.length ? (
-                    <span className="text-[var(--accent)] font-medium">{tied.map((m) => m.name).join(' 和 ')} 表现相当（<span className="font-mono">{bestScore.toFixed(4)}</span>）</span>
+                    <span className="text-[var(--accent)] font-medium">{tied.map((m) => m.name).join(t('compareExtra.and'))}{t('compareExtra.equallyMatched')}<span className="font-mono">{bestScore.toFixed(4)}</span>{t('compareExtra.closeParen')}</span>
                   ) : tied.length > 1 ? (
-                    <span><span className="text-[var(--accent)] font-medium">{tied.map((m) => m.name).join('、')}</span> 并列最优（<span className="font-mono text-[var(--accent)]">{bestScore.toFixed(4)}</span>）</span>
+                    <span><span className="text-[var(--accent)] font-medium">{tied.map((m) => m.name).join(t('compareExtra.listSeparator'))}</span>{t('compareExtra.tiedBest')}<span className="font-mono text-[var(--accent)]">{bestScore.toFixed(4)}</span>{t('compareExtra.closeParen')}</span>
                   ) : (
-                    <span><span className="text-[var(--accent)] font-medium">{tied[0].name}</span> 表现最优（<span className="font-mono text-[var(--accent)]">{bestScore.toFixed(4)}</span>）</span>
+                    <span><span className="text-[var(--accent)] font-medium">{tied[0].name}</span>{t('compareExtra.bestPerformance')}<span className="font-mono text-[var(--accent)]">{bestScore.toFixed(4)}</span>{t('compareExtra.closeParen')}</span>
                   )}
                   {rest.length > 0 && (
-                    <span className="text-[var(--text-muted)]">，其次 {
+                    <span className="text-[var(--text-muted)]">{t('compareExtra.followedBy')}{
                       rest.map((m, i) => (
-                        <span key={m.name}>{i > 0 ? '、' : ''}{m.name}（<span className="font-mono">{m.score!.toFixed(4)}</span>）</span>
+                        <span key={m.name}>{i > 0 ? t('compareExtra.listSeparator') : ''}{m.name}{t('compareExtra.openParen')}<span className="font-mono">{m.score!.toFixed(4)}</span>{t('compareExtra.closeParen')}</span>
                       ))
                     }</span>
                   )}
@@ -460,7 +471,7 @@ export default function ComparePage() {
       {datasetDescItems.length > 0 && (
         <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
           <div className="flex items-center border-b border-[var(--border)] px-5 py-3">
-            <h3 className="type-label-xs">数据集说明</h3>
+            <h3 className="type-label-xs">{t('compareExtra.datasetDescriptions')}</h3>
           </div>
           <div className="p-4 flex flex-col gap-2">
             {Object.keys(benchDescs).length === 0 && (
@@ -577,7 +588,7 @@ function ScoreTab({
         )}
       </div>
 
-      <Card title="得分对比">
+      <Card title={t('compareExtra.scoreChart')}>
         <ResponsiveContainer width="100%" height={320}>
           <RBarChart
             data={dataRows.map((row) => {
@@ -937,6 +948,9 @@ function PredictionTab({
 // ------------------------------------------------------------------ //
 
 function PerfCompareView({ taskIds }: { taskIds: string[] }) {
+  const { t } = useLocale()
+  const translate = useRef(t)
+  useEffect(() => { translate.current = t }, [t])
   const { clearCompareSelection } = useCompare()
   const [data, setData] = useState<PerfCompareResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -944,21 +958,21 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
 
   useEffect(() => {
     if (taskIds.length < 2) {
-      setError('选择至少 2 个压测任务进行对比')
+      setError(translate.current('compareExtra.perfNeedTwo'))
       setLoading(false)
       return
     }
     setLoading(true)
     comparePerfReports(taskIds)
       .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : '加载失败'))
+      .catch((e) => setError(e instanceof Error ? e.message : translate.current('compareExtra.loadFailed')))
       .finally(() => setLoading(false))
   }, [taskIds])
 
   if (loading) {
     return (
       <div className="page-enter flex flex-col gap-6">
-        <Breadcrumb items={[{ label: '压测报告' }, { label: '对比' }]} />
+        <Breadcrumb items={[{ label: t('compareExtra.perfReports') }, { label: t('compare.title') }]} />
         <div className="flex flex-col gap-4">
           <Skeleton height={120} />
           <Skeleton height={400} />
@@ -970,10 +984,10 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
   if (error || !data || data.tasks.length < 2) {
     return (
       <div className="page-enter">
-        <Breadcrumb items={[{ label: '压测报告' }, { label: '对比' }]} />
+        <Breadcrumb items={[{ label: t('compareExtra.perfReports') }, { label: t('compare.title') }]} />
         <div className="flex flex-col items-center justify-center gap-4 py-20">
           <AlertCircle size={48} className="text-[var(--text-dim)]" />
-          <p className="text-[var(--text-muted)] text-lg">{error || '选择至少 2 个压测任务进行对比'}</p>
+          <p className="text-[var(--text-muted)] text-lg">{error || t('compareExtra.perfNeedTwo')}</p>
         </div>
       </div>
     )
@@ -1000,21 +1014,21 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
     : '0'
 
   const kpis = [
-    ['已选任务', models.length],
-    ['有效数据', valid.length],
-    ['总请求数', totalReqs],
-    ['平均成功率', `${avgSuccess}%`],
-    ['平均延迟', `${avgLatency}s`],
-    ['平均输出 TPS', avgOutputTps],
+    [t('compareExtra.selectedTasks'), models.length],
+    [t('compareExtra.validData'), valid.length],
+    [t('compareExtra.totalRequests'), totalReqs],
+    [t('compareExtra.avgSuccessRate'), `${avgSuccess}%`],
+    [t('compareExtra.avgLatency'), `${avgLatency}s`],
+    [t('compareExtra.avgOutputTps'), avgOutputTps],
   ]
 
   const columns = [
-    { key: 'model', label: '模型', render: (m: typeof valid[0]) => m.label },
-    { key: 'concurrency', label: '并发', render: (m: typeof valid[0]) => m.data['Concurrency'] ?? '-' },
-    { key: 'total', label: '请求数', render: (m: typeof valid[0]) => m.data['Total Requests'] ?? '-' },
-    { key: 'success', label: '成功', render: (m: typeof valid[0]) => m.data['Success Requests'] ?? '-' },
-    { key: 'failed', label: '失败', render: (m: typeof valid[0]) => m.data['Failed Requests'] ?? '0' },
-    { key: 'rate', label: '成功率', render: (m: typeof valid[0]) => {
+    { key: 'model', label: t('compareExtra.model'), render: (m: typeof valid[0]) => m.label },
+    { key: 'concurrency', label: t('compareExtra.concurrency'), render: (m: typeof valid[0]) => m.data['Concurrency'] ?? '-' },
+    { key: 'total', label: t('compareExtra.requests'), render: (m: typeof valid[0]) => m.data['Total Requests'] ?? '-' },
+    { key: 'success', label: t('compareExtra.success'), render: (m: typeof valid[0]) => m.data['Success Requests'] ?? '-' },
+    { key: 'failed', label: t('compareExtra.failed'), render: (m: typeof valid[0]) => m.data['Failed Requests'] ?? '0' },
+    { key: 'rate', label: t('compareExtra.successRate'), render: (m: typeof valid[0]) => {
       const sr = m.data['Success Requests'] && m.data['Total Requests']
         ? m.data['Success Requests'] / m.data['Total Requests'] : 1
       return `${(sr * 100).toFixed(1)}%`
@@ -1022,28 +1036,28 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
     { key: 'rps', label: 'RPS', render: (m: typeof valid[0]) => (m.data['Req Throughput (req/s)'] ?? 0).toFixed(4) },
     { key: 'rpm', label: 'RPM', render: (m: typeof valid[0]) => `${((m.data['Req Throughput (req/s)'] ?? 0) * 60).toFixed(1)}` },
     { key: 'tpm', label: 'TPM', render: (m: typeof valid[0]) => `${((m.data['Output Throughput (tok/s)'] ?? 0) * 60).toFixed(0)}` },
-    { key: 'latency_avg', label: '延迟 Avg(s)', render: (m: typeof valid[0]) => (m.data['Avg Latency (s)'] ?? 0).toFixed(2) },
+    { key: 'latency_avg', label: t('compareExtra.latencyAvg'), render: (m: typeof valid[0]) => (m.data['Avg Latency (s)'] ?? 0).toFixed(2) },
     { key: 'ttft', label: 'TTFT Avg(ms)', render: (m: typeof valid[0]) => (m.data['TTFT (ms)'] ?? 0).toFixed(1) },
     { key: 'tpot', label: 'TPOT Avg(ms)', render: (m: typeof valid[0]) => (m.data['TPOT (ms)'] ?? 0).toFixed(1) },
-    { key: 'output_tps', label: '输出 tok/s', render: (m: typeof valid[0]) => (m.data['Output Throughput (tok/s)'] ?? 0).toFixed(1) },
-    { key: 'total_tps', label: '总 tok/s', render: (m: typeof valid[0]) => (m.data['Total Throughput (tok/s)'] ?? 0).toFixed(1) },
+    { key: 'output_tps', label: t('compareExtra.outputTok'), render: (m: typeof valid[0]) => (m.data['Output Throughput (tok/s)'] ?? 0).toFixed(1) },
+    { key: 'total_tps', label: t('compareExtra.totalTok'), render: (m: typeof valid[0]) => (m.data['Total Throughput (tok/s)'] ?? 0).toFixed(1) },
   ]
 
   return (
     <div className="page-enter flex flex-col gap-6">
-      <Breadcrumb items={[{ label: '压测报告' }, { label: '对比' }]} />
+      <Breadcrumb items={[{ label: t('compareExtra.perfReports') }, { label: t('compare.title') }]} />
 
       <div className="flex items-center justify-between">
-        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => clearCompareSelection()}>← 返回列表</Button>
+        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => clearCompareSelection()}>← {t('compareExtra.backToList')}</Button>
         <Button size="md" onClick={async () => {
           const name = `${valid.map((m) => m.label).join(' vs ')}`.slice(0, 80)
           try {
             await saveCompareReport(name, taskIds)
-            toast.success('报告已保存')
+            toast.success(t('compareExtra.reportSaved'))
           } catch (e) {
-            toast.error(e instanceof Error ? e.message : '保存失败')
+            toast.error(e instanceof Error ? e.message : t('compareExtra.saveFailed'))
           }
-        }}>保存报告</Button>
+        }}>{t('compareExtra.saveReport')}</Button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
@@ -1057,14 +1071,14 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
 
       {missing.length > 0 && (
         <div className="px-4 py-3 rounded-[var(--radius)] bg-[var(--accent-dim)] border border-[var(--accent)] text-sm text-[var(--text)]">
-          以下 {missing.length} 个任务缺少压测数据，已排除在图表和对比表之外：
+          {t('compareExtra.missingData', { count: missing.length })}
           <span className="text-[var(--text-muted)] ml-2">
-            {missing.map((m) => m.label).join('、')}
+            {missing.map((m) => m.label).join(t('compareExtra.listSeparator'))}
           </span>
         </div>
       )}
 
-      <Card title="压测指标对比">
+      <Card title={t('compareExtra.perfMetricsComparison')}>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
@@ -1089,7 +1103,7 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
               {missing.map((m, i) => (
                 <tr key={`miss-${i}`} className="border-b border-[var(--border)] bg-[var(--bg-deep)] opacity-60">
                   <td className="py-2 px-3 text-[var(--text-muted)] whitespace-nowrap">{m.label}</td>
-                  <td colSpan={columns.length - 1} className="py-2 px-3 text-xs text-[var(--text-dim)]">无数据</td>
+                  <td colSpan={columns.length - 1} className="py-2 px-3 text-xs text-[var(--text-dim)]">{t('common.noData')}</td>
                 </tr>
               ))}
             </tbody>
@@ -1098,7 +1112,7 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-        <Card title="吞吐能力 (RPM)">
+        <Card title={t('compareExtra.throughputRpm')}>
           <ResponsiveContainer width="100%" height={280}>
             <RBarChart data={valid.map((m) => ({
               name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
@@ -1114,7 +1128,7 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
             </RBarChart>
           </ResponsiveContainer>
         </Card>
-        <Card title="吞吐能力 (TPM)">
+        <Card title={t('compareExtra.throughputTpm')}>
           <ResponsiveContainer width="100%" height={280}>
             <RBarChart data={valid.map((m) => ({
               name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
@@ -1130,23 +1144,23 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
             </RBarChart>
           </ResponsiveContainer>
         </Card>
-        <Card title="Avg 延迟 (s)">
+        <Card title={t('compareExtra.avgLatencyChart')}>
           <ResponsiveContainer width="100%" height={280}>
             <RBarChart data={valid.map((m) => ({
               name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
-              '延迟': (m.data['Avg Latency (s)'] || 0),
+              [t('compareExtra.latency')]: (m.data['Avg Latency (s)'] || 0),
             }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
               <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} unit="s" />
               <Tooltip formatter={(v: unknown) => `${Number(v).toFixed(2)}s`} />
-              <Bar dataKey="延迟" radius={[4, 4, 0, 0]}>
+              <Bar dataKey={t('compareExtra.latency')} radius={[4, 4, 0, 0]}>
                 {valid.map((_, i) => <Cell key={i} fill={modelColor(i)} />)}
               </Bar>
             </RBarChart>
           </ResponsiveContainer>
         </Card>
-        <Card title="TTFT 首字延迟 (ms)">
+        <Card title={t('compareExtra.ttftChart')}>
           <ResponsiveContainer width="100%" height={280}>
             <RBarChart data={valid.map((m) => ({
               name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
@@ -1162,7 +1176,7 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
             </RBarChart>
           </ResponsiveContainer>
         </Card>
-        <Card title="TPOT 生成间隔 (ms)">
+        <Card title={t('compareExtra.tpotChart')}>
           <ResponsiveContainer width="100%" height={280}>
             <RBarChart data={valid.map((m) => ({
               name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label,
@@ -1178,18 +1192,18 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
             </RBarChart>
           </ResponsiveContainer>
         </Card>
-        <Card title="成功率 (%)">
+        <Card title={t('compareExtra.successRateChart')}>
           <ResponsiveContainer width="100%" height={280}>
             <RBarChart data={valid.map((m) => {
               const sr = m.data['Success Requests'] && m.data['Total Requests']
                 ? (m.data['Success Requests'] / m.data['Total Requests']) * 100 : 100
-              return { name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label, '成功率': sr }
+              return { name: m.label.length > 14 ? m.label.slice(0, 12) + '…' : m.label, [t('compareExtra.successRate')]: sr }
             })}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
               <Tooltip formatter={(v: unknown) => `${Number(v).toFixed(1)}%`} />
-              <Bar dataKey="成功率" radius={[4, 4, 0, 0]}>
+              <Bar dataKey={t('compareExtra.successRate')} radius={[4, 4, 0, 0]}>
                 {valid.map((_, i) => <Cell key={i} fill={modelColor(i)} />)}
               </Bar>
             </RBarChart>
@@ -1197,7 +1211,7 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
         </Card>
       </div>
 
-      <Card title="原始报告">
+      <Card title={t('compareExtra.originalReports')}>
         <div className="flex flex-wrap gap-2">
           {data.tasks.map((t) => (
             <a
@@ -1222,6 +1236,9 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
 // ------------------------------------------------------------------ //
 
 function SavedReportsList() {
+  const { t } = useLocale()
+  const translate = useRef(t)
+  useEffect(() => { translate.current = t }, [t])
   const [reports, setReports] = useState<SavedCompareReport[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
@@ -1231,20 +1248,20 @@ function SavedReportsList() {
     setLoading(true)
     listSavedCompareReports()
       .then((r) => setReports(r.reports || []))
-      .catch(() => toast.error('加载报告列表失败'))
+      .catch(() => toast.error(translate.current('compareExtra.loadListFailed')))
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { load() }, [load])
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('确定删除该对比报告？')) return
+    if (!window.confirm(t('compareExtra.confirmDelete'))) return
     try {
       await deleteCompareReport(id)
-      toast.success('已删除')
+      toast.success(t('compareExtra.deleted'))
       load()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '删除失败')
+      toast.error(e instanceof Error ? e.message : t('compareExtra.deleteFailed'))
     }
   }
 
@@ -1257,13 +1274,13 @@ function SavedReportsList() {
 
   return (
     <div className="page-enter flex flex-col gap-6">
-      <Breadcrumb items={[{ label: '对比报告列表' }]} />
+      <Breadcrumb items={[{ label: t('compareExtra.savedReportsList') }]} />
 
       <Tabs
         tabs={[
-          { key: 'all', label: `全部 (${reports.length})` },
-          { key: 'Perf', label: `性能压测 (${reports.filter((r) => r.backend === 'Perf').length})` },
-          { key: 'LLM', label: `模型评估 (${reports.filter((r) => r.backend === 'LLM').length})` },
+          { key: 'all', label: `${t('compareExtra.all')} (${reports.length})` },
+          { key: 'Perf', label: `${t('compareExtra.perfTesting')} (${reports.filter((r) => r.backend === 'Perf').length})` },
+          { key: 'LLM', label: `${t('compareExtra.modelEvaluation')} (${reports.filter((r) => r.backend === 'LLM').length})` },
         ]}
         activeKey={filter}
         onChange={(k) => setFilter(k as string)}
@@ -1276,19 +1293,19 @@ function SavedReportsList() {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-[var(--text-dim)]">
           <AlertCircle size={36} />
-          <p className="text-sm">暂无保存的对比报告</p>
+          <p className="text-sm">{t('compareExtra.noSavedReports')}</p>
         </div>
       ) : (
-        <Card title={`已保存 ${filtered.length} 份对比报告`}>
+        <Card title={t('compareExtra.savedCount', { count: filtered.length })}>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b-2 border-[var(--border)]">
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">名称</th>
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">类型</th>
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">任务数</th>
-                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">创建时间</th>
-                  <th className="text-right py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">操作</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('compareExtra.name')}</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('compareExtra.type')}</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('compareExtra.taskCount')}</th>
+                  <th className="text-left py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('compareExtra.createdAt')}</th>
+                  <th className="text-right py-2.5 px-3 text-xs text-[var(--text-muted)] font-medium">{t('compareExtra.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1299,7 +1316,7 @@ function SavedReportsList() {
                       <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
                         r.backend === 'LLM' ? 'bg-[var(--accent-dim)] text-[var(--accent)]' : 'bg-[var(--green-dim)] text-[var(--green)]'
                       }`}>
-                        {r.backend === 'LLM' ? '模型评估' : '性能压测'}
+                        {r.backend === 'LLM' ? t('compareExtra.modelEvaluation') : t('compareExtra.perfTesting')}
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-[var(--text-muted)]">{r.task_count}</td>
@@ -1309,14 +1326,14 @@ function SavedReportsList() {
                         href={`/api/v1/perf/compare/saved/${r.id}/download`}
                         onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded text-[var(--accent)] hover:bg-[var(--accent-dim)] transition-colors"
-                        title="下载"
+                        title={t('compareExtra.download')}
                       >
                         <Download size={14} />
                       </a>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(r.id) }}
                         className="p-1 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all ml-1"
-                        title="删除"
+                        title={t('compareExtra.delete')}
                       >
                         <Trash2 size={14} />
                       </button>

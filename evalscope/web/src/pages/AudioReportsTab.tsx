@@ -59,23 +59,23 @@ export default function AudioReportsTab() {
       const data = await api<{ reports: AudioReportSummary[] }>('/api/v1/audio/reports')
       setAllReports(data.reports || [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reports')
+      setError(err instanceof Error ? err.message : t('reports.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   const handleDelete = useCallback(async (taskId: string) => {
-    if (!window.confirm(`确定要删除此报告吗？\n\n${taskId}`)) return
+    if (!window.confirm(t('reports.confirmDelete', { name: taskId }))) return
     try {
       await apiDelete<{ ok: boolean }>(`/api/v1/audio/reports/${encodeURIComponent(taskId)}`)
-      toast.success('已删除')
+      toast.success(t('common.deleteSuccess'))
       setSelected((prev) => { const next = new Set(prev); next.delete(taskId); return next })
       fetchReports()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败')
+      toast.error(err instanceof Error ? err.message : t('common.deleteFailed'))
     }
-  }, [fetchReports])
+  }, [fetchReports, t])
 
   useEffect(() => { fetchReports() }, [fetchReports])
 
@@ -184,9 +184,9 @@ export default function AudioReportsTab() {
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
         </div>
       ) : allReports.length === 0 ? (
-        <EmptyState icon={<Mic size={40} />} title="暂无音频评估报告" subtitle="完成 ASR 或 TTS 评估后，报告将显示在这里" />
+        <EmptyState icon={<Mic size={40} />} title={t('reports.noAudioReports')} subtitle={t('reports.audioReportsHint')} />
       ) : paged.length === 0 ? (
-        <div className="text-center text-[var(--text-muted)] py-8">无匹配结果</div>
+        <div className="text-center text-[var(--text-muted)] py-8">{t('reports.noMatches')}</div>
       ) : (
         <>
           <div className="rounded-[var(--radius)] border border-[var(--border)] overflow-hidden">
@@ -201,12 +201,12 @@ export default function AudioReportsTab() {
                       className="w-4 h-4 rounded accent-[var(--accent)] cursor-pointer"
                     />
                   </th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">任务 ID</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.taskId')}</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.type')}</th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">模型</th>
-                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>
-                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">创建时间</th>
-                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">操作</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.filters.model')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.evaluationScore')}</th>
+                  <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.createdAt')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -231,7 +231,7 @@ export default function AudioReportsTab() {
                       <div className="flex flex-col gap-0.5 items-end">
                         {r.wer != null && <span className="text-[var(--accent)]">WER: {r.wer.toFixed(4)}</span>}
                         {r.cer != null && <span className="text-[var(--text)]">CER: {r.cer.toFixed(4)}</span>}
-                        {r.num_samples != null && <span className="text-[var(--text-dim)]">{r.num_samples} 条样本</span>}
+                        {r.num_samples != null && <span className="text-[var(--text-dim)]">{t('reports.sampleCount', { count: r.num_samples })}</span>}
                         {r.wer == null && r.cer == null && r.num_samples == null && <span className="text-[var(--text-dim)]">-</span>}
                       </div>
                     </td>
@@ -239,9 +239,9 @@ export default function AudioReportsTab() {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="outline" size="sm" onClick={() => navigate(`/reports/audio/${encodeURIComponent(r.task_id)}`)}>
-                          <Eye size={14} className="mr-1" />查看
+                          <Eye size={14} className="mr-1" />{t('common.view')}
                         </Button>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(r.task_id) }} className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title="删除">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(r.task_id) }} className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title={t('common.delete')}>
                           <Trash2 size={14} />
                         </button>
                       </div>

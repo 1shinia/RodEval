@@ -75,6 +75,12 @@ def snapshot_root(tmp_path: Path) -> Path:
                 ]},
             ]},
         },
+        'en-US': {'ranks': {'sections': [
+            {'id': 'ability', 'lineTabs': [
+                {'key': 'openclaw', 'name': 'OpenClaw Models Leaderboard'},
+                {'key': 'hermes', 'name': 'Hermes Models Leaderboard'},
+            ]},
+        ]}},
     })
     _write(agent / 'data-agent-ability_openclaw.json', {
         'OverallTable': [{'key': 0, 'model': 'OpenClaw-1', 'Score': 88.5}],
@@ -106,7 +112,7 @@ def test_meta(client):
     assert data['llm_periods'][0]['value'] == '26-07.20260724'
     assert data['default_llm'] == '26-07.20260724'
     assert data['mm_periods'] == []                       # image-vlm 无历史期
-    assert data['vlm_tabs'] == [{'value': 'ability_official', 'label': '官方评测榜'}]
+    assert data['vlm_tabs'] == [{'value': 'ability_official', 'label': '官方评测榜', 'label_en': 'Official Leaderboard'}]
     assert data['default_mm'] is None
 
 
@@ -149,10 +155,12 @@ def test_meta_boards_lists_all(client):
     data = client.get('/api/v1/leaderboard/meta').get_json()
     boards = {b['id']: b for b in data['boards']}
     assert list(boards) == ['llm', 'multimodal', 'agent', 'ai4science', 'physical-intelligence']
+    assert boards['llm']['label_en'] == 'LLM Leaderboard'
+    assert boards['multimodal']['label_en'] == 'Multimodal Leaderboard'
     # 多模态（无布局文件，回退到旧中文名表）
-    assert boards['multimodal']['tabs'] == [{'value': 'ability_official', 'label': '官方评测榜'}]
+    assert boards['multimodal']['tabs'] == [{'value': 'ability_official', 'label': '官方评测榜', 'label_en': 'Official Leaderboard'}]
     # 智能体（有布局文件，只暴露有 data 的页签：hermes 无 data 故不出现）
-    assert boards['agent']['tabs'] == [{'value': 'ability_openclaw', 'label': 'OpenClaw 模型榜'}]
+    assert boards['agent']['tabs'] == [{'value': 'ability_openclaw', 'label': 'OpenClaw 模型榜', 'label_en': 'OpenClaw Models Leaderboard'}]
     # 未落盘的新榜：出现在清单里但页签为空
     assert boards['ai4science']['tabs'] == []
     assert boards['physical-intelligence']['tabs'] == []

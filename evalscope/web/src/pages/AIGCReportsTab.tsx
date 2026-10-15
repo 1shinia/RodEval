@@ -58,23 +58,23 @@ export default function AIGCReportsTab() {
       const data = await api<{ reports: AIGCReportSummary[] }>('/api/v1/aigc/reports')
       setAllReports(data.reports || [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reports')
+      setError(err instanceof Error ? err.message : t('reports.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   const handleDelete = useCallback(async (taskId: string) => {
-    if (!window.confirm(`确定要删除此报告吗？\n\n${taskId}`)) return
+    if (!window.confirm(t('reports.confirmDelete', { name: taskId }))) return
     try {
       await apiDelete<{ ok: boolean }>(`/api/v1/aigc/reports/${encodeURIComponent(taskId)}`)
-      toast.success('已删除')
+      toast.success(t('common.deleteSuccess'))
       setSelected((prev) => { const next = new Set(prev); next.delete(taskId); return next })
       fetchReports()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败')
+      toast.error(err instanceof Error ? err.message : t('common.deleteFailed'))
     }
-  }, [fetchReports])
+  }, [fetchReports, t])
 
   useEffect(() => { fetchReports() }, [fetchReports])
 
@@ -185,7 +185,7 @@ export default function AIGCReportsTab() {
       ) : allReports.length === 0 ? (
         <EmptyState icon={<ImageIcon size={40} />} title={t('aigc.noReports')} subtitle={t('aigc.noReportsHint')} />
       ) : paged.length === 0 ? (
-        <div className="text-center text-[var(--text-muted)] py-8">无匹配结果</div>
+        <div className="text-center text-[var(--text-muted)] py-8">{t('reports.noMatches')}</div>
       ) : (
         <>
           <div className="rounded-[var(--radius)] border border-[var(--border)] overflow-hidden">
@@ -204,7 +204,7 @@ export default function AIGCReportsTab() {
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.type')}</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.modelName')}</th>
                   <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.totalImages')}</th>
-                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">评估得分</th>
+                  <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('reports.evaluationScore')}</th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--text-muted)]">{t('aigc.createdAt')}</th>
                   <th className="text-right px-4 py-3 font-medium text-[var(--text-muted)]">{t('common.actions')}</th>
                 </tr>
@@ -227,7 +227,7 @@ export default function AIGCReportsTab() {
                         report.model_type === 'txt2video' ? 'bg-blue-500/10 text-blue-400' :
                         'bg-orange-500/10 text-orange-400'
                       }`}>
-                        {report.model_type === 'txt2img' ? '文生图' : report.model_type === 'txt2video' ? '文生视频' : '图生图'}
+                        {report.model_type === 'txt2img' ? t('aigc.txt2img') : report.model_type === 'txt2video' ? t('aigc.txt2video') : t('aigc.img2img')}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[var(--text)]">{report.model_name}</td>
@@ -235,14 +235,14 @@ export default function AIGCReportsTab() {
                     <td className="px-4 py-3 text-right font-mono text-xs">
                       <div className="flex flex-col gap-0.5 items-end">
                         {report.clip_score_mean != null && <span className="text-[var(--accent)]">CLIP: {report.clip_score_mean.toFixed(2)}</span>}
-                        {report.lpips_mean != null && <span className="text-[var(--text)]">参考图感知距离: {report.lpips_mean.toFixed(4)}</span>}
+                        {report.lpips_mean != null && <span className="text-[var(--text)]">{t('reports.referenceDistance')}: {report.lpips_mean.toFixed(4)}</span>}
                         {report.clip_score_mean == null && report.lpips_mean == null && <span className="text-[var(--text-dim)]">-</span>}
                         {report.has_errors ? (
                           <span
-                            title={report.error_note || '失败/不完整结果'}
+                            title={report.error_note || t('reports.incompleteResult')}
                             className="inline-flex items-center rounded px-1 py-px text-[10px] font-medium text-white bg-amber-500/90 cursor-help"
                           >
-                            失败
+                            {t('reports.failed')}
                           </span>
                         ) : null}
                       </div>
@@ -253,7 +253,7 @@ export default function AIGCReportsTab() {
                         <Button variant="outline" size="sm" onClick={() => navigate(`/reports/aigc/${encodeURIComponent(report.task_id)}`)}>
                           <Eye size={14} />{t('common.view')}
                         </Button>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(report.task_id) }} className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title="删除">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(report.task_id) }} className="p-1.5 rounded cursor-pointer opacity-40 hover:opacity-100 hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all" title={t('common.delete')}>
                           <Trash2 size={14} />
                         </button>
                       </div>
