@@ -4,6 +4,7 @@ interface CompareSelection {
   reports: string[]
   rootPath: string
   backend: string
+  draftId?: string
 }
 
 interface CompareCtx {

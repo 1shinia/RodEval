@@ -105,6 +105,20 @@ def test_owner_can_save_llm_compare_with_report_identifiers(clients):
     assert json.loads(saved[0]['task_ids']) == report_ids
 
 
+def test_saved_compare_detail_is_owner_only(clients):
+    client_a, client_b, uid_a, _ = clients
+    report_id = svc_db.save_compare_report(
+        'my comparison', json.dumps(['perf_a', 'perf_b']), 2, user_id=uid_a
+    )
+    url = f'/api/v1/perf/compare/saved/{report_id}'
+    owned = client_a.get(url)
+    assert owned.status_code == 200
+    assert owned.get_json()['report']['id'] == report_id
+    assert json.loads(owned.get_json()['report']['task_ids']) == ['perf_a', 'perf_b']
+    assert client_b.get(url).status_code == 404
+    assert client_a.get('/api/v1/perf/compare/saved/99999999').status_code == 404
+
+
 def test_llm_compare_rejects_path_traversal_in_report_identifier(clients):
     client_a, *_ = clients
     resp = client_a.post('/api/v1/perf/compare/save', json={

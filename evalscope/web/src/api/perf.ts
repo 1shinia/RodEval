@@ -160,6 +160,10 @@ export async function listSavedCompareReports() {
   return api<{ reports: SavedCompareReport[] }>('/api/v1/perf/compare/saved')
 }
 
+export async function getSavedCompareReport(id: number) {
+  return api<{ report: SavedCompareReport }>(`/api/v1/perf/compare/saved/${id}`)
+}
+
 export async function deleteCompareReport(id: number) {
   return apiDelete<{ ok: boolean }>('/api/v1/perf/compare/saved/' + id)
 }

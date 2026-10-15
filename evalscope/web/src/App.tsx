@@ -85,6 +85,8 @@ function AppRoutes() {
           </Route>
           <Route path="/reports/:reportId" element={<PageErrorBoundary pageName="report-detail"><ReportDetailPage /></PageErrorBoundary>} />
           <Route path="/compare" element={<PageErrorBoundary pageName="compare"><ComparePage /></PageErrorBoundary>} />
+          <Route path="/compare/draft" element={<PageErrorBoundary pageName="compare"><ComparePage /></PageErrorBoundary>} />
+          <Route path="/compare/saved/:reportId" element={<PageErrorBoundary pageName="compare"><ComparePage /></PageErrorBoundary>} />
           <Route path="/eval" element={<PageErrorBoundary pageName="eval"><EvalLayout /></PageErrorBoundary>}>
             <Route index element={<Navigate to="/eval/llm" replace />} />
             <Route path="llm" element={<PageErrorBoundary pageName="eval"><EvalLLMTab /></PageErrorBoundary>} />

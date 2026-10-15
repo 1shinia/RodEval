@@ -2053,6 +2053,17 @@ def list_compare_reports():
         return jsonify({'error': 'Failed to list', 'error_id': error_id}), 500
 
 
+@bp_perf.route('/compare/saved/<int:report_id>', methods=['GET'])
+def get_compare_report(report_id: int):
+    """Retrieve one user's saved comparison by ID."""
+    from .. import db as _db
+    from .auth import get_current_user_id
+    report = _db.get_compare_report(report_id, user_id=get_current_user_id())
+    if report is None:
+        return jsonify({'error': 'Report not found'}), 404
+    return jsonify({'report': report}), 200
+
+
 @bp_perf.route('/compare/saved/<int:report_id>', methods=['DELETE'])
 def delete_compare_report(report_id: int):
     """Delete a saved compare report."""

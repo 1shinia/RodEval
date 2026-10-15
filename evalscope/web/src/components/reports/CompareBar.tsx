@@ -28,8 +28,13 @@ export default function CompareBar({
   const { setCompareSelection } = useCompare()
 
   const handleCompare = () => {
-    setCompareSelection({ reports: selected, rootPath, backend })
-    window.open(compareUrl || `/compare?root_path=${encodeURIComponent(rootPath)}`, '_blank')
+    // The dev UI may run over plain HTTP, where crypto.randomUUID is unavailable.
+    const draftId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    setCompareSelection({ reports: selected, rootPath, backend, draftId })
+    const target = new URL(compareUrl || '/compare', window.location.origin)
+    target.pathname = '/compare/draft'
+    target.searchParams.set('id', draftId)
+    window.open(target.pathname + target.search, '_blank')
   }
 
   const hasSelection = selected.length > 0

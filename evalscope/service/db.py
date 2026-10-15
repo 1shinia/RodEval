@@ -3068,6 +3068,23 @@ def list_compare_reports(user_id: int = 1) -> list[dict]:
     } for r in rows]
 
 
+def get_compare_report(report_id: int, user_id: int) -> dict | None:
+    """Return one saved comparison belonging to the user."""
+    conn = _get_conn()
+    row = conn.execute(
+        'SELECT id, name, task_ids, created_at, task_count, backend, root_path '
+        'FROM compare_reports WHERE id = ? AND user_id = ?',
+        (report_id, user_id),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        'id': row[0], 'name': row[1], 'task_ids': row[2],
+        'created_at': row[3], 'task_count': row[4],
+        'backend': row[5] or 'Perf', 'root_path': row[6] or '',
+    }
+
+
 def delete_compare_report(report_id: int, user_id: int | None = None) -> bool:
     """Delete a compare report by ID. Returns True if deleted."""
 

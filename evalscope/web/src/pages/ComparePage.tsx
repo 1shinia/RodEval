@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLocale } from '@/contexts/LocaleContext'
 import { useReports } from '@/contexts/ReportsContext'
 import { useCompare } from '@/contexts/CompareContext'
-import { useQueryParams } from '@/hooks/useQueryParams'
+import { useParams, useLocation, useSearchParams, useNavigate } from 'react-router-dom'
 import { getPredictions, getDataFrame } from '@/api/reports'
-import { comparePerfReports, type PerfCompareResponse, saveCompareReport, listSavedCompareReports, deleteCompareReport, type SavedCompareReport } from '@/api/perf'
+import { comparePerfReports, type PerfCompareResponse, saveCompareReport, listSavedCompareReports, getSavedCompareReport, deleteCompareReport, type SavedCompareReport } from '@/api/perf'
 import { listBenchmarks } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
 import type { ReportData, PredictionRow } from '@/api/types'
@@ -77,19 +77,63 @@ function modelBg(idx: number): string {
 // Main Component                                                      //
 // ------------------------------------------------------------------ //
 
+type ComparisonSelection = { reports: string[]; rootPath: string; backend: string }
+
 export default function ComparePage() {
+  const { reportId } = useParams()
+  const { pathname } = useLocation()
+  const [searchParams] = useSearchParams()
+  const { selection } = useCompare()
+  if (reportId !== undefined) return <SavedComparison key={reportId} reportId={reportId} />
+  if (pathname === '/compare/draft') {
+    return selection?.draftId && selection.draftId === searchParams.get('id')
+      ? <ComparisonView selection={selection} /> : <ComparisonMessage />
+  }
+  return <SavedReportsList />
+}
+
+function ComparisonMessage({ error }: { error?: string }) {
+  const { t } = useLocale()
+  const navigate = useNavigate()
+  return <div className="page-enter flex flex-col items-center gap-4 py-20">
+    <p>{error || t('compare.needTwo')}</p>
+    <Button onClick={() => navigate('/compare')}>{t('compareExtra.backToList')}</Button>
+  </div>
+}
+
+function SavedComparison({ reportId }: { reportId: string }) {
+  const [selection, setSelection] = useState<ComparisonSelection | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    getSavedCompareReport(Number(reportId)).then(({ report }) => {
+      const reports: unknown = JSON.parse(report.task_ids)
+      if (!Array.isArray(reports) || reports.length < 2 || !reports.every((id) => typeof id === 'string')) {
+        throw new Error('Invalid comparison report')
+      }
+      if (!cancelled) setSelection({ reports, rootPath: report.root_path, backend: report.backend === 'LLM' ? 'Native' : 'Perf' })
+    }).catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load report') })
+    return () => { cancelled = true }
+  }, [reportId])
+  if (error) return <ComparisonMessage error={error} />
+  if (!selection) return <Skeleton height={240} />
+  return <ComparisonView selection={selection} />
+}
+
+function ComparisonView({ selection }: { selection: ComparisonSelection }) {
   const { locale, t } = useLocale()
   const translate = useRef(t)
   useEffect(() => { translate.current = t }, [t])
-  const qp = useQueryParams()
-  const { selection, clearCompareSelection } = useCompare()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+
   const { rootPath: ctxRootPath, setRootPath, loadMultiReports, loading } = useReports()
 
-  const rootPath = qp.get('root_path') || selection?.rootPath || ctxRootPath
+  const rootPath = selection.rootPath || searchParams.get('root_path') || ctxRootPath
 
   // ── LLM comparison state (must be before early returns for hook ordering) ──
   const reportNames = useMemo(
-    () => (selection?.backend !== 'Perf' ? selection?.reports || [] : []),
+    () => (selection.backend !== 'Perf' ? selection.reports : []),
     [selection],
   )
 
@@ -114,15 +158,19 @@ export default function ComparePage() {
   }, [rootPath, ctxRootPath, setRootPath])
 
   useEffect(() => {
-    if (reportNames.length < 2) return
+    if (reportNames.length < 2 || (rootPath && rootPath !== ctxRootPath)) return
+    let cancelled = false
     setDataLoaded(false)
     loadMultiReports(reportNames)
-      .then((list) => { setReports(list); setDataLoaded(true) })
+      .then((list) => { if (!cancelled) { setReports(list); setDataLoaded(true) } })
       .catch((e) => {
-        toast.error(e instanceof Error ? e.message : translate.current('common.loadFailed'))
-        setDataLoaded(true)
+        if (!cancelled) {
+          toast.error(e instanceof Error ? e.message : translate.current('common.loadFailed'))
+          setDataLoaded(true)
+        }
       })
-  }, [reportNames, loadMultiReports])
+    return () => { cancelled = true }
+  }, [reportNames, rootPath, ctxRootPath, loadMultiReports])
 
   const { scoreTableData, scoreTableColumns, displayNames } = useMemo(() => {
     const displayNames = getDisplayNames(reportNames)
@@ -350,7 +398,7 @@ export default function ComparePage() {
       <Breadcrumb items={[{ label: t('reports.title'), href: '/reports' }, { label: t('compare.title') }]} />
 
       <div className="flex items-center justify-between">
-        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => clearCompareSelection()}>← {t('compareExtra.backToList')}</Button>
+        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => navigate('/compare')}>← {t('compareExtra.backToList')}</Button>
         <Button size="md" onClick={async () => {
           const name = reportNames.map((n) => parseReportName(n).model || n).join(' vs ').slice(0, 80)
           try {
@@ -951,7 +999,7 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
   const { t } = useLocale()
   const translate = useRef(t)
   useEffect(() => { translate.current = t }, [t])
-  const { clearCompareSelection } = useCompare()
+  const navigate = useNavigate()
   const [data, setData] = useState<PerfCompareResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1048,7 +1096,7 @@ function PerfCompareView({ taskIds }: { taskIds: string[] }) {
       <Breadcrumb items={[{ label: t('compareExtra.perfReports') }, { label: t('compare.title') }]} />
 
       <div className="flex items-center justify-between">
-        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => clearCompareSelection()}>← {t('compareExtra.backToList')}</Button>
+        <Button size="md" className="bg-[var(--accent-dim)] text-[var(--accent)] hover:bg-[var(--accent-glow)]" onClick={() => navigate('/compare')}>← {t('compareExtra.backToList')}</Button>
         <Button size="md" onClick={async () => {
           const name = `${valid.map((m) => m.label).join(' vs ')}`.slice(0, 80)
           try {
@@ -1242,7 +1290,7 @@ function SavedReportsList() {
   const [reports, setReports] = useState<SavedCompareReport[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
-  const { setCompareSelection } = useCompare()
+  const navigate = useNavigate()
 
   const load = useCallback(() => {
     setLoading(true)
@@ -1266,8 +1314,7 @@ function SavedReportsList() {
   }
 
   const handleOpen = (r: SavedCompareReport) => {
-    const ids = JSON.parse(r.task_ids) as string[]
-    setCompareSelection({ reports: ids, rootPath: r.root_path || '', backend: r.backend === 'LLM' ? 'Native' : 'Perf' })
+    navigate(`/compare/saved/${r.id}`)
   }
 
   const filtered = filter === 'all' ? reports : reports.filter((r) => r.backend === filter)
