@@ -361,7 +361,6 @@ class AIGCBackendManager(BackendManager):
         import io
         from PIL import Image
 
-        from .datasets.prompt_loader import load_prompts
         from .models.img2img import Img2ImgModel
         from .utils.media import create_thumbnails
         from .utils.progress import ProgressTracker
@@ -372,55 +371,40 @@ class AIGCBackendManager(BackendManager):
         thumbs_dir = output_dir / 'thumbnails'
         thumbs_dir.mkdir(exist_ok=True)
 
-        # Decode reference image from base64 if provided
-        reference_images: list = []
-        ref_image_base64 = getattr(config.eval, 'reference_image', None)
-        if ref_image_base64:
-            try:
-                # Strip data:image/...;base64, prefix if present
-                if ',' in ref_image_base64:
-                    ref_image_base64 = ref_image_base64.split(',', 1)[1]
-                img_bytes = base64.b64decode(ref_image_base64)
-                ref_img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
-                reference_images = [ref_img]
-                ref_w, ref_h = ref_img.size
-                gen_w = config.generate.width
-                gen_h = config.generate.height
-                ref_aspect = ref_w / ref_h
-                gen_aspect = gen_w / gen_h
-                logger.info(f'Loaded reference image: {ref_img.size}')
-                if abs(ref_aspect - gen_aspect) > 0.05:
-                    logger.warning(
-                        f'Reference image aspect ratio ({ref_w}x{ref_h}, {ref_aspect:.2f}) '
-                        f'differs from generation target ({gen_w}x{gen_h}, {gen_aspect:.2f}). '
-                        f'Reference will be letterboxed to fit target size — consider using '
-                        f'matching dimensions for best results.'
-                    )
-            except Exception as e:
-                logger.warning(f'Failed to decode reference image: {e}')
-                reference_images = []
-
-        # Load prompts — use custom_prompt if provided, otherwise load from dataset
-        custom_prompt = getattr(config.eval, 'custom_prompt', None)
-        if custom_prompt:
-            prompts = [custom_prompt.strip()]
-            logger.info(f'Using custom prompt for img2img: {prompts[0][:80]}...')
-        else:
-            logger.info(f'Loading prompts from: {config.eval.prompt_dataset}')
-            prompts = load_prompts(
-                config.eval.prompt_dataset,
-                limit=config.eval.prompt_limit,
-                custom_path=config.eval.custom_dataset_path,
-                shuffle=getattr(config.eval, 'random_prompt', False),
-                seed=config.generate.seed,
-            )
-        logger.info(f'Loaded {len(prompts)} prompts')
+        # Fail before model loading or any billable request.
+        ref_data = getattr(config.eval, 'reference_image', None)
+        if not isinstance(ref_data, str) or not ref_data:
+            raise ValueError('图生图需要参考图')
+        encoded = ref_data.split(',', 1)[1] if ref_data.startswith('data:image/') else ref_data
+        if len(encoded) > 4 * ((10 * 1024 * 1024 + 2) // 3):
+            raise ValueError('参考图不得超过 10 MB')
+        try:
+            img_bytes = base64.b64decode(encoded, validate=True)
+            if len(img_bytes) > 10 * 1024 * 1024:
+                raise ValueError('参考图不得超过 10 MB')
+            with Image.open(io.BytesIO(img_bytes)) as source:
+                if source.format not in ('PNG', 'JPEG', 'WEBP', 'BMP'):
+                    raise ValueError('参考图仅支持 PNG、JPEG、WEBP、BMP')
+                source.load()
+                ref_img = source.convert('RGB')
+            buf = io.BytesIO()
+            ref_img.save(buf, format='PNG')
+            if len(buf.getvalue()) > 10 * 1024 * 1024:
+                raise ValueError('参考图转换 PNG 后不得超过 10 MB')
+        except Exception as e:
+            raise ValueError('参考图格式无效或超过 10 MB，请重新上传') from e
+        reference_images = [ref_img]
+        ref_img.save(images_dir / 'reference.png')
+        prompt = getattr(config.eval, 'custom_prompt', None)
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError('图生图需要非空编辑指令')
+        prompts = [prompt.strip()]
+        logger.info('Loaded img2img reference %s and one editing instruction', ref_img.size)
 
         progress = ProgressTracker(output_dir / 'progress.json', total=len(prompts))
 
         # Load model
         model_config = config.model.dict()
-        model_config['strength'] = getattr(config.generate, 'strength', 0.8)
         model_config['tool'] = 'img2img'
         model = Img2ImgModel(model_config)
         model.load()
@@ -432,7 +416,7 @@ class AIGCBackendManager(BackendManager):
             per_sample_results = []
 
             for i, prompt in enumerate(prompts):
-                # Pass the same reference image for all prompts if provided
+                sample_started = time.monotonic()
                 img = model.generate(
                     [prompt],
                     reference_images=reference_images if reference_images else None,
@@ -440,9 +424,10 @@ class AIGCBackendManager(BackendManager):
                     height=config.generate.height,
                     num_inference_steps=config.generate.num_inference_steps,
                     guidance_scale=config.generate.guidance_scale,
-                    strength=getattr(config.generate, 'strength', 0.8),
                     negative_prompt=config.generate.negative_prompt,
-                    seed=config.generate.seed + i,
+                    seed=config.generate.seed + i if config.generate.seed is not None else None,
+                    prompt_extend=getattr(config.generate, 'prompt_extend', None),
+                    watermark=getattr(config.generate, 'watermark', None),
                 )[0]
 
                 # Save image
@@ -454,6 +439,11 @@ class AIGCBackendManager(BackendManager):
                 create_thumbnails([img], [thumb_path])
 
                 sample_result = {
+                    'generation_time': time.monotonic() - sample_started,
+                    'output_size': list(img.size),
+                    'request_parameters': (getattr(model, 'last_image_requests', []) or [{}])[0].get('parameters', {}),
+                    'request_seconds': (getattr(model, 'last_image_requests', []) or [{}])[0].get('request_seconds'),
+                    'metric_errors': {},
                     'index': i,
                     'prompt': prompt,
                     'image_path': str(img_path.relative_to(output_dir)),
@@ -463,46 +453,32 @@ class AIGCBackendManager(BackendManager):
                 if 'clip_score' in config.eval.metrics:
                     try:
                         from .metrics.clip_score import compute_clip_score
-                        score = compute_clip_score([img], [prompt])
-                        sample_result['clip_score'] = score[0]
+                        sample_result['clip_score'] = compute_clip_score([img], [prompt])[0]
                     except Exception as e:
+                        sample_result['metric_errors']['clip_score'] = '文本相关性指标计算失败，请检查服务日志和模型权重'
                         logger.warning(f'CLIP score computation failed: {e}')
-
                 if 'lpips' in config.eval.metrics:
-                    try:
-                        from .metrics.lpips import compute_lpips
-                        score = compute_lpips([img],
-                                              reference_images=reference_images[:1] if reference_images else None)
-                        sample_result['lpips'] = score[0]
-                    except Exception as e:
-                        logger.warning(f'LPIPS computation failed: {e}')
-
+                    sample_result['metric_errors']['lpips'] = '当前感知距离实现不是标准 LPIPS，图生图暂不计算'
                 per_sample_results.append(sample_result)
                 progress.update(i + 1)
 
             elapsed = time.time() - start_time
-            logger.info(f'Generated {len(prompts)} images in {elapsed:.1f}s')
-
-            # Compute aggregate metrics
             metrics = {}
             if 'clip_score' in config.eval.metrics:
-                from .metrics.clip_score import CLIP_SCORE_META
-                scores = [r['clip_score'] for r in per_sample_results]
-                metrics['clip_score_mean'] = sum(scores) / len(scores)
-                metrics['clip_score_min'] = min(scores)
-                metrics['clip_score_max'] = max(scores)
-                metrics['clip_score_meta'] = CLIP_SCORE_META  # 口径随结果落盘（0~1 余弦）
-                logger.info(f'CLIP Score: mean={metrics["clip_score_mean"]:.4f}')
-
-            if 'lpips' in config.eval.metrics:
-                scores = [r.get('lpips', 0) for r in per_sample_results if 'lpips' in r]
+                scores = [r['clip_score'] for r in per_sample_results if 'clip_score' in r]
+                metrics['clip_score_valid_samples'] = len(scores)
                 if scores:
-                    metrics['lpips_mean'] = sum(scores) / len(scores)
-                    logger.info(f'LPIPS (vs reference): mean={metrics["lpips_mean"]:.4f}')
+                    from .metrics.clip_score import CLIP_SCORE_META
+                    metrics['clip_score_mean'] = sum(scores) / len(scores)
+                    metrics['clip_score_min'] = min(scores)
+                    metrics['clip_score_max'] = max(scores)
+                    metrics['clip_score_meta'] = CLIP_SCORE_META
 
             results = {
                 'model': _safe_model_name(config.model.model_name_or_path, 'img2img'),
                 'model_type': 'img2img',
+                'reference_path': 'images/reference.png',
+                'reference_size': list(ref_img.size),
                 'num_samples': len(prompts),
                 'metrics': metrics,
                 'generation_time': elapsed,

@@ -46,10 +46,12 @@ export default function AIGCReportDetailPage() {
   // Aggregate metrics display
   const metricsSummary = useMemo<Array<{ label: string; value: string }>>(() => {
     if (!data?.metrics) return []
-    return Object.entries(data.metrics).map(([key, value]) => ({
-      label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-      value: typeof value === 'number' ? value.toFixed(4) : String(value),
-    }))
+    return Object.entries(data.metrics)
+      .filter(([key, value]) => data.model_type !== 'img2img' || (typeof value === 'number' && !key.endsWith('_valid_samples')))
+      .map(([key, value]) => ({
+        label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        value: typeof value === 'number' ? value.toFixed(4) : String(value),
+      }))
   }, [data])
 
   if (loading) {
@@ -122,6 +124,18 @@ export default function AIGCReportDetailPage() {
           )}
         </div>
       </div>
+
+      {data.model_type === 'img2img' && data.reference_url && (
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] p-6">
+          <h2 className="text-lg font-semibold text-[var(--text)] mb-4">参考图</h2>
+          <img src={data.reference_url} alt="图生图参考图" className="max-h-80 max-w-full object-contain" />
+          {data.reference_size && (
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              原图尺寸：{data.reference_size[0]} × {data.reference_size[1]}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Image Gallery */}
       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] p-6">
@@ -205,6 +219,16 @@ function SampleCard({ sample, onClick }: { sample: AIGCSampleResult; onClick: ()
             </span>
           </div>
         )}
+        {sample.output_size && (
+          <p className="text-xs text-[var(--text-muted)]">
+            输出尺寸：{sample.output_size[0]} × {sample.output_size[1]}
+          </p>
+        )}
+        {sample.metric_errors && Object.entries(sample.metric_errors).map(([metric, message]) => (
+          <p key={metric} className="text-xs text-[var(--danger)]" title={message}>
+            {metric}: {message}
+          </p>
+        ))}
       </div>
     </div>
   )

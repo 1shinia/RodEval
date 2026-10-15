@@ -104,6 +104,20 @@ class AIGCToolConfig(BaseArgument):
             for name in ('num_inference_steps', 'guidance_scale', 'seed'):
                 generate.setdefault(name, None)
             data['generate'] = generate
+        elif tool == 'img2img':
+            data = dict(data)
+            generate = dict(data.get('generate') or {})
+            if 'strength' in generate:
+                raise ValueError('图生图不支持 strength 参数')
+            api_mode = isinstance(model, dict) and bool(model.get('api_base'))
+            if api_mode:
+                for name in ('num_inference_steps', 'guidance_scale', 'seed'):
+                    generate.setdefault(name, None)
+            else:
+                if not api_mode and any(generate.get(name, 1) is None for name in
+                                        ('num_inference_steps', 'guidance_scale', 'seed')):
+                    raise ValueError('本地图生图参数不能为 null')
+            data['generate'] = generate
         elif tool != 'txt2img':
             generate = data.get('generate', {})
             if isinstance(generate, dict) and any(

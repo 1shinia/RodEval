@@ -385,8 +385,6 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
                 payload['negative_prompt'] = params['negative_prompt']
 
         if tool == 'img2img':
-            if params.get('strength'):
-                payload['strength'] = params['strength']
             ref_b64 = params.get('reference_image_b64')
             if ref_b64:
                 payload['image'] = f'data:image/png;base64,{ref_b64}'
@@ -397,12 +395,12 @@ class OpenAICompatibleAdapter(AIGCApiAdapter):
             if std_name in payload:
                 payload[alias_name] = payload.pop(std_name)
 
-        if tool == 'txt2img':
+        if tool in ('txt2img', 'img2img'):
             self.last_image_request = {
                 'parameters': {
                     key: value
                     for key, value in payload.items()
-                    if key != 'prompt'
+                    if key != 'prompt' and (tool != 'img2img' or key != aliases.get('image', 'image'))
                 },
             }
         return payload
@@ -1348,6 +1346,59 @@ class DashScopeImageAdapter(AIGCApiAdapter):
         return response.content
 
 
+class DashScopeImageEditAdapter(DashScopeImageAdapter):
+    """Qwen 2.0 synchronous single-reference editing protocol."""
+
+    def _resolve_url(self, tool):
+        if tool != 'img2img':
+            raise ValueError('图像编辑适配器仅支持图生图')
+        base = self.api_base.rstrip('/')
+        if not base.endswith('/api/v1') or 'compatible-mode' in base:
+            raise ValueError('百炼图生图 API 地址须以 /api/v1 结尾')
+        return f'{base}/services/aigc/multimodal-generation/generation'
+
+    def __init__(self, config):
+        AIGCApiAdapter.__init__(self, config)
+        if not re.fullmatch(
+            r'qwen-image-2\.0(?:-pro)?(?:-\d{4}-\d{2}-\d{2})?', self.model_name
+        ):
+            raise ValueError('图生图百炼首期仅支持 qwen-image-2.0 / qwen-image-2.0-pro')
+        if 'compatible-mode' in self.api_base:
+            raise ValueError('百炼图生图请使用 /api/v1 原生入口')
+        self.legacy = False
+        self.last_image_request = {}
+
+    def _build_payload(self, prompt, **params):
+        if not prompt.strip():
+            raise ValueError('图生图编辑指令不能为空')
+        reference = params.get('reference_image_b64')
+        if not reference:
+            raise ValueError('图生图需要有效参考图')
+        raw = base64.b64decode(reference, validate=True)
+        if len(raw) > 10 * 1024 * 1024:
+            raise ValueError('参考图不得超过 10 MB')
+        width, height = params.get('width', 1024), params.get('height', 1024)
+        if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in (width, height)):
+            raise ValueError('图生图输出尺寸须为正整数')
+        if not 512 * 512 <= width * height <= 2048 * 2048:
+            raise ValueError('千问图像编辑总像素须在 512×512～2048×2048')
+        payload = super()._build_payload(prompt, **params)
+        payload['input']['messages'][0]['content'].insert(0, {'image': f'data:image/png;base64,{reference}'})
+        for name in ('prompt_extend', 'watermark'):
+            if name in params and params[name] is not None:
+                if not isinstance(params[name], bool):
+                    raise ValueError(f'{name} 须为布尔值')
+                payload['parameters'][name] = params[name]
+        self.last_image_request = {'parameters': {'model': self.model_name, **payload['parameters']}}
+        return payload
+
+    def _is_async_response(self, data):
+        return False
+
+    def _handle_retry(self, response, url, headers, payload, **params):
+        raise ValueError(f'百炼图生图 HTTP {response.status_code}: {self._redact_secrets(response.text)[:300]}')
+
+
 def create_adapter(config: Dict[str, Any]) -> AIGCApiAdapter:
     """Factory: create the appropriate API adapter from model config.
 
@@ -1364,6 +1415,12 @@ def create_adapter(config: Dict[str, Any]) -> AIGCApiAdapter:
             return DashScopeImageAdapter(config)
         if provider not in ('openai', 'custom'):
             raise ValueError('文生图当前支持 OpenAI 兼容和百炼提供商')
+
+    if config.get('tool', config.get('model_type')) == 'img2img':
+        if provider == 'dashscope':
+            return DashScopeImageEditAdapter(config)
+        if provider not in ('openai', 'custom'):
+            raise ValueError('图生图当前支持 OpenAI 兼容和百炼千问')
 
     if provider in ('openai', 'custom'):
         return OpenAICompatibleAdapter(config)

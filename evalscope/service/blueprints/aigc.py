@@ -201,6 +201,9 @@ def get_aigc_report():
     with open(results_file) as f:
         results = json.load(f)
 
+    if results.get('model_type') == 'img2img' and results.get('reference_path'):
+        results['reference_url'] = f"/api/v1/aigc/file/{task_id}/{results['reference_path']}"
+
     # Build media URLs for each sample
     for sample in results.get('per_sample', []):
         img_path = sample.get('image_path', '')
@@ -494,6 +497,13 @@ def _build_aigc_config(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
     if config['tool'] == 'txt2img' and config['model'].get('api_base'):
         for name in ('num_inference_steps', 'guidance_scale', 'seed'):
             config['generate'][name] = data.get('generate', {}).get(name)
+
+    if config['tool'] == 'img2img':
+        generate = data.get('generate', {})
+        config['eval']['reference_image'] = data.get('eval', {}).get('reference_image')
+        if config['model'].get('api_base'):
+            for name in ('num_inference_steps', 'guidance_scale', 'seed'):
+                config['generate'][name] = generate.get(name)
 
     return config
 

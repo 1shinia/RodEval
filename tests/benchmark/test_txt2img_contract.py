@@ -21,8 +21,8 @@ def test_txt2img_prompt_dataset_dropdown_only_contains_builtin_image_sets():
     assert "{ value: 'parti', label: 'PartiPrompts (150 prompts)' }" in block
     assert "value: 'custom'" not in block
     assert "value: ''" not in block
-    assert "prompt_dataset: tool === 'txt2img' && promptDataset !== 'parti' ? 'drawbench' : promptDataset" in source
-    assert "tool !== 'txt2img' && promptDataset === 'custom'" in source
+    assert "prompt_dataset: tool !== 'txt2video' && promptDataset !== 'parti' ? 'drawbench' : promptDataset" in source
+    assert 'evalConfig.custom_dataset_path' not in source
 
 
 @pytest.mark.parametrize('message', ['invalid model', 'size is not supported', 'invalid resolution'])
@@ -63,9 +63,14 @@ def test_image_request_evidence_excludes_prompt_and_records_duration():
 def test_other_tools_keep_original_defaults(tool):
     from evalscope.backend.aigc_eval.arguments import AIGCToolConfig
     config = AIGCToolConfig(tool=tool, model={'model_name_or_path': 'm', 'api_base': 'https://example.test'})
-    assert config.generate.num_inference_steps == 50
-    assert config.generate.guidance_scale == 7.5
-    assert config.generate.seed == 42
+    if tool == 'img2img':
+        assert config.generate.num_inference_steps is None
+        assert config.generate.guidance_scale is None
+        assert config.generate.seed is None
+    else:
+        assert config.generate.num_inference_steps == 50
+        assert config.generate.guidance_scale == 7.5
+        assert config.generate.seed == 42
 
 
 def test_image_api_defaults_are_optional_but_explicit_values_are_preserved():

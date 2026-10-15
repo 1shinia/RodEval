@@ -1,7 +1,6 @@
 """Text-to-image model adapter using diffusers or API."""
 
 import logging
-import torch
 from io import BytesIO
 from PIL import Image
 from typing import Any, Dict, List
@@ -34,6 +33,7 @@ class Txt2ImgModel(AIGCModelBase):
             raise ImportError('diffusers is required for local txt2img. Install with: pip install diffusers')
 
         logger.info('Loading model: %s', self.model_name)
+        import torch
         dtype = torch.float16 if self.dtype == 'float16' else torch.float32
 
         self.pipe = StableDiffusionPipeline.from_pretrained(
@@ -76,6 +76,7 @@ class Txt2ImgModel(AIGCModelBase):
         if self.pipe is None:
             raise RuntimeError('Model not loaded. Call load() first.')
 
+        import torch
         generator = torch.Generator(device=self.device).manual_seed(seed) if seed is not None else None
         images = []
         for prompt in prompts:
@@ -98,6 +99,7 @@ class Txt2ImgModel(AIGCModelBase):
         if self.pipe is not None:
             del self.pipe
             self.pipe = None
+            import torch
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             logger.info('Model unloaded')

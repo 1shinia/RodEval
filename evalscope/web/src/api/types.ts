@@ -376,6 +376,8 @@ export interface AIGCSampleResult {
   clip_score?: number
   url: string
   video_url?: string
+  output_size?: [number, number]
+  metric_errors?: Record<string, string>
   thumbnail_url: string
 }
 
@@ -385,5 +387,10 @@ export interface AIGCReportResponse {
   num_samples: number
   metrics: Record<string, number>
   generation_time: number
+  reference_path?: string
+  reference_url?: string
+  reference_size?: [number, number]
+  request_parameters?: Record<string, unknown>
+  metric_errors?: Record<string, string>
   per_sample: AIGCSampleResult[]
 }

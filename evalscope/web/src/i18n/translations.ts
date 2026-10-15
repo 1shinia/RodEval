@@ -650,7 +650,7 @@ const en: Dict = {
     seed: 'Random Seed',
     numFrames: 'Number of Frames',
     fps: 'FPS',
-    strength: 'Strength',
+
     negativePrompt: 'Negative Prompt',
     evalConfig: 'Evaluation Configuration',
     promptDataset: 'Prompt Dataset',
@@ -1331,7 +1331,7 @@ const zh: Dict = {
     seed: '随机种子',
     numFrames: '帧数',
     fps: 'FPS',
-    strength: '去噪强度',
+
     negativePrompt: '负向提示词',
     evalConfig: '评估配置',
     promptDataset: '提示词数据集',

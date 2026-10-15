@@ -3,6 +3,7 @@
 import base64
 import io
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from PIL import Image
@@ -21,7 +22,8 @@ class Img2ImgModel(AIGCModelBase):
         self.pipe = None
         self.api_base = config.get('api_base')
         self._adapter = None
-        self.strength = config.get('strength', 0.8)
+
+
 
     def load(self) -> None:
         """Load the img2img pipeline or init API adapter."""
@@ -60,7 +62,6 @@ class Img2ImgModel(AIGCModelBase):
         height: int = 1024,
         num_inference_steps: int = 50,
         guidance_scale: float = 7.5,
-        strength: float = 0.8,
         negative_prompt: str = '',
         seed: int = 42,
         **kwargs,
@@ -74,33 +75,47 @@ class Img2ImgModel(AIGCModelBase):
             height: Output image height.
             num_inference_steps: Number of denoising steps.
             guidance_scale: CFG scale.
-            strength: How much to transform the reference image (0-1).
             negative_prompt: Negative prompt.
             seed: Random seed.
 
         Returns:
             List of PIL Images.
         """
+        if not reference_images or len(reference_images) != len(prompts) or any(
+            image is None for image in reference_images
+        ):
+            raise ValueError('图生图需要每条提示词对应一张有效参考图')
+        if any(not prompt.strip() for prompt in prompts):
+            raise ValueError('图生图编辑指令不能为空')
+        self.last_image_requests = []
         if self._adapter:
             tool = self.config.get('tool', 'img2img')
             images: List[Image.Image] = []
             for i, prompt in enumerate(prompts):
                 ref_b64 = None
                 if reference_images and i < len(reference_images) and reference_images[i] is not None:
-                    ref = self._fit_to_size(reference_images[i], width, height)
+                    ref = reference_images[i].convert('RGB')
                     buf = io.BytesIO()
                     ref.save(buf, format='PNG')
                     ref_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
 
+                request_started = time.monotonic()
                 img_bytes = self._adapter.generate(
                     prompt,
                     tool=tool,
                     width=width,
                     height=height,
                     seed=seed,
-                    strength=strength,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale,
+                    negative_prompt=negative_prompt,
                     reference_image_b64=ref_b64,
+                    prompt_extend=kwargs.get('prompt_extend'),
+                    watermark=kwargs.get('watermark'),
                 )
+                request = dict(getattr(self._adapter, 'last_image_request', {}))
+                request['request_seconds'] = time.monotonic() - request_started
+                self.last_image_requests.append(request)
                 images.append(Image.open(io.BytesIO(img_bytes)).convert('RGB'))
             return images
 
@@ -110,7 +125,7 @@ class Img2ImgModel(AIGCModelBase):
         return self._generate_local(
             prompts, reference_images,
             width, height, num_inference_steps,
-            guidance_scale, strength, negative_prompt, seed,
+            guidance_scale, negative_prompt, seed,
         )
 
     def _generate_local(
@@ -121,7 +136,6 @@ class Img2ImgModel(AIGCModelBase):
         height: int,
         num_inference_steps: int,
         guidance_scale: float,
-        strength: float,
         negative_prompt: str,
         seed: int,
     ) -> List[Image.Image]:
@@ -142,7 +156,6 @@ class Img2ImgModel(AIGCModelBase):
             result = self.pipe(
                 prompt=prompt,
                 image=init_image,
-                strength=strength,
                 num_inference_steps=num_inference_steps,
                 guidance_scale=guidance_scale,
                 negative_prompt=negative_prompt if negative_prompt else None,
