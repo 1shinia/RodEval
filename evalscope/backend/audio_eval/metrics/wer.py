@@ -6,7 +6,7 @@ from typing import Optional
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 # Chinese + English punctuation to strip before WER/CER
-_PUNCT_RE = re.compile(r'[，。！？、；：""''（）《》【】\s,.!?;:\"\'()\[\]{}]')
+_PUNCT_RE = re.compile(r"[，。！？、；：\"'（）《》【】,.!?;:()\[\]{}]")
 
 # Detect CJK (Chinese/Japanese/Korean) characters
 _CJK_RE = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]')
@@ -32,7 +32,7 @@ def _wordify(text: str) -> str:
 
 def _normalize(text: str) -> str:
     """Strip punctuation for fair WER/CER comparison."""
-    return _PUNCT_RE.sub('', text)
+    return re.sub(r'\s+', ' ', _PUNCT_RE.sub(' ', text)).strip()
 
 
 def compute_wer(reference: str, hypothesis: str) -> float:
@@ -71,8 +71,8 @@ def compute_cer(reference: str, hypothesis: str) -> float:
         logger.error('jiwer not installed. Install with: pip install jiwer')
         return -1.0
 
-    ref = _normalize(reference)
-    hyp = _normalize(hypothesis)
+    ref = _normalize(reference).replace(' ', '')
+    hyp = _normalize(hypothesis).replace(' ', '')
 
     if not ref.strip():
         return 0.0 if not hyp.strip() else 1.0

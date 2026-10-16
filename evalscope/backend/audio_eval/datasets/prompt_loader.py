@@ -42,7 +42,9 @@ def load_asr_samples(
     For ASR, the audio file is uploaded by the user, not provided by the dataset.
     The dataset only provides reference texts for WER/CER comparison.
     """
-    if dataset == 'custom' and custom_path:
+    if dataset == 'custom':
+        if not custom_path:
+            raise ValueError('custom ASR dataset path is required')
         return _load_custom_asr(custom_path, limit)
 
     samples = []
@@ -58,9 +60,11 @@ def load_tts_prompts(
     custom_path: Optional[str] = None,
 ) -> List[str]:
     """Load TTS text prompts. Returns list of strings."""
-    if dataset == 'custom' and custom_path:
+    if dataset == 'custom':
+        if not custom_path:
+            raise ValueError('custom TTS dataset path is required')
         return _load_custom_lines(custom_path, limit)
-    return random.sample(TTS_BUILTIN, min(limit, len(TTS_BUILTIN)))
+    return random.SystemRandom().sample(TTS_BUILTIN, min(limit, len(TTS_BUILTIN)))
 
 
 def _load_custom_asr(path: str, limit: int) -> List[dict]:

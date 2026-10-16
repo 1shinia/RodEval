@@ -1,4 +1,5 @@
-import { useId, useState, type SyntheticEvent } from 'react'
+import { useId, useEffect, useState, type SyntheticEvent } from 'react'
+import { api } from '@/api/client'
 import { useLocale } from '@/contexts/LocaleContext'
 
 import Button from '@/components/ui/Button'
@@ -40,14 +41,6 @@ const PROVIDER_OPTIONS: { value: string; label: string; apiPlaceholder: string; 
       { value: 'zhixiaobai', label: 'voiceZhixiaobai' },
       { value: 'zhiluo', label: 'voiceZhiluo' },
       { value: 'zhiyu', label: 'voiceZhiyu' },
-    ],
-  },
-  {
-    value: 'volcengine', label: 'providerVolcengine', apiPlaceholder: 'https://ark.cn-beijing.volces.com/api/v3', modelPlaceholder: 'doubao-xxx',
-    defaultVoice: 'zh_female_qingxin',
-    voices: [
-      { value: 'zh_female_qingxin', label: 'voiceQingxin' },
-      { value: 'zh_male_chunhou', label: 'voiceChunhou' },
     ],
   },
 ]
@@ -92,10 +85,12 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
   const [audioFormat, setAudioFormat] = useState('mp3')
   const [speed, setSpeed] = useState('1.0')
   const [customPrompt, setCustomPrompt] = useState('')
-  const [promptDataset, setPromptDataset] = useState('builtin')
+  const [builtinPrompts, setBuiltinPrompts] = useState<string[]>([])
+  const [promptLoadError, setPromptLoadError] = useState('')
   const [promptLimit, setPromptLimit] = useState('1')
   // TTS→ASR closed-loop
   const [asrEnabled, setAsrEnabled] = useState(false)
+  const [asrProvider, setAsrProvider] = useState('dashscope')
   const [asrModelName, setAsrModelName] = useState('paraformer-realtime-v2')
   const [asrApiBase, setAsrApiBase] = useState('https://ws-dwy81zmcwutmk6py.cn-beijing.maas.aliyuncs.com/api/v1')
   const [asrApiKey, setAsrApiKey] = useState('')
@@ -105,6 +100,14 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  useEffect(() => {
+    let active = true
+    api<{ prompts: string[] }>('/api/v1/audio/tts-prompts')
+      .then(data => { if (active) setBuiltinPrompts(data.prompts || []) })
+      .catch(() => { if (active) setPromptLoadError(t('evalAudioExtra.promptLoadFailed')) })
+    return () => { active = false }
+  }, [t])
+
   const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) {
@@ -112,11 +115,21 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
       setAudioFileName('')
       return
     }
+    if (file.size > 25 * 1024 * 1024) {
+      setAudioBase64('')
+      setAudioFileName('')
+      setErrors(prev => ({ ...prev, audio: t('evalAudioExtra.audioTooLarge') }))
+      e.target.value = ''
+      return
+    }
+    setErrors(prev => ({ ...prev, audio: '' }))
+    setAudioBase64('')
     setAudioFileName(file.name)
     const reader = new FileReader()
     reader.onload = () => {
       setAudioBase64(reader.result as string)
     }
+    reader.onerror = () => setErrors(prev => ({ ...prev, audio: t('evalAudioExtra.audioReadFailed') }))
     reader.readAsDataURL(file)
   }
 
@@ -127,6 +140,14 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     if (!model.trim()) newErrors.model = t('evalAudioExtra.modelRequired')
     if (!apiBase.trim()) newErrors.apiBase = t('evalAudioExtra.apiUrlRequired')
     if (!apiKey.trim()) newErrors.apiKey = t('evalAudioExtra.apiKeyRequired')
+    if (provider === 'volcengine') {
+      const expected = tool === 'asr' ? ['volc.bigasr.auc_turbo'] : ['seed-tts-2.0', 'seed-icl-2.0']
+      if (model.trim() && !expected.includes(model.trim())) newErrors.model = t('evalAudioExtra.volcModelHint')
+      if (tool === 'tts' && !voice.trim()) newErrors.voice = t('evalAudioExtra.volcVoiceHint')
+    }
+    if (tool === 'tts' && asrEnabled && asrProvider === 'volcengine' && asrModelName.trim() !== 'volc.bigasr.auc_turbo') {
+      newErrors.asrModel = t('evalAudioExtra.volcModelHint')
+    }
 
     // ASR requires audio file
     if (tool === 'asr' && !audioBase64) {
@@ -161,7 +182,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
 
     const evalConfig: Record<string, unknown> = {
       metrics: tool === 'asr' ? metrics : [],
-      prompt_dataset: promptDataset,
+      prompt_dataset: 'builtin',
       prompt_limit: Number(promptLimit) || 1,
     }
 
@@ -170,9 +191,15 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
     }
     if (tool === 'tts' && asrEnabled && asrModelName.trim()) {
       evalConfig.asr_model_name = asrModelName.trim()
+      evalConfig.asr_provider = asrProvider
       if (asrApiBase.trim()) evalConfig.asr_api_base = asrApiBase.trim()
       if (asrApiKey.trim()) evalConfig.asr_api_key = asrApiKey.trim()
       evalConfig.metrics = metrics.length > 0 ? metrics : ['wer', 'cer']
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
     }
 
     onSubmit({
@@ -205,12 +232,18 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
 
       <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <FormField label={t('evalAudioExtra.apiProvider')}>
+        <FormField label={t('evalAudioExtra.apiProvider')} className="md:col-span-2">
           <select value={provider} onChange={e => {
             const newProvider = e.target.value
             setProvider(newProvider)
             const p = PROVIDER_OPTIONS.find(o => o.value === newProvider)
             if (p) setVoice(p.defaultVoice)
+            setModel('')
+            setApiBase('')
+            if (newProvider === 'volcengine') {
+              setAudioFormat('mp3')
+              setSpeed('1.0')
+            }
           }} className={FORM_INPUT_CLASS}>
             {PROVIDER_OPTIONS.map(p => (
               <option key={p.value} value={p.value}>{t(`evalAudioExtra.${p.label}`)}</option>
@@ -218,7 +251,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
           </select>
         </FormField>
 
-        <FormField label={t('eval.ragModelName')} required error={errors.model}>
+        <FormField label={t('evalAudioExtra.model')} required error={errors.model} className="md:col-span-2">
           <input value={model}
             onChange={e => { setModel(e.target.value.trimStart()); if (errors.model) setErrors(p => ({ ...p, model: '' })) }}
             className={FORM_INPUT_CLASS} placeholder={currentProvider.modelPlaceholder} />
@@ -230,7 +263,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
             className={FORM_INPUT_CLASS} placeholder={currentProvider.apiPlaceholder} />
         </FormField>
 
-        <FormField label={t('eval.ragApiKey')} required error={errors.apiKey}>
+        <FormField label={t('evalAudioExtra.modelApiKey')} required error={errors.apiKey} className="md:col-span-2">
           <input type="password" value={apiKey}
             onChange={e => { setApiKey(e.target.value); if (errors.apiKey) setErrors(p => ({ ...p, apiKey: '' })) }}
             className={FORM_INPUT_CLASS} placeholder="sk-..." />
@@ -257,9 +290,9 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
             {t('evalAudioExtra.asrTitle')}
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label={t('evalAudioExtra.audioFile')} required error={errors.audio}>
+            <FormField label={t('evalAudioExtra.audioFile')} required error={errors.audio} hint={provider === 'volcengine' ? t('evalAudioExtra.volcAsrFileHint') : undefined}>
               <div className="flex items-center gap-3">
-                <input id={audioFileInputId} type="file" accept="audio/*"
+                <input id={audioFileInputId} type="file" accept={provider === 'volcengine' ? '.wav,.mp3,.ogg' : 'audio/*'}
                   onChange={handleAudioChange} className="peer sr-only" />
                 <label htmlFor={audioFileInputId}
                   className="inline-flex cursor-pointer rounded bg-[var(--accent)] px-3 py-1 text-sm text-white peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--accent)]">
@@ -305,7 +338,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
             {t('evalAudioExtra.ttsTitle')}
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <FormField label={t('evalAudioExtra.voice')}>
+            <FormField label={t('evalAudioExtra.voice')} required={provider === 'volcengine'} error={errors.voice} hint={provider === 'volcengine' ? t('evalAudioExtra.volcVoiceHint') : undefined}>
               <input
                 type="text"
                 value={voice}
@@ -325,12 +358,13 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
               <select value={audioFormat} onChange={e => setAudioFormat(e.target.value)} className={FORM_INPUT_CLASS}>
                 <option value="mp3">MP3</option>
                 <option value="wav">WAV</option>
-                <option value="ogg">OGG</option>
+                {provider !== 'volcengine' && <option value="ogg">OGG</option>}
+                {provider === 'volcengine' && <option value="ogg">OGG Opus</option>}
               </select>
             </FormField>
 
             <FormField label={t('evalAudioExtra.speed')}>
-              <input type="range" min="0.25" max="4.0" step="0.25"
+              <input type="range" min={provider === 'volcengine' ? '0.5' : '0.25'} max={provider === 'volcengine' ? '2.0' : '4.0'} step="0.25"
                 value={speed} onChange={e => setSpeed(e.target.value)}
                 className="w-full accent-[var(--accent)]" />
               <span className="text-xs text-[var(--text-muted)]">{speed}x</span>
@@ -347,10 +381,20 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
             </label>
             {asrEnabled && (
               <div className="mt-2 grid grid-cols-2 gap-3">
-                <FormField label={t('evalAudioExtra.asrModel')}>
+                <FormField label={t('evalAudioExtra.apiProvider')}>
+                  <select value={asrProvider} onChange={e => {
+                    const selected = e.target.value
+                    setAsrProvider(selected)
+                    setAsrModelName(selected === 'volcengine' ? 'volc.bigasr.auc_turbo' : selected === 'dashscope' ? 'paraformer-realtime-v2' : '')
+                    setAsrApiBase(selected === 'volcengine' ? 'https://openspeech.bytedance.com' : selected === 'dashscope' ? 'https://dashscope.aliyuncs.com/api/v1' : '')
+                  }} className={FORM_INPUT_CLASS}>
+                    {PROVIDER_OPTIONS.map(p => <option key={p.value} value={p.value}>{t(`evalAudioExtra.${p.label}`)}</option>)}
+                  </select>
+                </FormField>
+                <FormField label={t('evalAudioExtra.asrModel')} error={errors.asrModel}>
                   <input type="text" value={asrModelName} onChange={e => setAsrModelName(e.target.value)}
                     className={FORM_INPUT_CLASS}
-                    placeholder="paraformer-realtime-v2" />
+                    placeholder={asrProvider === 'volcengine' ? 'volc.bigasr.auc_turbo' : asrProvider === 'dashscope' ? 'paraformer-realtime-v2' : 'whisper-1'} />
                 </FormField>
                 <FormField label={t('evalAudioExtra.asrApiUrl')} hint={t('evalAudioExtra.asrApiUrlHint')}>
                   <input type="text" value={asrApiBase} onChange={e => setAsrApiBase(e.target.value)}
@@ -385,27 +429,28 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
           </div>
 
           {/* TTS Prompts */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label={t('aigc.promptDataset')}>
-              <select value={promptDataset} onChange={e => setPromptDataset(e.target.value)} className={FORM_INPUT_CLASS}>
-                <option value="builtin">{t('evalAudioExtra.builtinPrompts')}</option>
-                <option value="custom">{t('evalAudioExtra.customDataset')}</option>
-              </select>
-            </FormField>
-
-            <FormField label={t('evalAudioExtra.promptCount')}>
-              <input type="number" min="1" max="1000"
-                value={promptLimit} onChange={e => { const v = Math.max(1, Number(e.target.value)); setPromptLimit(String(v)) }}
-                className={FORM_INPUT_CLASS} />
-            </FormField>
-          </div>
-
           <FormField label={t('evalAudioExtra.customPrompt')} hint={t('evalAudioExtra.customPromptHint')}>
             <textarea value={customPrompt}
               onChange={e => setCustomPrompt(e.target.value)}
               className={FORM_INPUT_CLASS} rows={2}
               placeholder={t('evalAudioExtra.customPromptPlaceholder')} />
           </FormField>
+          <div className="text-sm text-[var(--text)]">
+            {t('evalAudioExtra.promptDataset')}: {t('evalAudioExtra.builtinPrompts')}
+          </div>
+          <FormField label={t('evalAudioExtra.promptCount')} hint={t('evalAudioExtra.promptCountHint')}>
+            <input type="number" min="1" max={10}
+              value={promptLimit} onChange={e => setPromptLimit(e.target.value.replace(/[^0-9]/g, ''))}
+              className={FORM_INPUT_CLASS} />
+          </FormField>
+          <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-deep)] p-3 space-y-2">
+            <div className="text-sm font-medium text-[var(--text)]">{t('evalAudioExtra.builtinPreview')}</div>
+            {promptLoadError ? <div className="text-sm text-red-500">{promptLoadError}</div> : (
+              <ol className="list-decimal pl-5 space-y-1 text-sm text-[var(--text-muted)]">
+                {builtinPrompts.map((prompt, index) => <li key={`${index}-${prompt}`}>{prompt}</li>)}
+              </ol>
+            )}
+          </div>
         </>
       )}
 

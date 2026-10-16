@@ -47,6 +47,9 @@ class AudioEvalConfig(BaseArgument):
     prompt_dataset: str = Field('builtin', description='Dataset (builtin/custom)')
     prompt_limit: int = Field(1, ge=1, le=1000, description='Number of prompts')
     custom_prompt: Optional[str] = Field(None, description='Custom prompt for TTS')
+    prompt_source: Optional[Literal['builtin', 'custom']] = Field(
+        None, description='Explicit TTS prompt source; None preserves legacy custom_prompt behavior'
+    )
     custom_dataset_path: Optional[str] = Field(
         None, description='Path to custom audio dataset (one item per line)'
     )
@@ -55,9 +58,13 @@ class AudioEvalConfig(BaseArgument):
     asr_model_name: Optional[str] = Field(
         None, description='ASR model name for TTS closed-loop evaluation (e.g. paraformer-realtime-v2)'
     )
+    asr_provider: Optional[Literal['openai', 'dashscope', 'volcengine']] = Field(
+        None, description='ASR API type (defaults to TTS provider if not set)'
+    )
     asr_api_base: Optional[str] = Field(
         None, description='ASR API base URL (defaults to TTS api_base if not set)'
     )
+    asr_api_key: Optional[str] = Field(None, description='ASR API key (defaults to TTS key if not set)')
 
 
 class AudioToolConfig(BaseArgument):

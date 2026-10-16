@@ -12,12 +12,19 @@ from evalscope.service.utils.log import (
     validate_task_id,
 )
 from evalscope.service.time_utils import epoch_to_utc_iso
+from evalscope.backend.audio_eval.datasets.prompt_loader import TTS_BUILTIN
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 bp_audio = Blueprint('audio', __name__, url_prefix='/api/v1/audio')
 
 OUTPUT_DIR = Path(_OUTPUT_DIR)
+
+
+@bp_audio.route('/tts-prompts', methods=['GET'])
+def get_tts_prompts():
+    """Return the built-in TTS prompts for the AUDIO evaluation form."""
+    return jsonify({'prompts': TTS_BUILTIN})
 
 
 def _require_task_access(task_id: str):

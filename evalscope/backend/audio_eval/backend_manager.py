@@ -12,6 +12,7 @@ from .arguments import AudioToolConfig
 logger = get_logger()
 
 MAX_MODEL_NAME_LENGTH = 200
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 
 def _safe_model_name(name: str, tool: str = 'unknown') -> str:
@@ -79,6 +80,9 @@ class AudioBackendManager(BackendManager):
         DashScope auto-detects transport: paraformer-* models → WebSocket, others → HTTP.
         """
         provider = model_config.get('provider', 'openai')
+        if provider == 'volcengine':
+            from .models.asr_volcengine import AsrModelVolcengine
+            return AsrModelVolcengine(model_config)
         if provider == 'dashscope':
             model_name = model_config.get('model_name_or_path', '')
             if model_name.lower().startswith('paraformer'):
@@ -109,6 +113,9 @@ class AudioBackendManager(BackendManager):
         DashScope auto-detects transport: Sambert models → WebSocket, others → HTTP.
         """
         provider = model_config.get('provider', 'openai')
+        if provider == 'volcengine':
+            from .models.tts_volcengine import TtsModelVolcengine
+            return TtsModelVolcengine(model_config)
         if provider == 'dashscope':
             model_name = model_config.get('model_name_or_path', '')
             if model_name.lower().startswith('sambert'):
@@ -161,13 +168,25 @@ class AudioBackendManager(BackendManager):
 
         if audio_base64:
             import base64
+            import binascii
             b64_data = audio_base64
             if ',' in b64_data:
                 b64_data = b64_data.split(',', 1)[1]
-            audio_bytes = base64.b64decode(b64_data)
+            if len(b64_data) > ((MAX_AUDIO_BYTES + 2) // 3) * 4:
+                raise ValueError('Audio size exceeds limit')
+            try:
+                audio_bytes = base64.b64decode(b64_data, validate=True)
+            except (ValueError, binascii.Error) as exc:
+                raise ValueError('Invalid audio encoding') from exc
+            if not audio_bytes or len(audio_bytes) > MAX_AUDIO_BYTES:
+                raise ValueError('Invalid audio size')
             audio_filename = getattr(config.generate, 'audio_filename', None) or 'input.wav'
+            if (not isinstance(audio_filename, str) or audio_filename in ('.', '..')
+                    or '/' in audio_filename or '\\' in audio_filename
+                    or '\x00' in audio_filename or len(audio_filename) > 255):
+                raise ValueError('Invalid audio filename')
             audio_path = str(audio_dir / audio_filename)
-            with open(audio_path, 'wb') as f:
+            with open(audio_path, 'xb') as f:
                 f.write(audio_bytes)
             logger.info(f'Decoded base64 audio → {audio_path} ({len(audio_bytes)} bytes)')
 
@@ -189,16 +208,16 @@ class AudioBackendManager(BackendManager):
         hypothesis = result['text']
         reference = config.generate.reference_text or ''
 
-        # Compute metrics
+        # Compute metrics only when a reference was supplied
         metrics_result: Dict[str, float] = {}
-        if 'wer' in config.eval.metrics:
+        if reference.strip() and 'wer' in config.eval.metrics:
             try:
                 metrics_result['wer'] = compute_wer(reference, hypothesis)
             except Exception as e:
                 logger.warning(f'WER computation failed: {e}')
                 metrics_result['wer'] = -1.0
 
-        if 'cer' in config.eval.metrics:
+        if reference.strip() and 'cer' in config.eval.metrics:
             try:
                 metrics_result['cer'] = compute_cer(reference, hypothesis)
             except Exception as e:
@@ -235,7 +254,7 @@ class AudioBackendManager(BackendManager):
 
     def _run_tts(self, config: AudioToolConfig) -> Dict[str, Any]:
         """Run TTS evaluation pipeline, optionally with ASR closed-loop eval."""
-        from .datasets.prompt_loader import load_tts_prompts
+        from evalscope.backend.audio_eval.datasets.prompt_loader import load_tts_prompts
         from .utils.audio import save_audio, get_audio_duration
 
         output_dir = self._ensure_output_dir(config.eval.output_dir)
@@ -244,7 +263,17 @@ class AudioBackendManager(BackendManager):
 
         # Load prompts
         custom_prompt = getattr(config.eval, 'custom_prompt', None)
-        if custom_prompt:
+        prompt_source = getattr(config.eval, 'prompt_source', None)
+        if prompt_source == 'custom':
+            if not custom_prompt or not custom_prompt.strip():
+                raise ValueError('custom prompt is required when prompt_source is custom')
+            prompts = [custom_prompt.strip()]
+        elif prompt_source == 'builtin':
+            prompts = load_tts_prompts(
+                'builtin', limit=config.eval.prompt_limit, custom_path=None,
+            )
+        elif custom_prompt:
+            # Legacy configs with a custom prompt continue to synthesize just that text.
             prompts = [custom_prompt.strip()]
         else:
             prompts = load_tts_prompts(
@@ -264,9 +293,9 @@ class AudioBackendManager(BackendManager):
         asr_model_name = getattr(config.eval, 'asr_model_name', None)
         if asr_model_name:
             asr_api_base = getattr(config.eval, 'asr_api_base', None) or config.model.api_base
-            # Auto-detect provider: paraformer-* → dashscope, otherwise inherit from TTS
-            asr_provider = config.model.provider
-            if asr_model_name.lower().startswith('paraformer'):
+            # Explicit ASR type wins; existing configurations retain model-name inference.
+            asr_provider = getattr(config.eval, 'asr_provider', None) or config.model.provider
+            if not getattr(config.eval, 'asr_provider', None) and asr_model_name.lower().startswith('paraformer'):
                 asr_provider = 'dashscope'
             asr_config = {
                 'model_name_or_path': asr_model_name,
@@ -400,9 +429,13 @@ class AudioBackendManager(BackendManager):
             results['metrics'] = metrics_summary
             results['asr_model'] = asr_model_name
 
-        results_path = output_dir / 'results.json'
+        all_failed = not per_sample_results or all('error' in sample for sample in per_sample_results)
+        results_path = output_dir / ('failed_results.json' if all_failed else 'results.json')
         with open(results_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
         logger.info(f'TTS results saved to {results_path}')
+
+        if all_failed:
+            raise RuntimeError('TTS evaluation: all samples failed')
 
         return results

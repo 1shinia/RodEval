@@ -82,14 +82,23 @@ class AsrModelDashScopeWS(AudioModelBase):
                 "format": audio_format,
             },
         }
-        # Detect actual sample rate for correct ASR decoding
+        # Raw PCM has no header; encoded formats must declare their actual rate.
         try:
-            from mutagen.mp3 import MP3
-            audio_info = MP3(audio_path)
-            if audio_info.info.sample_rate:
-                payload["parameters"]["sample_rate"] = audio_info.info.sample_rate
-        except Exception:
-            pass
+            if audio_format == 'pcm':
+                sample_rate = kwargs.get('sample_rate')
+            elif audio_format == 'wav':
+                import wave
+                with wave.open(audio_path, 'rb') as wav_file:
+                    sample_rate = wav_file.getframerate()
+            else:
+                from mutagen import File
+                audio_info = File(audio_path)
+                sample_rate = audio_info.info.sample_rate if audio_info else None
+        except Exception as exc:
+            raise ValueError(f'Cannot detect audio sample rate for {audio_format}: {exc}') from exc
+        if not isinstance(sample_rate, int) or sample_rate <= 0:
+            raise ValueError(f'Cannot detect audio sample rate for {audio_format}; raw PCM requires sample_rate')
+        payload["parameters"]["sample_rate"] = sample_rate
         if language and language != "auto":
             payload["parameters"]["language_hints"] = [language]
 

@@ -36,8 +36,8 @@ const defaultFilters: ReportFilters = {
   sortOrder: 'desc',
 }
 
-function primaryScore(r: AudioReportSummary): number {
-  return r.wer ?? r.cer ?? 0
+function primaryScore(r: AudioReportSummary): number | undefined {
+  return r.wer ?? r.cer
 }
 
 export default function AudioReportsTab() {
@@ -102,10 +102,12 @@ export default function AudioReportsTab() {
       const ds = new Set(filters.datasets.map((d) => d.toLowerCase()))
       list = list.filter((r) => ds.has(r.tool.toLowerCase()))
     }
-    list = list.filter((r) => {
-      const s = primaryScore(r)
-      return s >= filters.scoreMin && s <= filters.scoreMax
-    })
+    if (filters.scoreMin !== 0 || filters.scoreMax !== 1) {
+      list = list.filter((r) => {
+        const s = primaryScore(r)
+        return s != null && s >= filters.scoreMin && s <= filters.scoreMax
+      })
+    }
     const desc = filters.sortOrder === 'desc'
     list.sort((a, b) => {
       const da = new Date(a.created_at).getTime()
@@ -231,8 +233,8 @@ export default function AudioReportsTab() {
                       <div className="flex flex-col gap-0.5 items-end">
                         {r.wer != null && <span className="text-[var(--accent)]">WER: {r.wer.toFixed(4)}</span>}
                         {r.cer != null && <span className="text-[var(--text)]">CER: {r.cer.toFixed(4)}</span>}
+                        {r.wer == null && r.cer == null && <span className="text-[var(--text-dim)]">-</span>}
                         {r.num_samples != null && <span className="text-[var(--text-dim)]">{t('reports.sampleCount', { count: r.num_samples })}</span>}
-                        {r.wer == null && r.cer == null && r.num_samples == null && <span className="text-[var(--text-dim)]">-</span>}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</td>
