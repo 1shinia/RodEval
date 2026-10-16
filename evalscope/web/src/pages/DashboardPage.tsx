@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useReports } from '@/contexts/ReportsContext'
 import { useLocale } from '@/contexts/LocaleContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { listReports } from '@/api/reports'
 import type { ReportSummary } from '@/api/types'
 import Card from '@/components/ui/Card'
@@ -193,6 +194,7 @@ function t_pageLabel(total: number): string {
 const PAGE_SIZE = 20
 
 export default function DashboardPage() {
+  const { user } = useAuth()
   const { t } = useLocale()
   const { rootPath, setRootPath, serverAddress } = useReports()
   const navigate = useNavigate()
@@ -348,6 +350,7 @@ export default function DashboardPage() {
 
       {/* ── Path Bar ── */}
       <PathBar
+        showPath={user?.role === 'admin'}
         value={pathInput}
         onChange={setPathInput}
         onSubmit={handleScan}

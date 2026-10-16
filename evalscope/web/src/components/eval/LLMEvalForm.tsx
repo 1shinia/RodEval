@@ -47,7 +47,9 @@ function applyThinkingMode(config: Record<string, unknown>, mode: ThinkingMode) 
 export default function LLMEvalForm({ context }: Props) {
   const { t } = useLocale()
   const tRef = useRef(t)
-  tRef.current = t
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const { onSubmit, disabled, initialDataset, onApiKeyChange, isBatch, batchRunning, batchState,
@@ -489,7 +491,7 @@ export default function LLMEvalForm({ context }: Props) {
           </FormField>
           <FormField label={t('eval.evalType')}>
             <select value={evalType} onChange={(e) => setEvalType(e.target.value)} className={FORM_INPUT_CLASS}>
-              <option value="openai">OpenAI</option>
+              <option value="openai">{t('evalAudioExtra.providerOpenai')}</option>
               <option value="anthropic">Anthropic</option>
             </select>
           </FormField>

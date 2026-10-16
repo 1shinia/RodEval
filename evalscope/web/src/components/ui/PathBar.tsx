@@ -12,6 +12,7 @@ interface PathBarProps {
   scanning?: boolean
   disabled?: boolean
   icon?: ReactNode
+  showPath?: boolean
 }
 
 /**
@@ -28,20 +29,23 @@ export default function PathBar({
   scanning,
   disabled,
   icon,
+  showPath = true,
 }: PathBarProps) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] shadow-[var(--shadow-sm)]">
-      <span className="text-[var(--accent)] shrink-0 flex items-center">
-        {icon ?? <FolderInput size={18} />}
-      </span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
-        placeholder={placeholder}
-        className="flex-1 min-w-0 px-3 py-2 type-body-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent-dim)] transition-all duration-150"
-      />
+      {showPath && <>
+        <span className="text-[var(--accent)] shrink-0 flex items-center">
+          {icon ?? <FolderInput size={18} />}
+        </span>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+          placeholder={placeholder}
+          className="flex-1 min-w-0 px-3 py-2 type-body-sm rounded-[var(--radius-sm)] bg-[var(--bg-deep)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent-dim)] transition-all duration-150"
+        />
+      </>}
       <Button onClick={onSubmit} disabled={disabled || scanning} size="md">
         {scanning ? (
           <span className="flex items-center gap-1.5">

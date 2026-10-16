@@ -161,7 +161,7 @@ export default function LeaderboardPage() {
       </div>
 
       {/* 下拉框：榜单类型 / 分类维度(LLM) / 时间段(LLM) / 子榜单(其余) */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 flex-wrap [&_label]:text-sm">
         <div className="w-44">
           <Select label={t('leaderboardExtra.boardType')} options={typeOptions} value={validType} onChange={changeType} />
         </div>
