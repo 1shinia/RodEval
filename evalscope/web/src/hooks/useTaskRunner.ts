@@ -188,13 +188,15 @@ export function useTaskRunner({ api, taskPrefix }: UseTaskRunnerOptions) {
         setProgress(d.percent ?? 0)
         const outcome = classifyProgress(d)
         if (outcome) {
-          setRunning(false)
-          clearTaskId()
-          setResult({ ...outcome, task_id: taskId })
+          // Drain the final log before running=false cleans up this effect and SSE.
           try {
             const finalLog = await api.getLog(taskId, 0, 999999)
             if (!cancelled && finalLog.text) setLogText(finalLog.text)
           } catch { /* Status remains authoritative if the final log is unavailable. */ }
+          if (cancelled) return
+          setRunning(false)
+          clearTaskId()
+          setResult({ ...outcome, task_id: taskId })
           return
         }
         schedule(3000)

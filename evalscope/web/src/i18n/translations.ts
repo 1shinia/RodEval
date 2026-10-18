@@ -903,6 +903,10 @@ const en: Dict = {
       "batchSizePlaceholder": "Default: 20, maximum: 20",
       "languageCodesPlaceholder": "Or enter other language codes (comma-separated)",
       "randomSample": "Random sampling",
+      "truncateLabel": "API input truncation (characters)",
+      "truncateHint": "Off by default. When enabled, keep the first N Unicode characters of each query/document (initial value 2000). This is not a token limit and does not guarantee API acceptance. Changes evaluation inputs; policy and affected pair counts are saved with results.",
+      "truncateEnable": "Enable truncation (changes evaluation conditions)",
+      "truncateError": "Enter a positive integer character limit.",
       "encoderStageOne": "Encoder Model (Stage 1)",
       "encoderPlaceholder": "Select or enter an Embedding model"
   },
@@ -1928,6 +1932,10 @@ const zh: Dict = {
       "batchSizePlaceholder": "默认20，上限20",
       "languageCodesPlaceholder": "或手动输入其他语言代码（逗号分隔）",
       "randomSample": "随机抽取",
+      "truncateLabel": "API 输入截断（字符数）",
+      "truncateHint": "默认关闭。开启后，每条查询和文档只保留前 N 个 Unicode 字符（初始值 2000）。字符数不等于 Token 数，不保证供应商一定接受。此操作改变评测输入；结果目录保存规则及受影响查询—文档对数量。",
+      "truncateEnable": "启用截断（改变评测条件）",
+      "truncateError": "请输入正整数字符上限。",
       "encoderStageOne": "Encoder 模型（Stage 1）",
       "encoderPlaceholder": "选择或输入 Embedding 模型"
   },

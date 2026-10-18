@@ -65,7 +65,7 @@ const TYPE_DATASETS: Record<string, string[]> = {
 
 const RAGAS_METRICS = [
   'answer_relevancy', 'faithfulness', 'context_precision',
-  'context_recall', 'context_relevancy', 'answer_correctness',
+  'context_recall', 'answer_correctness',
 ]
 
 const LANG_OPTIONS: [string, string][] = [
@@ -90,11 +90,10 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
   const [ragLanguages, setRagLanguages] = useState('')
   const [ragLimit, setRagLimit] = useState('')
   const [ragRandomSample, setRagRandomSample] = useState(false)
+  const [truncateInput, setTruncateInput] = useState(false)
+  const [maxInputChars, setMaxInputChars] = useState('2000')
   const [ragBatchSize, setRagBatchSize] = useState('')
-  const [ragTopK, setRagTopK] = useState('')
 
-  const [ragTwoStage, setRagTwoStage] = useState(false)
-  const [ragEncoderModel, setRagEncoderModel] = useState('')
   const [ragPrompt, setRagPrompt] = useState('')
   const [ragDataHub, setRagDataHub] = useState('huggingface')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -109,7 +108,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
   const [ragasEmbBase, setRagasEmbBase] = useState('')
   const [ragasEmbKey, setRagasEmbKey] = useState('')
   const [ragasMetrics, setRagasMetrics] = useState<string[]>(['answer_relevancy', 'faithfulness'])
-  const [ragasLang, setRagasLang] = useState('english')
+  const ragasNeedsEmbeddings = ragasMetrics.some(metric => ['answer_relevancy', 'answer_correctness'].includes(metric))
 
   useEffect(() => {
     onApiKeyChange?.(ragApiKey)
@@ -171,7 +170,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
       const ragasErrors: Record<string, string> = {}
       if (!ragasTestset.trim()) ragasErrors.ragasTestset = t('perf.required')
       if (!ragasLlmModel.trim()) ragasErrors.ragasLlmModel = t('perf.required')
-      if (!ragasEmbModel.trim()) ragasErrors.ragasEmbModel = t('perf.required')
+      if (ragasNeedsEmbeddings && !ragasEmbModel.trim()) ragasErrors.ragasEmbModel = t('perf.required')
       if (ragasMetrics.length === 0) ragasErrors.ragasMetrics = t('evalRagExtra.metricRequired')
       if (Object.keys(ragasErrors).length > 0) {
         setErrors(ragasErrors)
@@ -190,14 +189,13 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
               api_base: ragasLlmBase.trim() || undefined,
               api_key: ragasLlmKey || undefined,
             },
-            embeddings: {
+            ...(ragasNeedsEmbeddings ? { embeddings: {
               model_name_or_path: ragasEmbModel.trim(),
               provider: ragasEmbProv,
               api_base: ragasEmbBase.trim() || undefined,
               api_key: ragasEmbKey || undefined,
-            },
+            } } : {}),
             metrics: ragasMetrics,
-            language: ragasLang,
           },
         },
       })
@@ -247,22 +245,21 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
       return
     }
 
+    if (ragTool === 'reranker' && truncateInput && (!Number.isSafeInteger(Number(maxInputChars)) || Number(maxInputChars) < 1)) {
+      setErrors({ maxInputChars: t('evalRagExtra.truncateError') })
+      return
+    }
     const modelConfig: Record<string, unknown> = {
       is_cross_encoder: ragTool === 'reranker',
       model_name: modelName,
       api_base: apiBase,
     }
+    if (ragTool === 'reranker' && truncateInput) modelConfig.model_kwargs = { max_input_chars: Number(maxInputChars) }
     if (ragPrompt.trim()) modelConfig.prompt = ragPrompt.trim()
     modelConfig.api_key = apiKey
     if (ragBatchSize) modelConfig.encode_kwargs = { batch_size: Number(ragBatchSize) }
 
     const models: Record<string, unknown>[] = [modelConfig]
-    if (ragTwoStage && ragEncoderModel.trim()) {
-      models.unshift({
-        model_name_or_path: ragEncoderModel.trim(),
-        is_cross_encoder: false,
-      })
-    }
 
     const evalCfg: Record<string, unknown> = {
       hub: ragDataHub,
@@ -272,7 +269,6 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
     if (ragLanguages) evalCfg.languages = ragLanguages.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
     if (ragLimit) evalCfg.limits = Number(ragLimit)
     if (ragLimit && ragRandomSample) evalCfg.random_sample = true
-    if (ragTopK) evalCfg.top_k = Number(ragTopK)
 
     onSubmit({
       eval_backend: 'RAGEval',
@@ -290,8 +286,6 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
         <select value={ragTool} onChange={e => setRagTool(e.target.value as RAGTool)} className={FORM_INPUT_CLASS + ' !w-auto'}>
           <option value="embedding">{t('evalRagExtra.toolEmbedding')}</option>
           <option value="reranker">{t('evalRagExtra.toolReranker')}</option>
-          <option value="ragas">RAGAS</option>
-          <option value="clip">{t('evalRagExtra.toolClip')}</option>
         </select>
       </div>
 
@@ -405,6 +399,15 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
                 className={`${FORM_INPUT_CLASS} text-xs`} placeholder={t('evalRagExtra.languageCodesPlaceholder')} />
             </FormField>
 
+            {ragTool === 'reranker' && (
+              <FormField label={t('evalRagExtra.truncateLabel')} hint={t('evalRagExtra.truncateHint')} error={errors.maxInputChars}>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={truncateInput} onChange={e => setTruncateInput(e.target.checked)} />
+                  {t('evalRagExtra.truncateEnable')}
+                </label>
+                {truncateInput && <input type="number" min={1} value={maxInputChars} onChange={e => setMaxInputChars(e.target.value)} className={FORM_INPUT_CLASS} />}
+              </FormField>
+            )}
             <FormField label={t('eval.ragLimit')} hint={t('eval.ragLimitHint')}>
               <div className="flex items-center gap-3">
                 <input type="number" value={ragLimit}
@@ -418,52 +421,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
                 </label>
               </div>
             </FormField>
-
-            {ragTool === 'reranker' && (
-              <FormField label={t('eval.ragTopK')}>
-                <input type="number" value={ragTopK}
-                  onChange={e => setRagTopK(e.target.value.replace(/[^0-9]/g, ''))}
-                  className={FORM_INPUT_CLASS} placeholder="10" />
-              </FormField>
-            )}
           </div>
-
-          {ragTool === 'reranker' && (
-            <div className="md:col-span-2 border-t border-[var(--border-md)] pt-3"></div>
-          )}
-
-          {ragTool === 'reranker' && (
-            <div className="md:col-span-2">
-              <div className="flex items-center gap-3 p-4 rounded-[var(--radius)] border border-[var(--border-md)] bg-[var(--bg-card2)] cursor-pointer"
-                onClick={() => setRagTwoStage(!ragTwoStage)}>
-                <input type="checkbox" checked={ragTwoStage} readOnly className="accent-[var(--accent)]" />
-                <div>
-                  <span className="text-sm font-medium text-[var(--text)]">{t('eval.ragTwoStage')}</span>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">{t('eval.ragTwoStageHint')}</p>
-                </div>
-              </div>
-              {ragTwoStage && (
-                <div className="mt-3 p-4 rounded-[var(--radius)] border border-[var(--accent-dim)] bg-[var(--bg-card)]">
-                  <FormField label={t('evalRagExtra.encoderStageOne')}>
-                    <input value={ragEncoderModel}
-                      onChange={e => setRagEncoderModel(e.target.value)}
-                      className={FORM_INPUT_CLASS} placeholder={t('evalRagExtra.encoderPlaceholder')}
-                      list="encoder-models" />
-                    <datalist id="encoder-models">
-                      <option value="BAAI/bge-large-zh-v1.5" />
-                      <option value="BAAI/bge-small-zh-v1.5" />
-                      <option value="BAAI/bge-large-en-v1.5" />
-                      <option value="BAAI/bge-small-en-v1.5" />
-                      <option value="intfloat/e5-large-v2" />
-                      <option value="intfloat/e5-base-v2" />
-                      <option value="sentence-transformers/all-MiniLM-L6-v2" />
-                      <option value="sentence-transformers/all-mpnet-base-v2" />
-                    </datalist>
-                  </FormField>
-                </div>
-              )}
-            </div>
-          )}
 
           <Button type="submit" variant="primary" disabled={disabled} className="btn-glow !mt-6">
             {t('eval.ragStartEval')}
@@ -500,6 +458,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
           </div>
 
           <div className="border-t border-[var(--border-md)] pt-3" />
+          {ragasNeedsEmbeddings && <>
           <h4 className="text-sm font-medium text-[var(--text)]">{t('eval.ragEmbeddingModel')}</h4>
           <p className="text-xs text-[var(--text-muted)] -mt-2 mb-1">{t('eval.ragEmbeddingModelHint')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -524,6 +483,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
             </FormField>
           </div>
 
+          </>}
           <div className="border-t border-[var(--border-md)] pt-3" />
           <div>
             <label className="text-sm font-medium text-[var(--text)]">{t('eval.ragMetrics')}</label>
@@ -541,10 +501,6 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
             </div>
           </div>
 
-          <FormField label={t('eval.ragLanguage')}>
-            <input value={ragasLang} onChange={e => setRagasLang(e.target.value)}
-              className={FORM_INPUT_CLASS} placeholder="english" />
-          </FormField>
 
           <Button type="submit" variant="primary" disabled={disabled} className="btn-glow !mt-6">
             {t('eval.ragStartEval')}

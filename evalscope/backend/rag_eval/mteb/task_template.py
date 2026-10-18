@@ -210,7 +210,8 @@ def _apply_retrieval_limits(task, limits: int, random_sample: bool = False) -> N
                 continue
 
             # queries is a HuggingFace Dataset with 'id' column
-            limited_queries = queries.select(range(limits))
+            selected_queries = queries.shuffle(seed=42) if random_sample else queries
+            limited_queries = selected_queries.select(range(limits))
             keep_qids = set(str(q) for q in limited_queries['id'])
 
             split_data['queries'] = limited_queries
@@ -229,6 +230,30 @@ def _apply_retrieval_limits(task, limits: int, random_sample: bool = False) -> N
                 f'Applied limits={limits} to {task.metadata.name}/{subset_key}/{split_key}: '
                 f'{len(limited_queries)} queries kept (was {len(queries)})'
             )
+
+
+def _apply_classification_limits(task, limits: int, random_sample: bool = False) -> None:
+    """Limit evaluation splits without truncating classifier training data."""
+    # Cross-validation derives training folds from the evaluation split itself.
+    if getattr(task, 'is_cross_validation', False):
+        logger.warning(f'Skipping limits for cross-validation classification task {task.metadata.name}')
+        return
+    train_split = getattr(task, 'train_split', 'train')
+
+    def limit_splits(data):
+        limited = {}
+        for key, value in data.items():
+            if isinstance(value, dict):
+                limited[key] = limit_splits(value)
+            elif key == train_split:
+                limited[key] = value
+                logger.info(f'Preserving classification training split {task.metadata.name}/{key}: {len(value)} samples')
+            else:
+                selected = value.shuffle(seed=42) if random_sample else value
+                limited[key] = selected.select(range(min(limits, len(selected))))
+        return DatasetDict(limited) if isinstance(data, DatasetDict) else limited
+
+    task.dataset = limit_splits(task.dataset)
 
 
 def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
@@ -273,6 +298,8 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
                 task.load_data()
                 if _is_retrieval_task(task):
                     _apply_retrieval_limits(task, eval_args.limits, eval_args.random_sample)
+                elif getattr(task.metadata, 'type', None) == 'Classification':
+                    _apply_classification_limits(task, eval_args.limits, eval_args.random_sample)
                 elif hasattr(task, 'dataset') and task.dataset is not None:
                     ds = task.dataset
                     _limit_fn = (lambda d: d.shuffle(seed=42)) if eval_args.random_sample else (lambda d: d)

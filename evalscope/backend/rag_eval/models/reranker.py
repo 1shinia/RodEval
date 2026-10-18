@@ -150,6 +150,7 @@ class APIReranker(BaseReranker):
         revision: Optional[str] = 'master',
         batch_size: int = 10,
         timeout: int = 60,
+        max_input_chars: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
         """Initialize APIReranker.
@@ -195,6 +196,13 @@ class APIReranker(BaseReranker):
         if resolved_api_key:
             self.headers['Authorization'] = f'Bearer {resolved_api_key}'
 
+        if max_input_chars is not None and (type(max_input_chars) is not int or max_input_chars < 1):
+            raise ValueError('max_input_chars must be a positive integer or null.')
+        self.max_input_chars = max_input_chars
+        self.input_audit = {'unit': 'unicode_characters', 'max_input_chars': max_input_chars,
+                           'evaluation_condition': 'truncated_inputs',
+                           'counting_scope': 'submitted_query_document_pairs_including_failed_requests',
+                           'evaluated_pairs': 0, 'truncated_pairs': 0}
         self.session = requests.Session()
 
     def predict(self, inputs1, inputs2=None, **kwargs: Any) -> Array:
@@ -258,13 +266,32 @@ class APIReranker(BaseReranker):
             for i in range(0, len(pairs), batch_size):
                 batch_pairs = pairs[i:i + batch_size]
                 documents = [doc for _, doc in batch_pairs]
+                original_query, original_documents = query, documents
+                if self.max_input_chars is not None:
+                    import json
+                    from pathlib import Path
+
+                    limit = self.max_input_chars
+                    truncated = sum(len(query) > limit or len(doc) > limit for doc in documents)
+                    request_query = query[:limit]
+                    documents = [doc[:limit] for doc in documents]
+                    self.input_audit['evaluated_pairs'] += len(documents)
+                    self.input_audit['truncated_pairs'] += truncated
+                    logger.info(f'Rerank input policy: max_input_chars={limit}; '
+                                f'truncated_pairs={self.input_audit["truncated_pairs"]}; '
+                                f'evaluated_pairs={self.input_audit["evaluated_pairs"]} (truncated-input evaluation)')
+                    if self.progress_path:
+                        audit_path = Path(self.progress_path).with_name('reranker_input_policy.json')
+                        audit_path.write_text(json.dumps(self.input_audit, indent=2), encoding='utf-8')
+                else:
+                    request_query = query
 
                 if self.is_dashscope:
                     # DashScope native format: {model, input: {query, documents}, parameters: {top_n}}
                     payload: Dict[str, Any] = {
                         'model': self.model_name,
                         'input': {
-                            'query': query,
+                            'query': request_query,
                             'documents': documents
                         },
                         'parameters': {
@@ -275,7 +302,7 @@ class APIReranker(BaseReranker):
                 else:
                     payload = {
                         'model': self.model_name,
-                        'query': query,
+                        'query': request_query,
                         'documents': documents,
                         'top_n': len(documents),
                         'return_documents': False,
@@ -305,7 +332,46 @@ class APIReranker(BaseReranker):
                             f'(attempt {attempt + 1}/{max_retries})'
                         )
                         time.sleep(wait_time)
-                response.raise_for_status()
+                assert response is not None
+                try:
+                    response.raise_for_status()
+                except requests.HTTPError:
+                    # Only expose selected diagnostic fields, never the raw response or payload.
+                    import re
+
+                    try:
+                        body = response.json()
+                    except ValueError:
+                        body = {}
+                    if not isinstance(body, dict):
+                        body = {}
+                    detail = body.get('error')
+                    detail = detail if isinstance(detail, dict) else body
+                    secrets = [original_query, *original_documents, request_query, *documents, self.headers.get('Authorization', '')]
+                    authorization = self.headers.get('Authorization', '')
+                    if authorization.startswith('Bearer '):
+                        secrets.append(authorization[7:])
+
+                    def safe_field(value):
+                        if not isinstance(value, (str, int)):
+                            return ''
+                        text = str(value)
+                        for secret in sorted((s for s in secrets if s), key=len, reverse=True):
+                            text = text.replace(secret, '[REDACTED]')
+                        text = re.sub(r'(?i)Bearer\s+\S+', 'Bearer [REDACTED]', text)
+                        return ' '.join(text.split())[:500]
+
+                    fields = {
+                        'code': detail.get('code'),
+                        'message': detail.get('message'),
+                        'request_id': body.get('request_id') or detail.get('request_id') or response.headers.get('X-Request-Id'),
+                    }
+                    summary = '; '.join(f'{key}={text}' for key, value in fields.items() if (text := safe_field(value)))
+                    message = f'Rerank API HTTP {response.status_code}'
+                    if summary:
+                        message += f': {summary}'
+                    logger.error(message)
+                    raise requests.HTTPError(message, response=response) from None
                 data = response.json()
 
                 if self.is_dashscope:

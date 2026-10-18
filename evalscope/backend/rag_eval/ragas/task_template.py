@@ -1,55 +1,20 @@
 import asyncio
-import importlib
+import re
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict
+
+from .arguments import SUPPORTED_METRICS, normalize_metric_name
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
 
 def import_metric(metric_name: str):
-    """Import a metric by name. Supports both ragas built-in and custom metrics.
-
-    Args:
-        metric_name: Either a ragas built-in metric name (e.g., 'answer_relevancy')
-                    or a full Python import path (e.g., 'mypackage.metrics.CustomMetric')
-
-    Returns:
-        The metric instance or class.
-    """
-    # Try as ragas built-in first
-    try:
-        import re
-        from ragas import metrics as ragas_metrics
-
-        # Build candidate names: exact, snake_case, lowercase
-        candidates = [metric_name]
-        snake = re.sub(r'(?<!^)(?=[A-Z])', '_', metric_name).lower()
-        if snake != metric_name:
-            candidates.append(snake)
-        if metric_name.lower() not in candidates:
-            candidates.append(metric_name.lower())
-
-        for name in candidates:
-            if hasattr(ragas_metrics, name):
-                obj = getattr(ragas_metrics, name)
-                if isinstance(obj, type):
-                    return obj()
-                return obj
-    except ImportError:
-        pass
-
-    # Try as full import path
-    if '.' in metric_name:
-        module_path, cls_name = metric_name.rsplit('.', 1)
-        module = importlib.import_module(module_path)
-        obj = getattr(module, cls_name)
-        if isinstance(obj, type):
-            return obj()
-        return obj
-
-    raise ImportError(f'Cannot import metric: {metric_name}')
+    """Construct a fresh supported metric, never a user-supplied import path."""
+    name = normalize_metric_name(metric_name)
+    from ragas import metrics
+    return getattr(metrics, SUPPORTED_METRICS[name])()
 
 
 def _build_llm(llm_config) -> Any:
@@ -72,7 +37,10 @@ def _build_llm(llm_config) -> Any:
             client_kwargs['api_key'] = llm_config.api_key
 
         client = OpenAI(**client_kwargs)
-        return llm_factory(llm_config.model_name, client=client)
+        options = {'temperature': llm_config.temperature}
+        if llm_config.max_tokens is not None:
+            options['max_tokens'] = llm_config.max_tokens
+        return llm_factory(llm_config.model_name, client=client, **options)
     except (ImportError, AttributeError, TypeError):
         logger.warning('Failed to use llm_factory, falling back to LangchainLLMWrapper', exc_info=True)
         from langchain_openai import ChatOpenAI
@@ -83,6 +51,7 @@ def _build_llm(llm_config) -> Any:
             base_url=llm_config.api_base,
             api_key=llm_config.api_key or 'EMPTY',
             temperature=llm_config.temperature,
+            max_tokens=llm_config.max_tokens,
         )
         return LangchainLLMWrapper(langchain_llm)
 
@@ -96,86 +65,81 @@ def _build_embeddings(embedding_config) -> Any:
     Returns:
         A BaseRagasEmbeddings or BaseRagasEmbedding instance.
     """
+    from ragas.embeddings.base import LangchainEmbeddingsWrapper
+
     if embedding_config.provider == 'openai':
-        try:
-            from openai import OpenAI
-            from ragas.embeddings import embedding_factory
-
-            client_kwargs: Dict[str, Any] = {}
-            if embedding_config.api_base:
-                client_kwargs['base_url'] = embedding_config.api_base
-            if embedding_config.api_key:
-                client_kwargs['api_key'] = embedding_config.api_key
-
-            client = OpenAI(**client_kwargs)
-            return embedding_factory('openai', model=embedding_config.model_name_or_path, client=client)
-        except (ImportError, AttributeError, TypeError):
-            logger.warning('Failed to use embedding_factory for openai', exc_info=True)
-            from langchain_openai import OpenAIEmbeddings
-            from ragas.embeddings.base import LangchainEmbeddingsWrapper
-
-            return LangchainEmbeddingsWrapper(
-                OpenAIEmbeddings(
-                    model=embedding_config.model_name_or_path,
-                    base_url=embedding_config.api_base,
-                    api_key=embedding_config.api_key or 'EMPTY',
-                )
-            )
-    else:
-        # Local model — resolve via ModelScope first
-        from evalscope.backend.rag_eval.models.utils import resolve_model_path
-        local_path = resolve_model_path(embedding_config.model_name_or_path)
-        try:
-            from ragas.embeddings import embedding_factory
-            return embedding_factory('huggingface', model=local_path)
-        except (ImportError, AttributeError, TypeError):
-            logger.warning('Failed to use embedding_factory for huggingface', exc_info=True)
-            from langchain_huggingface import HuggingFaceEmbeddings
-            from ragas.embeddings.base import LangchainEmbeddingsWrapper
-            return LangchainEmbeddingsWrapper(HuggingFaceEmbeddings(model_name=local_path))
+        from langchain_openai import OpenAIEmbeddings
+        return LangchainEmbeddingsWrapper(OpenAIEmbeddings(
+            model=embedding_config.model_name_or_path,
+            base_url=embedding_config.api_base,
+            api_key=embedding_config.api_key or 'EMPTY',
+            check_embedding_ctx_length=False,
+        ))
+    if embedding_config.provider != 'huggingface':
+        raise ValueError(f'Unsupported embedding provider: {embedding_config.provider}')
+    from evalscope.backend.rag_eval.models.utils import resolve_model_path
+    from langchain_huggingface import HuggingFaceEmbeddings
+    local_path = resolve_model_path(embedding_config.model_name_or_path)
+    return LangchainEmbeddingsWrapper(HuggingFaceEmbeddings(model_name=local_path))
 
 
-def _load_dataset(testset_file: str):
-    """Load evaluation dataset from JSON/JSONL file.
-
-    Args:
-        testset_file: Path to the dataset file (JSON or JSONL format).
-
-    Returns:
-        EvaluationDataset instance.
-    """
+def _load_dataset(testset_file: str, metrics=None):
+    """Load and validate JSON/JSONL rows into a RAGAS evaluation dataset."""
     from ragas.dataset_schema import EvaluationDataset, SingleTurnSample
 
     file_path = Path(testset_file)
+    if not file_path.is_file():
+        raise ValueError(f'RAGAS testset file does not exist: {testset_file}')
+    if file_path.suffix.lower() == '.jsonl':
+        rows = []
+        with file_path.open('r', encoding='utf-8') as file:
+            for line_number, line in enumerate(file, 1):
+                if not line.strip():
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f'Invalid JSONL at line {line_number}: {exc.msg}') from exc
+    else:
+        try:
+            with file_path.open('r', encoding='utf-8') as file:
+                data = json.load(file)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f'Invalid JSON testset: {exc.msg}') from exc
+        rows = data if isinstance(data, list) else [data]
 
-    if file_path.suffix == '.jsonl':
-        return EvaluationDataset.from_jsonl(file_path)
+    if not rows or any(not isinstance(row, dict) for row in rows):
+        raise ValueError('RAGAS testset must contain at least one JSON object row.')
 
-    with open(testset_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    if isinstance(data, list):
-        samples = []
-        for item in data:
-            raw_ctx = item.get('contexts', item.get('retrieved_contexts', []))
-            if raw_ctx is None:
-                retrieved_contexts = []
-            elif isinstance(raw_ctx, list):
-                retrieved_contexts = raw_ctx
+    required = set()
+    for metric in metrics or []:
+        for columns in getattr(metric, 'required_columns', {}).values():
+            required.update(columns)
+    samples = []
+    for row_number, item in enumerate(rows, 1):
+        raw_contexts = item.get('retrieved_contexts', item.get('contexts', []))
+        contexts = [] if raw_contexts is None else (
+            raw_contexts if isinstance(raw_contexts, list) else [str(raw_contexts)])
+        values = {
+            'user_input': item.get('user_input', item.get('question')),
+            'response': item.get('response', item.get('answer')),
+            'retrieved_contexts': contexts,
+            'reference': item.get('reference', item.get('ground_truth')),
+        }
+        missing = []
+        for field in required:
+            value = values.get(field)
+            if field == 'retrieved_contexts':
+                valid = (isinstance(value, list) and bool(value)
+                         and all(isinstance(text, str) and text.strip() for text in value))
             else:
-                retrieved_contexts = [str(raw_ctx)]
-
-            sample = SingleTurnSample(
-                user_input=item.get('question', item.get('user_input', '')),
-                response=item.get('answer', item.get('response', '')),
-                retrieved_contexts=retrieved_contexts,
-                reference=item.get('ground_truth', item.get('reference', '')),
-            )
-            samples.append(sample)
-        return EvaluationDataset(samples=samples)
-
-    # Single dict, wrap in a list
-    return EvaluationDataset.from_list([data])
+                valid = isinstance(value, str) and bool(value.strip())
+            if not valid:
+                missing.append(field)
+        if missing:
+            raise ValueError(f'RAGAS testset row {row_number} missing required field(s): {", ".join(sorted(missing))}')
+        samples.append(SingleTurnSample(**values))
+    return EvaluationDataset(samples=samples)
 
 
 async def _run_ragas_eval(args) -> Any:
@@ -190,17 +154,19 @@ async def _run_ragas_eval(args) -> Any:
     from ragas import aevaluate
     from ragas.run_config import RunConfig
 
-    # 1. Build LLM
+    from ragas.metrics.base import MetricWithEmbeddings
+
+    if not args.metrics:
+        raise ValueError('At least one RAGAS metric is required.')
+    metrics = [import_metric(name) for name in args.metrics]
+    dataset = _load_dataset(args.testset_file, metrics=metrics)
+    needs_embeddings = any(isinstance(metric, MetricWithEmbeddings) for metric in metrics)
+    if needs_embeddings and args.embeddings is None:
+        raise ValueError('Selected RAGAS metrics require an embedding model.')
+    if needs_embeddings and args.embeddings.provider not in ('openai', 'huggingface'):
+        raise ValueError(f'Unsupported embedding provider: {args.embeddings.provider}')
     llm = _build_llm(args.critic_llm)
-
-    # 2. Build Embeddings
-    embeddings = _build_embeddings(args.embeddings)
-
-    # 3. Load dataset
-    dataset = _load_dataset(args.testset_file)
-
-    # 4. Load metrics
-    metrics = [import_metric(m) for m in args.metrics]
+    embeddings = _build_embeddings(args.embeddings) if needs_embeddings else None
 
     # 5. Build run config
     run_config = RunConfig(timeout=600, max_retries=3, max_wait=60)
@@ -244,9 +210,33 @@ def rag_eval(args) -> dict:
     # Save results
     output_path = Path(args.testset_file).with_name(Path(args.testset_file).stem + '_score.json')
     result_df = result.to_pandas()
+    import numpy as np
+    import pandas as pd
+
+    scores = {}
+    counts = {}
+    for metric_name in args.metrics:
+        name = re.sub(r'(?<!^)(?=[A-Z])', '_', metric_name).lower()
+        if name not in result_df:
+            raise ValueError(f'No valid RAGAS result column: {name}')
+        values = pd.to_numeric(result_df[name], errors='coerce')
+        valid = values.notna() & np.isfinite(values) & values.between(0, 1)
+        valid_count = int(valid.sum())
+        failed_count = len(values) - valid_count
+        counts[name] = {'valid': valid_count, 'failed': failed_count, 'total': len(values)}
+        scores[name] = float(values[valid].mean()) if valid_count else None
+        result_df.loc[~valid, name] = None
+        logger.info('RAGAS %s: valid=%d failed=%d total=%d score=%s',
+                    name, valid_count, failed_count, len(values), scores[name])
+
     result_df.to_json(str(output_path), orient='records', force_ascii=False, indent=2)
-
-    logger.info(f'RAGAS evaluation complete. Results saved to {output_path}')
-    logger.info(f'Scores: {result}')
-
-    return dict(result._repr_dict)
+    summary_path = output_path.with_name(output_path.stem + '_summary.json')
+    summary_path.write_text(json.dumps({'scores': scores, 'counts': counts},
+                                      ensure_ascii=False, allow_nan=False, indent=2), encoding='utf-8')
+    if not any(count['valid'] for count in counts.values()):
+        raise ValueError('No valid RAGAS scores; see per-metric failure counts.')
+    if any(count['failed'] for count in counts.values()):
+        logger.warning('RAGAS evaluation has partial failures; scores use valid samples only. Counts: %s', counts)
+    logger.info('RAGAS evaluation complete. Results saved to %s', output_path)
+    logger.info('Scores: %s', scores)
+    return scores
