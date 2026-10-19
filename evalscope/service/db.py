@@ -92,7 +92,7 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 27  # Bump when adding migrations below
+SCHEMA_VERSION = 28  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -555,6 +555,11 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         DROP TABLE dataset_catalog_manual_reviews_old;
         CREATE INDEX IF NOT EXISTS idx_dataset_catalog_public
             ON dataset_catalog(published,status,category,benchmark);
+    '''
+    ),
+    (
+        28, 'add user authentication generation', '''
+        ALTER TABLE users ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 0;
     '''
     ),
 ]

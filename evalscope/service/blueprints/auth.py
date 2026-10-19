@@ -160,7 +160,7 @@ def ensure_admin_user() -> None:
 def _user_by_username(username: str) -> dict | None:
     conn = _get_conn()
     row = conn.execute(
-        'SELECT id, username, password_hash, role FROM users WHERE username = ? AND deleted_at IS NULL',
+        'SELECT id, username, password_hash, role, auth_version FROM users WHERE username = ? AND deleted_at IS NULL',
         (username,),
     ).fetchone()
     return dict(row) if row else None
@@ -172,6 +172,7 @@ def _create_token(user: dict) -> str:
         'sub': str(user['id']),
         'username': user['username'],
         'role': user['role'],
+        'auth_version': user.get('auth_version', 0),
         'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=_JWT_EXPIRY_HOURS),
         'iat': datetime.datetime.now(datetime.timezone.utc),
     }
@@ -320,6 +321,10 @@ def require_auth():
         uid = int(user.get('sub', '0'))
     except (TypeError, ValueError):
         return jsonify({'error': 'Token user is invalid'}), 401
+    # Recovery runs in a separate process: never cache the revocation generation.
+    generation = _get_conn().execute('SELECT auth_version FROM users WHERE id = ?', (uid,)).fetchone()
+    if generation is None or user.get('auth_version', 0) != generation['auth_version']:
+        return jsonify({'error': 'Token has been revoked'}), 401
     row = _get_user_row(uid)
     if row is None:
         return jsonify({'error': 'User account is disabled or deleted'}), 401

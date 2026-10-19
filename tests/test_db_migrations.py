@@ -519,7 +519,7 @@ def test_released_migrations_immutable():
     """
     assert len(RELEASED) == 25
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 27
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 28
 
 
 def test_fresh_db_converges(tmp_path):
