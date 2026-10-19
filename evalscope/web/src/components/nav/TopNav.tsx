@@ -117,6 +117,13 @@ export default function TopNav() {
                     用户管理
                   </button>
                 )}
+                {user?.role === 'admin' && (
+                  <button onClick={() => { window.open('/admin/datasets', '_blank'); setUserMenuOpen(false) }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg)] transition-colors">
+                    <Medal size={14} />
+                    {t('nav.datasetManagement')}
+                  </button>
+                )}
                 <button onClick={() => { setPwDialogOpen(true); setUserMenuOpen(false) }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg)] transition-colors">
                   <KeyRound size={14} />

@@ -59,6 +59,7 @@ class MTEBModelConfig(BaseArgument):
 class MTEBEvalConfig(BaseArgument):
     """MTEB evaluation configuration."""
 
+    catalog_selection: Optional[List[Dict]] = None
     task_names: Optional[List[str]] = None
     task_types: Optional[List[str]] = None
     languages: Optional[List[str]] = None

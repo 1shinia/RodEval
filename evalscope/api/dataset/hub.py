@@ -199,7 +199,23 @@ def download_dataset_file(
 ) -> str:
     """Download or resolve a single file from a dataset hub."""
     data_source = data_source or HubType.MODELSCOPE
-    if data_source != HubType.LOCAL:
+    if data_source != HubType.LOCAL and _dataset_offline():
+        try:
+            if data_source == HubType.MODELSCOPE:
+                from modelscope.hub.file_download import dataset_file_download
+                return dataset_file_download(
+                    dataset_id=data_id_or_path, file_path=file_path,
+                    revision=revision, cache_dir=cache_dir, local_files_only=True,
+                )
+            if data_source == HubType.HUGGINGFACE:
+                from huggingface_hub import hf_hub_download
+                return hf_hub_download(
+                    repo_id=data_id_or_path, filename=file_path, repo_type='dataset',
+                    revision=revision, cache_dir=cache_dir, local_files_only=True,
+                )
+        except Exception:
+            # Cache misses must never fall back to online preparation.
+            _raise_if_dataset_hub_access_is_offline(data_id_or_path)
         _raise_if_dataset_hub_access_is_offline(data_id_or_path)
 
     if data_source == HubType.HUGGINGFACE:

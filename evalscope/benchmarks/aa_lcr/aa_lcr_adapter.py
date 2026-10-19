@@ -127,6 +127,12 @@ class AALCRAdapter(DefaultDataAdapter):
         cache_root = Path(DEFAULT_EVALSCOPE_CACHE_DIR) / DEFAULT_CACHE_SUBDIR
         extracted_dir = cache_root / DEFAULT_EXTRACTED_DIR_NAME
 
+        from evalscope.api.dataset.hub import _dataset_offline
+        if _dataset_offline():
+            if extracted_dir.is_dir() and any(p.is_file() and p.stat().st_size for p in extracted_dir.rglob('*')):
+                return extracted_dir
+            raise RuntimeError('AA-LCR 文档缓存缺失，请联系管理员准备数据集。')
+
         if extracted_dir.exists():
             logger.info(f'AA-LCR documents found: {extracted_dir}')
             return extracted_dir
@@ -162,6 +168,16 @@ class AALCRAdapter(DefaultDataAdapter):
 
     def _get_context(self, record: Dict[str, Any]) -> str:
         doc_folder = self.text_dir / record['document_category'] / record['document_set_id']
+
+        from evalscope.api.dataset.hub import _dataset_offline
+        if _dataset_offline():
+            try:
+                if not doc_folder.is_dir() or not any(
+                    p.is_file() and p.read_text(encoding='utf-8').strip() for p in doc_folder.iterdir()
+                ):
+                    raise ValueError('Missing document content')
+            except (OSError, UnicodeError, ValueError) as exc:
+                raise RuntimeError('AA-LCR 文档缓存不完整，请联系管理员准备数据集。') from exc
 
         # Check if the document folder exists
         if not doc_folder.exists() or not doc_folder.is_dir():

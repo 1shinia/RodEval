@@ -92,7 +92,7 @@ def _write(fn, *, deadline_seconds: float | None = None, backoff: float = 0.15) 
 # Schema versioning — simple linear migration system
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 23  # Bump when adding migrations below
+SCHEMA_VERSION = 27  # Bump when adding migrations below
 
 # Each migration: (target_version, description, SQL statements)
 # Migrations are applied in order; only those with version > current are run.
@@ -468,6 +468,93 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
     (
         23, 'add task worker process identity', '''
         ALTER TABLE task_state ADD COLUMN pid_start_ticks INTEGER;
+    '''
+    ),
+    (
+        24, 'add offline dataset catalogue', '''
+        CREATE TABLE IF NOT EXISTS dataset_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            benchmark TEXT NOT NULL,
+            category TEXT NOT NULL CHECK(category IN ('llm','vlm','rag')),
+            source TEXT NOT NULL,
+            dataset_id TEXT NOT NULL,
+            revision TEXT,
+            subset TEXT NOT NULL DEFAULT '',
+            split TEXT NOT NULL DEFAULT '',
+            cache_path TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'candidate'
+                CHECK(status IN ('candidate','available','missing','unsupported','invalid','stale')),
+            published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),
+            manifest_json TEXT NOT NULL DEFAULT '{}',
+            details_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            validated_at TEXT,
+            UNIQUE(benchmark,category,source,dataset_id,subset,split,cache_path),
+            CHECK(published = 0 OR status = 'available')
+        );
+        CREATE INDEX IF NOT EXISTS idx_dataset_catalog_public
+            ON dataset_catalog(published,status,category,benchmark);
+    '''
+    ),
+    (
+        25, 'add dataset-level manual reviews', '''
+        CREATE TABLE dataset_catalog_manual_reviews (
+            category TEXT NOT NULL CHECK(category IN ('llm','vlm','rag')),
+            benchmark TEXT NOT NULL CHECK(length(trim(benchmark)) > 0),
+            passed INTEGER NOT NULL CHECK(passed IN (0,1)),
+            user_id INTEGER NOT NULL CHECK(user_id > 0),
+            at TEXT NOT NULL,
+            PRIMARY KEY(category, benchmark)
+        );
+    '''
+    ),
+    (
+        26, 'add dataset-level publication', '''
+        ALTER TABLE dataset_catalog_manual_reviews
+            ADD COLUMN published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1));
+    '''
+    ),
+    (
+        27, 'add agent dataset category', '''
+        ALTER TABLE dataset_catalog RENAME TO dataset_catalog_old;
+        CREATE TABLE dataset_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            benchmark TEXT NOT NULL,
+            category TEXT NOT NULL CHECK(category IN ('llm','vlm','rag','agent')),
+            source TEXT NOT NULL,
+            dataset_id TEXT NOT NULL,
+            revision TEXT,
+            subset TEXT NOT NULL DEFAULT '',
+            split TEXT NOT NULL DEFAULT '',
+            cache_path TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'candidate'
+                CHECK(status IN ('candidate','available','missing','unsupported','invalid','stale')),
+            published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),
+            manifest_json TEXT NOT NULL DEFAULT '{}',
+            details_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            validated_at TEXT,
+            UNIQUE(benchmark,category,source,dataset_id,subset,split,cache_path),
+            CHECK(published = 0 OR status = 'available')
+        );
+        INSERT INTO dataset_catalog SELECT * FROM dataset_catalog_old;
+        DROP TABLE dataset_catalog_old;
+        ALTER TABLE dataset_catalog_manual_reviews RENAME TO dataset_catalog_manual_reviews_old;
+        CREATE TABLE dataset_catalog_manual_reviews (
+            category TEXT NOT NULL CHECK(category IN ('llm','vlm','rag','agent')),
+            benchmark TEXT NOT NULL CHECK(length(trim(benchmark)) > 0),
+            passed INTEGER NOT NULL CHECK(passed IN (0,1)),
+            user_id INTEGER NOT NULL CHECK(user_id > 0),
+            at TEXT NOT NULL,
+            published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),
+            PRIMARY KEY(category, benchmark)
+        );
+        INSERT INTO dataset_catalog_manual_reviews SELECT * FROM dataset_catalog_manual_reviews_old;
+        DROP TABLE dataset_catalog_manual_reviews_old;
+        CREATE INDEX IF NOT EXISTS idx_dataset_catalog_public
+            ON dataset_catalog(published,status,category,benchmark);
     '''
     ),
 ]

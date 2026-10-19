@@ -195,9 +195,28 @@ class NeedleHaystackAdapter(DefaultDataAdapter):
         else:
             from modelscope import dataset_snapshot_download
             logger.info(f'Loading dataset from modelscope: > dataset_name: {dataset_name_or_path}')
-            dataset_path = dataset_snapshot_download(
-                dataset_name_or_path, allow_file_pattern=['PaulGraham_Essays.txt', 'Journey_to_the_West.txt']
-            )
+            offline = os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on')
+            try:
+                if offline:
+                    from modelscope.hub.snapshot_download import snapshot_download
+                    dataset_path = snapshot_download(
+                        dataset_name_or_path, repo_type='dataset', local_files_only=True,
+                        allow_file_pattern=['PaulGraham_Essays.txt', 'Journey_to_the_West.txt']
+                    )
+                else:
+                    dataset_path = dataset_snapshot_download(
+                        dataset_name_or_path, allow_file_pattern=['PaulGraham_Essays.txt', 'Journey_to_the_West.txt']
+                    )
+            except Exception as exc:
+                if offline:
+                    raise RuntimeError('语料缓存缺失，请联系管理员准备数据集。') from exc
+                raise
+
+        if os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on'):
+            required = {'english': 'PaulGraham_Essays.txt', 'chinese': 'Journey_to_the_West.txt'}
+            if any(not os.path.isfile(os.path.join(dataset_path, required[s]))
+                   for s in self.subset_list if s in required):
+                raise RuntimeError('语料缓存不完整，请联系管理员准备数据集。')
 
         # Load datasets for both subsets
         datasets = {}

@@ -127,6 +127,30 @@ def download_air_bench(
         Absolute path to the dataset root containing ``Foundation/`` and/or
         ``Chat/`` sub-directories.
     """
+    if os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on'):
+        cache_root = cache_dir or os.path.join(os.path.expanduser('~'), '.cache', 'modelscope', 'hub', 'datasets')
+        root = dataset_id if os.path.isdir(dataset_id) else os.path.join(cache_root, *dataset_id.split('/'))
+        try:
+            records = load_meta(root, track)
+            wanted = set(subset_dirs) if subset_dirs else None
+            seen = set()
+            for record in records:
+                folder = f"{record['task_name']}_{record['dataset_name']}"
+                if wanted is not None and folder not in wanted:
+                    continue
+                seen.add(folder)
+                # Match the real consumers, including Audio_Grounding's wav -> flac mapping.
+                audio_path, _ = resolve_audio_path(
+                    root, track, record['task_name'], record['dataset_name'], record['path']
+                )
+                if not os.path.isfile(audio_path):
+                    raise FileNotFoundError(audio_path)
+            if not seen or (wanted is not None and not wanted.issubset(seen)):
+                raise FileNotFoundError('Requested subsets are absent from metadata')
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise RuntimeError('AIR-Bench 数据集缓存不完整，请联系管理员准备元数据和所需音频。') from exc
+        return root
+
     if os.path.isdir(dataset_id):
         return dataset_id
 

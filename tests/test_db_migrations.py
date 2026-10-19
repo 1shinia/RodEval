@@ -393,6 +393,45 @@ RELEASED: list[tuple[int, str, str]] = [
         ALTER TABLE task_state ADD COLUMN pid_start_ticks INTEGER;
     '''
     ),
+    (
+        24, 'add offline dataset catalogue', '''
+        CREATE TABLE IF NOT EXISTS dataset_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            benchmark TEXT NOT NULL,
+            category TEXT NOT NULL CHECK(category IN ('llm','vlm','rag')),
+            source TEXT NOT NULL,
+            dataset_id TEXT NOT NULL,
+            revision TEXT,
+            subset TEXT NOT NULL DEFAULT '',
+            split TEXT NOT NULL DEFAULT '',
+            cache_path TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'candidate'
+                CHECK(status IN ('candidate','available','missing','unsupported','invalid','stale')),
+            published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),
+            manifest_json TEXT NOT NULL DEFAULT '{}',
+            details_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            validated_at TEXT,
+            UNIQUE(benchmark,category,source,dataset_id,subset,split,cache_path),
+            CHECK(published = 0 OR status = 'available')
+        );
+        CREATE INDEX IF NOT EXISTS idx_dataset_catalog_public
+            ON dataset_catalog(published,status,category,benchmark);
+    '''
+    ),
+    (
+        25, 'add dataset-level manual reviews', '''
+        CREATE TABLE dataset_catalog_manual_reviews (
+            category TEXT NOT NULL CHECK(category IN ('llm','vlm','rag')),
+            benchmark TEXT NOT NULL CHECK(length(trim(benchmark)) > 0),
+            passed INTEGER NOT NULL CHECK(passed IN (0,1)),
+            user_id INTEGER NOT NULL CHECK(user_id > 0),
+            at TEXT NOT NULL,
+            PRIMARY KEY(category, benchmark)
+        );
+    '''
+    ),
 ]
 
 # Pre-drift migration history (what the production DB actually recorded):
@@ -478,9 +517,9 @@ def test_released_migrations_immutable():
     Any in-place rewrite of a released migration fails this test on purpose —
     released migrations are append-only.
     """
-    assert len(RELEASED) == 23
+    assert len(RELEASED) == 25
     assert db._MIGRATIONS[: len(RELEASED)] == RELEASED
-    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 23
+    assert db.SCHEMA_VERSION == len(db._MIGRATIONS) == 27
 
 
 def test_fresh_db_converges(tmp_path):

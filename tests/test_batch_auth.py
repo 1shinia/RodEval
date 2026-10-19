@@ -150,7 +150,17 @@ class _DormantThread:
         pass
 
 
-def test_launch_persists_checkpoint_and_removes_credential_file(clients, monkeypatch):
+@pytest.fixture
+def published(monkeypatch):
+    from evalscope.service import dataset_catalog_inventory
+    monkeypatch.setattr(dataset_catalog_inventory, 'require_dataset_published', lambda *a: dict(
+        benchmark='gsm8k', category='llm', dataset_id='modelscope/gsm8k', revision=None,
+        subset='main', split='test', dataset_hub='modelscope', dataset_dir='/managed/cache',
+        details={'few_shot_num': 4}))
+    return {'gsm8k': {'_catalog_selection': [{'id': 1, 'fingerprint': 'a' * 64}]}}
+
+
+def test_launch_persists_checkpoint_and_removes_credential_file(clients, monkeypatch, published):
     client_a, _, uid_a, _ = clients
     batch_id = _upload_csv(client_a)
     monkeypatch.setattr(svc_eval.threading, 'Thread', _DormantThread)
@@ -158,7 +168,7 @@ def test_launch_persists_checkpoint_and_removes_credential_file(clients, monkeyp
     resp = client_a.post('/api/v1/eval/batch/launch', json={
         'batch_id': batch_id,
         'eval_backend': 'Native',
-        'datasets': ['gsm8k'],
+        'datasets': ['gsm8k'], 'dataset_args': published,
     })
 
     assert resp.status_code == 200, resp.data
@@ -181,12 +191,12 @@ def test_status_uses_durable_cancelled_checkpoint(clients):
     assert resp.get_json()['resumable'] is True
 
 
-def test_resume_reuses_original_batch_id_and_rejects_second_claim(clients, monkeypatch):
+def test_resume_reuses_original_batch_id_and_rejects_second_claim(clients, monkeypatch, published):
     client_a, _, _, _ = clients
     original = _upload_csv(client_a)
     monkeypatch.setattr(svc_eval.threading, 'Thread', _DormantThread)
     launch = client_a.post('/api/v1/eval/batch/launch', json={
-        'batch_id': original, 'eval_backend': 'Native', 'datasets': ['gsm8k'],
+        'batch_id': original, 'eval_backend': 'Native', 'datasets': ['gsm8k'], 'dataset_args': published,
     })
     assert launch.status_code == 200
     svc_db.update_batch_job(original, status='cancelled')
@@ -197,7 +207,7 @@ def test_resume_reuses_original_batch_id_and_rejects_second_claim(clients, monke
         'batch_id': original,
         'upload_id': upload_id,
         'eval_backend': 'Native',
-        'datasets': ['gsm8k'],
+        'datasets': ['gsm8k'], 'dataset_args': published,
     }
     resumed = client_a.post('/api/v1/eval/batch/resume', json=payload)
     duplicate = client_a.post('/api/v1/eval/batch/resume', json=payload)

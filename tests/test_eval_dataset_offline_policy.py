@@ -25,13 +25,24 @@ def test_admin_keeps_llm_vlm_dataset_configuration():
     assert result is not data
 
 
-def test_normal_user_is_forced_to_managed_offline_cache():
+@pytest.fixture
+def published(monkeypatch):
+    from evalscope.service import dataset_catalog_inventory
+    monkeypatch.setattr(dataset_catalog_inventory, 'require_dataset_published', lambda *a: dict(
+        benchmark='gsm8k', category='llm', dataset_id='modelscope/gsm8k', revision=None,
+        subset='main', split='test', dataset_hub='modelscope', dataset_dir=DEFAULT_DATASET_CACHE_DIR,
+        details={'few_shot_num': 4}))
+    return {'_catalog_selection': [{'id': 1, 'fingerprint': 'a' * 64}]}
+
+
+def test_normal_user_is_forced_to_managed_offline_cache(published):
     data = {
         'datasets': ['gsm8k'],
         'dataset_hub': 'huggingface',
         'dataset_dir': '/forged/cache',
         'dataset_args': {
             'gsm8k': {
+                **published,
                 'local_path': '/forged/data',
                 'force_redownload': True,
                 'subset_list': ['main'],
@@ -46,12 +57,17 @@ def test_normal_user_is_forced_to_managed_offline_cache():
     assert result['dataset_offline'] is True
     assert result['dataset_hub'] == 'modelscope'
     assert result['dataset_dir'] == DEFAULT_DATASET_CACHE_DIR
-    assert result['dataset_args'] == {'gsm8k': {'subset_list': ['main']}}
+    args = result['dataset_args']['gsm8k']
+    assert 'local_path' not in args
+    assert not args.get('force_redownload', False)
+    assert '_catalog_selection' not in args
+    assert args['subset_list'] == ['main']
 
 
-def test_normal_user_offline_policy_survives_task_config_roundtrip():
+def test_normal_user_offline_policy_survives_task_config_roundtrip(published):
     normalized = _apply_eval_dataset_policy(
-        {'model': 'demo', 'datasets': ['gsm8k'], 'api_url': 'http://example.test/v1'},
+        {'model': 'demo', 'datasets': ['gsm8k'], 'dataset_args': {'gsm8k': published},
+         'api_url': 'http://example.test/v1'},
         is_admin=False,
     )
 

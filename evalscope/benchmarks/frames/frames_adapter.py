@@ -74,12 +74,21 @@ class FramesAdapter(DefaultDataAdapter):
             logger.info(f'Loading dataset from {dataset_name_or_path}')
             dataset_path = dataset_name_or_path
         else:
-            from modelscope import dataset_snapshot_download
+            from evalscope.api.dataset.offline import resolve_dataset_snapshot
 
             # Load dataset from remote
             logger.info(f'Loading dataset from modelscope: > dataset_name: {dataset_name_or_path}')
             # download dataset snapshot
-            dataset_path = dataset_snapshot_download(dataset_name_or_path, allow_file_pattern='test.jsonl')
+            dataset_path = resolve_dataset_snapshot(dataset_name_or_path, allow_file_pattern='test.jsonl')
+
+        from evalscope.api.dataset.hub import _dataset_offline
+        if _dataset_offline() and not (
+            os.path.isfile(dataset_path) or any(
+                os.path.isfile(os.path.join(dataset_path, f'{stem}{ext}'))
+                for stem in (f'test_{self.eval_split}', 'test') for ext in ('.jsonl', '.csv', '.tsv')
+            ) or any(name.endswith('.arrow') for _, _, names in os.walk(dataset_path) for name in names)
+        ):
+            raise RuntimeError('FRAMES 数据集缓存不完整，请联系管理员准备数据集。')
 
         dataset = LocalDataLoader(
             data_id_or_path=dataset_path,

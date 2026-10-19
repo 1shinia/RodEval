@@ -99,8 +99,9 @@ class RemoteDataLoader(DataLoader):
         else:
             datasets_cache_dir = os.path.join(DEFAULT_EVALSCOPE_CACHE_DIR, 'datasets')
         dataset_cache_dir = os.path.join(datasets_cache_dir, f'{safe_filename(path)}-{dataset_hash}')
-        # force re-download: remove local cache if requested
-        if self.force_redownload and os.path.exists(dataset_cache_dir):
+        offline = os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on')
+        # Offline users may reuse cache, but must never delete it to force a download.
+        if self.force_redownload and not offline and os.path.exists(dataset_cache_dir):
             logger.info(f'Force redownload enabled. Removing cached dataset at: {dataset_cache_dir}')
             shutil.rmtree(dataset_cache_dir, ignore_errors=True)
 

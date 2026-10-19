@@ -145,6 +145,9 @@ def _preflight_offline_tasks(tasks: list, offline: bool, allow_download: bool) -
 
 def resolve_tasks(eval_args: MTEBEvalConfig) -> list:
     """Resolve tasks based on eval_args configuration."""
+    if eval_args.catalog_selection:
+        from evalscope.service.dataset_catalog_mteb import load_published_tasks
+        return load_published_tasks(eval_args.catalog_selection, eval_args.task_names or [])
     if eval_args.task_names:
         kwargs = {}
         if eval_args.languages:

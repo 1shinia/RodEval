@@ -88,6 +88,8 @@ def file_as_data(file: str, default_mime_type: str = 'image/png') -> tuple[bytes
 
         # handle url or file
         if is_http_url(file):
+            from evalscope.api.dataset.hub import _raise_if_dataset_hub_access_is_offline
+            _raise_if_dataset_hub_access_is_offline('远程媒体资源')
             client = httpx.Client()
             file_bytes = client.get(file).content
         else:
@@ -125,10 +127,16 @@ def download_url(url: str, save_path: str, num_retries: int = 3):
         num_retries (int): Number of times to retry on failure.
     """
     import requests
+    import tempfile
     from time import sleep
     from tqdm import tqdm
 
     save_path = os.path.abspath(save_path)
+    from evalscope.api.dataset.hub import _dataset_offline, _raise_if_dataset_hub_access_is_offline
+    if _dataset_offline():
+        if os.path.isfile(save_path) and os.path.getsize(save_path) > 0:
+            return
+        _raise_if_dataset_hub_access_is_offline('附属数据文件')
 
     # Check if the file already exists before opening any network connection.
     # A lightweight HEAD request is used to fetch content-length for size verification.
@@ -143,6 +151,7 @@ def download_url(url: str, save_path: str, num_retries: int = 3):
             logger.warning(f'HEAD request failed for {url}, will attempt full download: {e}')
 
     for attempt in range(num_retries):
+        partial_path = None
         try:
             with requests.get(url, stream=True, timeout=30) as response:
                 response.raise_for_status()
@@ -150,22 +159,35 @@ def download_url(url: str, save_path: str, num_retries: int = 3):
 
                 logger.info(f'Downloading {url} to {save_path} (attempt {attempt + 1}/{num_retries})...')
 
-                with open(save_path, 'wb') as f, tqdm(
+                with tempfile.NamedTemporaryFile(
+                    mode='wb', dir=os.path.dirname(save_path),
+                    prefix=f'.{os.path.basename(save_path)}.', suffix='.part', delete=False,
+                ) as f, tqdm(
                     desc=os.path.basename(save_path),
                     total=total_size,
                     unit='iB',
                     unit_scale=True,
                     unit_divisor=1024,
                 ) as bar:
+                    partial_path = f.name
+                    downloaded = 0
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             size = f.write(chunk)
+                            downloaded += size
                             bar.update(size)
+                    encoding = response.headers.get('content-encoding', '').strip().lower()
+                    if total_size and encoding in ('', 'identity') and downloaded != total_size:
+                        raise ValueError('Downloaded attachment size does not match Content-Length.')
+                os.replace(partial_path, save_path)
             logger.info(f'Downloaded {url} to {save_path}')
             return
         except Exception as e:
             logger.warning(f'Attempt {attempt + 1} failed to download {url}: {e}')
             if attempt < num_retries - 1:
                 sleep(2**attempt)  # Exponential backoff
+        finally:
+            if partial_path and os.path.exists(partial_path):
+                os.unlink(partial_path)
 
     raise RuntimeError(f'Failed to download {url} after {num_retries} attempts.')

@@ -108,10 +108,19 @@ class TIRBenchAdapter(VisionLanguageAdapter):
         else:
             from modelscope import dataset_snapshot_download
             logger.info(f'Downloading TIR-Bench dataset from ModelScope: {dataset_name_or_path}')
-            dataset_path = dataset_snapshot_download(
-                dataset_name_or_path,
-                allow_file_pattern=['data.zip'],
-            )
+            offline = os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on')
+            try:
+                if offline:
+                    from modelscope.hub.snapshot_download import snapshot_download
+                    dataset_path = snapshot_download(
+                        dataset_name_or_path, repo_type='dataset', local_files_only=True, allow_file_pattern=['data.zip']
+                    )
+                else:
+                    dataset_path = dataset_snapshot_download(dataset_name_or_path, allow_file_pattern=['data.zip'])
+            except Exception as exc:
+                if offline:
+                    raise RuntimeError('TIR-Bench 图片缓存缺失，请联系管理员准备数据集。') from exc
+                raise
 
         # Save for use in record_to_sample
         self.image_root = dataset_path
@@ -119,6 +128,9 @@ class TIRBenchAdapter(VisionLanguageAdapter):
         # Extract data.zip if the extracted directory does not yet exist
         extract_dir = os.path.join(dataset_path, 'data')
         zip_path = os.path.join(dataset_path, 'data.zip')
+        offline = os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on')
+        if offline and not os.path.isfile(zip_path) and not os.path.isdir(extract_dir):
+            raise RuntimeError('TIR-Bench 图片缓存缺失，请联系管理员准备数据集。')
         if not os.path.exists(extract_dir):
             if os.path.exists(zip_path):
                 logger.info(f'Extracting {zip_path} to {dataset_path} ...')
@@ -152,6 +164,8 @@ class TIRBenchAdapter(VisionLanguageAdapter):
                 continue
             full_path = os.path.join(self.image_root, img_path)
             if not os.path.exists(full_path):
+                if os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on'):
+                    raise RuntimeError(f'TIR-Bench 图片缓存缺失：{full_path}，请联系管理员准备数据集。')
                 logger.warning(f'Image not found: {full_path}')
                 continue
             ext = os.path.splitext(img_path)[1].lower().lstrip('.')

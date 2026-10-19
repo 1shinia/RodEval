@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useAuth } from '@/contexts/AuthContext'
+import PublishedDatasetPicker from './PublishedDatasetPicker'
+import type { PublishedDataset } from '@/api/datasetCatalog'
 import { listBenchmarks, getEvalTemplateDownloadUrl } from '@/api/eval'
 import { toast } from '@/components/common/Toast'
 import Button from '@/components/ui/Button'
@@ -100,6 +102,7 @@ export default function LLMEvalForm({ context }: Props) {
   // Dataset
   const [datasetHub, setDatasetHub] = useState('modelscope')
   const [datasets, setDatasets] = useState(initialDataset ?? '')
+  const [catalogEntries, setCatalogEntries] = useState<PublishedDataset[]>([])
   const [datasetPath, setDatasetPath] = useState('')
   const [datasetDir, setDatasetDir] = useState('')
   const isLocalDataset = datasetHub === 'local'
@@ -227,6 +230,11 @@ export default function LLMEvalForm({ context }: Props) {
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const catalogNames = datasets.split(/[,，]/).map(name => name.trim()).filter(Boolean)
+    if (!isAdmin && (!catalogNames.length || catalogNames.some(name => !catalogEntries.some(entry => entry.benchmark === name && entry.published)))) {
+      toast.error(t('eval.datasets') + ': 请选择已发布的数据集 / Select published datasets')
+      return
+    }
 
     // Warn if sandbox-required dataset selected without sandbox
     const selected = datasets.split(',').map(s => s.trim()).filter(Boolean)
@@ -277,6 +285,7 @@ export default function LLMEvalForm({ context }: Props) {
         judgeArgs.api_key = judgeApiKey.trim() || apiKey || ''
         judgeArgs.eval_type = isAnthropic ? 'anthropic_api' : 'openai_api'
       }
+
       const shared: Record<string, unknown> = {
         eval_backend: context.evalMode === 'rag' ? 'RAGEval' : context.evalMode === 'aigc' ? 'AIGCEval' : context.evalMode === 'audio' ? 'AudioEval' : '',
         datasets: dsList,
@@ -422,6 +431,10 @@ export default function LLMEvalForm({ context }: Props) {
       config.dataset_args = da
     }
 
+    const selectedArgs = (config.dataset_args || {}) as Record<string, unknown>
+
+    if (Object.keys(selectedArgs).length) config.dataset_args = selectedArgs
+
     // Judge model args
     if (judgeModel.trim() || judgeApiUrl.trim() || judgeApiKey.trim()) {
       const jma: Record<string, unknown> = {}
@@ -521,7 +534,7 @@ export default function LLMEvalForm({ context }: Props) {
           </FormField>
         )}
 
-        {isLocalDataset ? (<>
+        {!isAdmin ? <PublishedDatasetPicker categories={['llm', 'vlm', 'agent']} value={datasets} onChange={setDatasets} onEntriesChange={setCatalogEntries} /> : isLocalDataset ? (<>
           <FormField label={t('eval.datasets')} required error={errors.datasets} className="relative">
             <div ref={datasetInputRef}>
               <input value={datasets}
@@ -566,10 +579,10 @@ export default function LLMEvalForm({ context }: Props) {
           </FormField>
         )}
 
-        <FormField label={t('eval.datasetDir')}>
+        {isAdmin && <FormField label={t('eval.datasetDir')}>
           <input value={datasetDir} onChange={(e) => setDatasetDir(e.target.value)} className={FORM_INPUT_CLASS}
             placeholder="~/.cache/modelscope/hub/datasets" />
-        </FormField>
+        </FormField>}
 
         <FormField label={t('eval.limit')} error={errors.limit}>
           <div className="flex items-center gap-3">

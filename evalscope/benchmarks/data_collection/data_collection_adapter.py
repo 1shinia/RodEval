@@ -75,7 +75,30 @@ class DataCollectionAdapter(DefaultDataAdapter):
             # Load dataset from remote
             logger.info(f'Loading dataset from modelscope: > dataset_name: {dataset_name_or_path}')
             # download dataset snapshot
-            dataset_path = dataset_snapshot_download(dataset_name_or_path, allow_file_pattern='*.jsonl')
+            offline = os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on')
+            try:
+                if offline:
+                    from modelscope.hub.snapshot_download import snapshot_download
+                    dataset_path = snapshot_download(
+                        dataset_name_or_path, repo_type='dataset', local_files_only=True, allow_file_pattern='*.jsonl'
+                    )
+                else:
+                    dataset_path = dataset_snapshot_download(dataset_name_or_path, allow_file_pattern='*.jsonl')
+            except Exception as exc:
+                if offline:
+                    raise RuntimeError('数据集缓存缺失，请联系管理员准备数据集。') from exc
+                raise
+
+        if os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on'):
+            # Match LocalDataLoader's supported tabular filenames (and its Arrow cache fallback).
+            if os.path.isdir(dataset_path) and not any(
+                os.path.isfile(os.path.join(dataset_path, name))
+                for ext in ('.jsonl', '.csv', '.tsv')
+                for name in (f'test_{self.eval_split}{ext}', f'test{ext}')
+            ) and not any(
+                name.endswith('.arrow') for _, _, names in os.walk(dataset_path) for name in names
+            ):
+                raise RuntimeError('数据集缓存不完整，请联系管理员准备数据集。')
 
         dataset = LocalDataLoader(
             data_id_or_path=dataset_path,

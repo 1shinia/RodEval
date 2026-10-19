@@ -12,6 +12,7 @@ from . import db as _db
 from .blueprints import bp_eval, bp_perf, bp_reports
 from .blueprints.aigc import bp_aigc
 from .blueprints.audio import bp_audio
+from .blueprints.dataset_catalog import bp_dataset_catalog
 from .blueprints.auth import bp_auth, get_registration_policy, parse_env_bool, require_auth
 from .blueprints.leaderboard import bp_leaderboard
 from .rate_limit import SlidingWindowLimiter, classify_submission_path, get_client_ip, get_rate_policy
@@ -98,6 +99,7 @@ def create_app(outputs: str = None):
     app.register_blueprint(bp_audio)
     app.register_blueprint(bp_auth)
     app.register_blueprint(bp_leaderboard)
+    app.register_blueprint(bp_dataset_catalog, url_prefix='/api/v1/dataset-catalog')
 
     # Use HuggingFace mirror for MTEB dataset downloads (faster in CN)
     os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')

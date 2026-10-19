@@ -68,13 +68,29 @@ def _strip_normal_user_dataset_overrides(value):
 
 
 def _apply_eval_dataset_policy(data: dict, is_admin: bool) -> dict:
-    """Force normal LLM/VLM evaluations onto the managed offline dataset cache."""
+    """Apply dataset policy to every launch, batch and resume entry point."""
     import copy
 
     normalized = copy.deepcopy(data)
-    if is_admin or normalized.get('eval_backend') in (
-        EvalBackend.RAG_EVAL, EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL,
-    ):
+    if is_admin:
+        return normalized
+    backend = normalized.get('eval_backend')
+    if backend == EvalBackend.RAG_EVAL:
+        config = normalized.get('eval_config')
+        if not config:
+            return normalized  # Preserve the entry point's missing-config validation.
+        if not isinstance(config, dict) or not isinstance(config.get('tool', 'mteb'), str):
+            raise RequestValidationError('RAG eval_config must contain a valid tool.')
+        if config.get('tool', 'mteb').lower() != 'mteb':
+            raise RequestValidationError('普通用户仅可使用已开放的 Embedding、Reranker 数据集评测。', status_code=403)
+        try:
+            from ..dataset_catalog_policy import apply_rag_catalog_policy
+            normalized['eval_config'] = apply_rag_catalog_policy(
+                _apply_rag_dataset_policy(config, is_admin=False))
+        except ValueError as exc:
+            raise RequestValidationError(str(exc)) from exc
+        return normalized
+    if backend in (EvalBackend.AIGC_EVAL, EvalBackend.AUDIO_EVAL):
         return normalized
 
     normalized['dataset_offline'] = True
@@ -83,7 +99,11 @@ def _apply_eval_dataset_policy(data: dict, is_admin: bool) -> dict:
     normalized['dataset_args'] = _strip_normal_user_dataset_overrides(
         normalized.get('dataset_args') or {}
     )
-    return normalized
+    from ..dataset_catalog_policy import apply_catalog_policy
+    try:
+        return apply_catalog_policy(normalized)
+    except ValueError as exc:
+        raise RequestValidationError(str(exc), status_code=403) from exc
 
 
 def _apply_rag_dataset_policy(eval_config: dict, is_admin: bool) -> dict:
@@ -724,7 +744,7 @@ def run_evaluation():
             if not eval_config:
                 return jsonify({'error': 'eval_config is required for RAG eval'}), 400
 
-            tool = eval_config.get('tool', 'mteb')
+            tool = eval_config.get('tool', 'mteb').lower()
             if tool == 'mteb':
                 from .auth import get_current_role
                 try:
@@ -1802,7 +1822,7 @@ def launch_eval_batch():
                         if val is not None:
                             eval_data[key] = val
 
-                    if eval_backend in ('rag_eval', 'aigc_eval', 'audio_eval'):
+                    if eval_backend in (EvalBackend.RAG_EVAL, 'rag_eval', 'aigc_eval', 'audio_eval'):
                         ec = shared_config.get('eval_config')
                         if ec:
                             eval_data['eval_config'] = ec

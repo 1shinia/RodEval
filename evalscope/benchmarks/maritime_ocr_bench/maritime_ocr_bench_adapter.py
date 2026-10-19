@@ -91,12 +91,18 @@ class MaritimeOCRBenchAdapter(VisionLanguageAdapter):
             dataset_path = dataset_name_or_path
             logger.info(f'Loading Maritime-OCR-Bench from local path: {dataset_path}')
         else:
-            from modelscope import dataset_snapshot_download
+            from evalscope.api.dataset.offline import resolve_dataset_snapshot
 
             logger.info(f'Downloading Maritime-OCR-Bench dataset from ModelScope: {dataset_name_or_path}')
-            dataset_path = dataset_snapshot_download(dataset_name_or_path)
+            dataset_path = resolve_dataset_snapshot(dataset_name_or_path)
 
-        dataset_file = self._resolve_dataset_file(dataset_path)
+        try:
+            dataset_file = self._resolve_dataset_file(dataset_path)
+        except FileNotFoundError as exc:
+            from evalscope.api.dataset.hub import _dataset_offline
+            if _dataset_offline():
+                raise RuntimeError('Maritime-OCR 数据集缓存缺失，请联系管理员准备数据集。') from exc
+            raise
         self.data_root = os.path.dirname(dataset_file)
 
         dataset = LocalDataLoader(

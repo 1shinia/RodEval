@@ -203,7 +203,16 @@ class HealthBenchAdapter(DefaultDataAdapter):
             # Load dataset from remote
             logger.info(f'Loading dataset from modelscope: > dataset_name: {dataset_name_or_path}')
             # download dataset snapshot
-            dataset_path = dataset_snapshot_download(dataset_name_or_path, allow_file_pattern=self.version_file)
+            from evalscope.api.dataset.hub import download_dataset_file
+            if os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on'):
+                dataset_path = os.path.dirname(download_dataset_file(dataset_name_or_path, self.version_file))
+            else:
+                dataset_path = dataset_snapshot_download(dataset_name_or_path, allow_file_pattern=self.version_file)
+
+        if os.environ.get('EVALSCOPE_DATASET_OFFLINE', '').lower() in ('1', 'true', 'yes', 'on'):
+            required = os.path.join(dataset_path, self.version_file) if os.path.isdir(dataset_path) else dataset_path
+            if not os.path.isfile(required):
+                raise RuntimeError('HealthBench 数据集缓存不完整，请联系管理员准备数据集。')
 
         # Create local data loader with specified parameters
         dataset = LocalDataLoader(

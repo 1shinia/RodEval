@@ -7,6 +7,7 @@ interface Dict {
 const en: Dict = {
   nav: {
     dashboard: 'Dashboard',
+    datasetManagement: 'Dataset management',
     modelComparison: 'Model Comparison',
     leaderboard: 'Leaderboard',
     eval: 'Evaluation',
@@ -361,7 +362,7 @@ const en: Dict = {
     agent: 'Agent',
     multimodal: 'Multimodal (VLM)',
     rag: 'RAG',
-    aigc: 'AIGC (Text-to-Image)',
+    aigc: 'Image Generation & Editing',
     noDescription: 'No description available',
     search: 'Search benchmarks...',
     use: 'Use',
@@ -892,6 +893,7 @@ const en: Dict = {
       "languageRussian": "Russian",
       "languagePortuguese": "Portuguese",
       "metricRequired": "Select at least one metric",
+    "publishedVersionRequired": "Select explicit tasks and published versions.",
     "requiredForApiModels": "Required for API models",
     "tool": "Evaluation Tool",
     "toolEmbedding": "Embedding",
@@ -1036,6 +1038,7 @@ const en: Dict = {
 const zh: Dict = {
   nav: {
     dashboard: '看板',
+    datasetManagement: '数据集管理',
     modelComparison: '模型对比',
     leaderboard: '评测榜单',
     eval: '模型评估',
@@ -1389,8 +1392,8 @@ const zh: Dict = {
     text: '文本 (LLM)',
     agent: '智能体 (Agent)',
     multimodal: '多模态 (VLM)',
-    rag: 'RAG',
-    aigc: '文生图 (AIGC)',
+    rag: '检索增强生成 (RAG)',
+    aigc: '图片生成与编辑 (AIGC)',
     noDescription: '暂无描述',
     search: '搜索基准测试...',
     use: '使用',
@@ -1921,6 +1924,7 @@ const zh: Dict = {
       "languageRussian": "俄语",
       "languagePortuguese": "葡萄牙语",
       "metricRequired": "请至少选择一个指标",
+    "publishedVersionRequired": "请明确选择任务及已发布版本。",
     "requiredForApiModels": "API 模型必填",
     "tool": "评估工具",
     "toolEmbedding": "Embedding 向量模型",

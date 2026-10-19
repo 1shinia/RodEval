@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useAuth } from '@/contexts/AuthContext'
+import PublishedDatasetPicker from './PublishedDatasetPicker'
+import type { PublishedDataset } from '@/api/datasetCatalog'
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS, inputClass } from '@/components/ui/formStyles'
@@ -76,7 +78,7 @@ const LANG_OPTIONS: [string, string][] = [
 ]
 
 export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Props) {
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
 
@@ -87,6 +89,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
   const [ragApiKey, setRagApiKey] = useState('')
   const [ragTaskTypes, setRagTaskTypes] = useState('')
   const [ragTaskNames, setRagTaskNames] = useState('')
+  const [catalogEntries, setCatalogEntries] = useState<PublishedDataset[]>([])
   const [ragLanguages, setRagLanguages] = useState('')
   const [ragLimit, setRagLimit] = useState('')
   const [ragRandomSample, setRagRandomSample] = useState(false)
@@ -231,6 +234,10 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
     const apiBase = ragApiBase.trim()
     const apiKey = ragApiKey.trim()
     const mtebErrors: Record<string, string> = {}
+    const taskNames = ragTaskNames.split(/[,，]/).map(name => name.trim()).filter(Boolean)
+    if (!isAdmin && (!taskNames.length || taskNames.some(name => !catalogEntries.some(entry => entry.benchmark === name && entry.published)))) {
+      mtebErrors.ragTaskNames = locale === 'zh' ? '请选择已发布的数据集' : 'Select published datasets'
+    }
     if (!modelName) mtebErrors.ragModelPath = t('perf.required')
     if (!apiBase) mtebErrors.ragApiBase = t('evalRagExtra.requiredForApiModels')
     if (!apiKey) mtebErrors.ragApiKey = t('evalRagExtra.requiredForApiModels')
@@ -265,7 +272,8 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
       hub: ragDataHub,
     }
     if (ragTaskTypes) evalCfg.task_types = ragTaskTypes.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
-    if (ragTaskNames) evalCfg.task_names = ragTaskNames.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
+    if (taskNames.length) evalCfg.task_names = taskNames
+
     if (ragLanguages) evalCfg.languages = ragLanguages.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
     if (ragLimit) evalCfg.limits = Number(ragLimit)
     if (ragLimit && ragRandomSample) evalCfg.random_sample = true
@@ -358,7 +366,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
               </FormField>
             </div>
 
-            <FormField label={t('eval.ragTaskNames')} required>
+            {!isAdmin ? <PublishedDatasetPicker categories={['rag']} value={ragTaskNames} onChange={setRagTaskNames} onEntriesChange={setCatalogEntries} /> : <FormField label={t('eval.ragTaskNames')} required error={errors.ragTaskNames}>
               <div ref={nameInputRef} className="relative">
                 <input value={ragTaskNames}
                   onChange={(e) => handleTaskNameChange(e.target.value)}
@@ -375,8 +383,9 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
                   </div>
                 )}
               </div>
-            </FormField>
+            </FormField>}
 
+            {!isAdmin && errors.ragTaskNames && <p role="alert" className="md:col-span-2 text-red-600">{errors.ragTaskNames}</p>}
             <FormField label={t('eval.ragLanguages')}>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {LANG_OPTIONS.map(([code, label]) => {
