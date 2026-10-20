@@ -807,9 +807,22 @@ def get_chart():
                 validate_report_name(name, root)
                 if not _report_access_allowed(name):
                     return jsonify({'error': 'Report not found'}), 404
-            report_list = load_multi_report(root, names)
-            acc_df, _ = get_acc_report_df(report_list)
-            fig = plot_multi_report_radar(acc_df)
+            if len(names) == 1 and _is_mteb_report(root, names[0]):
+                # MTEB writes results/, not the standard reports/ directory.
+                import pandas as pd
+                _, _, task_cfg = load_single_report(root, names[0])
+                rag_reports, _ = _load_mteb_report_data(root, names[0], task_cfg)
+                acc_df = pd.DataFrame([
+                    {ReportKey.model_name: report['model_name'],
+                     ReportKey.dataset_name: report['dataset_name'],
+                     ReportKey.score: report['score']}
+                    for report in rag_reports
+                ], columns=[ReportKey.model_name, ReportKey.dataset_name, ReportKey.score])
+                fig = plot_multi_report_radar(acc_df) if not acc_df.empty else None
+            else:
+                report_list = load_multi_report(root, names)
+                acc_df, _ = get_acc_report_df(report_list)
+                fig = plot_multi_report_radar(acc_df)
         elif chart_type == 'grouped_bar':
             # Grouped bar chart for multi-model comparison
             names_raw = request.args.get('report_names', '')

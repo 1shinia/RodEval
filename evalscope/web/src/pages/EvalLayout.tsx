@@ -158,6 +158,19 @@ export default function EvalLayout() {
   }, [getDisplayLog])
 
   const handleBatchUpload = useCallback(async (file: File) => {
+    // 主动上传表示创建新批次；明确续跑仍由 onBatchResume 单独处理。
+    clearBatchPoll()
+    logGenerationRef.current += 1
+    batchIdRef.current = null
+    batchConfigRef.current = {}
+    lastLogTaskIdRef.current = ''
+    sessionStorage.removeItem('evalBatchId')
+    setBatchRunning(false)
+    setBatchState(null)
+    setBatchInfo(null)
+    setBatchLogText('')
+    setSelectedTaskId('')
+    setSelectedTaskLog('')
     batchFileRef.current = file
     setBatchUploading(true)
     setBatchError('')
@@ -170,7 +183,7 @@ export default function EvalLayout() {
     } finally {
       setBatchUploading(false)
     }
-  }, [])
+  }, [clearBatchPoll])
 
   const monitorBatch = useCallback((batchId: string) => {
     clearBatchPoll()
