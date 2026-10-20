@@ -208,6 +208,7 @@ export default function LeaderboardPage() {
               <Table
                 columns={buildTableCols(activeCols, rows)}
                 data={rows}
+                className="[&_th]:!text-sm [&_td]:text-base"
                 defaultSort={{ key: 'Average', dir: 'desc' }}
               />
             ) : <LoadingSpinner />)
@@ -215,6 +216,7 @@ export default function LeaderboardPage() {
               <Table
                 columns={buildTableCols(activeCols, rows)}
                 data={rows}
+                className="[&_th]:!text-sm [&_td]:text-base"
                 defaultSort={{ key: ossSortKey, dir: 'desc' }}
               />
             ) : <LoadingSpinner />)
