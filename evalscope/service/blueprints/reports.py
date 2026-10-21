@@ -744,6 +744,21 @@ def get_html_report():
         if not report_html.startswith(root + os.sep):
             return jsonify({'error': 'Access denied: invalid report path'}), 403
 
+        if not os.path.exists(report_html) and _is_mteb_report(root, report_name):
+            # Historical MTEB tasks only contain results/. Render on demand without
+            # creating reports/, which other RAG readers use for format detection.
+            from .rag_html import render_mteb_html
+            html = render_mteb_html(os.path.join(root, prefix), model_name, datasets)
+            if html is not None:
+                from ..html_security import secure_report_response
+                response = current_app.response_class(html, mimetype='text/html')
+                if request.args.get('download', '').lower() in ('1', 'true', 'yes'):
+                    from werkzeug.http import dump_options_header
+                    safe_name = re.sub(r'[\\/:*?"<>|]', '_', f'{prefix}_{model_name}_{"_".join(datasets)}.html')
+                    response.headers['Content-Disposition'] = dump_options_header(
+                        'attachment', {'filename': safe_name})
+                return secure_report_response(response)
+
         if not os.path.exists(report_html):
             return jsonify({
                 'error': 'Report not yet generated',
