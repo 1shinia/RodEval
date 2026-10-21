@@ -27,7 +27,11 @@ def test_every_installed_text_task_type_uses_native_resolution(monkeypatch):
         assert [(task.metadata.name, task.metadata.type) for task in tasks] == [(name, task_type)]
         # All resolved classes enter the same native load_data preflight. It is
         # not restricted to the three types supported by internal snapshots.
-        load = Mock()
+        def loaded_task(task=tasks[0], kind=task_type):
+            if kind == 'Reranking':
+                task.dataset = {'default': {'test': {
+                    'queries': {'id': ['q1']}, 'top_ranked': {'q1': ['d1']}}}}
+        load = Mock(side_effect=loaded_task)
         monkeypatch.setattr(tasks[0], 'load_data', load)
         runner._preflight_offline_tasks(tasks, offline=True, allow_download=False)
         load.assert_called_once_with()

@@ -92,7 +92,37 @@ def _offline_dataset_guard(enabled: bool):
         return
 
     from datasets import config as datasets_config
+    from datasets.naming import camelcase_to_snakecase
     from huggingface_hub import constants as hf_constants
+    from mteb.abstasks import retrieval_dataset_loaders
+    from unittest.mock import patch
+
+    original_configs = retrieval_dataset_loaders.get_dataset_config_names
+
+    def cached_configs(path, revision=None, **kwargs):
+        configs = list(original_configs(path, revision=revision, **kwargs))
+        # datasets' offline cache builder advertises only ['default'], even
+        # when corpus/queries/top_ranked were prepared online. Discover native
+        # Arrow configs for this repository and pinned revision, not snapshots
+        # or another task/revision. Leave unpinned discovery unchanged.
+        parts = path.split('/')
+        if (not revision or len(parts) != 2 or any(p in ('', '.', '..') for p in parts)
+                or '/' in str(revision) or '\\' in str(revision)):
+            return configs
+        root = Path(datasets_config.HF_DATASETS_CACHE) / (
+            parts[0] + '___' + camelcase_to_snakecase(parts[1]))
+        if root.is_dir():
+            for config_dir in sorted(root.iterdir()):
+                if not config_dir.is_dir():
+                    continue
+                for version_dir in config_dir.iterdir():
+                    cached = version_dir / str(revision)
+                    if (cached.is_dir() and (cached / 'dataset_info.json').is_file()
+                            and any(cached.glob('*.arrow'))):
+                        if config_dir.name not in configs:
+                            configs.append(config_dir.name)
+                        break
+        return configs
 
     env_names = ('HF_DATASETS_OFFLINE', 'HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE')
     previous_env = {name: os.environ.get(name) for name in env_names}
@@ -106,7 +136,8 @@ def _offline_dataset_guard(enabled: bool):
         datasets_config.HF_HUB_OFFLINE = True
         datasets_config.HF_DATASETS_OFFLINE = True
         hf_constants.HF_HUB_OFFLINE = True
-        yield
+        with patch.object(retrieval_dataset_loaders, 'get_dataset_config_names', cached_configs):
+            yield
     finally:
         for name, value in previous_env.items():
             if value is None:
@@ -132,6 +163,16 @@ def _preflight_offline_tasks(tasks: list, offline: bool, allow_download: bool) -
             task.data_loaded = False
             with _offline_dataset_guard(True):
                 task.load_data()
+            if getattr(getattr(task, 'metadata', None), 'type', None) == 'Reranking':
+                for subset, splits in task.dataset.items():
+                    for split, data in splits.items():
+                        candidates = data.get('top_ranked')
+                        query_ids = data['queries']['id']
+                        if (not isinstance(candidates, dict) or not candidates
+                                or any(not candidates.get(qid) for qid in query_ids)):
+                            raise ValueError(
+                                f'{subset}/{split} 缺少完整的 top_ranked 候选文档缓存，'
+                                '请管理员补充准备此数据集的重排序候选数据。')
         except Exception as exc:
             missing.append(f'{task_name}: {exc}')
 
