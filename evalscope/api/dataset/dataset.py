@@ -310,6 +310,7 @@ class DatasetDict:
         limit: Optional[Union[int, float]] = None,
         repeats: int = 1,
         random_sample: bool = False,
+        seed: Optional[int] = 42,
     ) -> 'DatasetDict':
         """
         Create a DatasetDict from a single Dataset using subset key in the sample.
@@ -320,6 +321,7 @@ class DatasetDict:
             limit (int | float | None): Optional limit on number of samples per subset.
                 If int, limits to that many samples. If float, limits to that fraction of samples.
             random_sample (bool): If True and limit is set, shuffle samples before slicing.
+            seed (int | None): Sampling seed; defaults to 42 for existing callers.
 
         Returns:
             DatasetDict: A new DatasetDict containing the provided dataset.
@@ -343,7 +345,7 @@ class DatasetDict:
             if limit is not None:
                 if random_sample:
                     import random
-                    random.Random(42).shuffle(samples)
+                    random.Random(seed).shuffle(samples)
                 if isinstance(limit, float):
                     limit = int(len(samples) * limit)
                 samples = samples[:limit]

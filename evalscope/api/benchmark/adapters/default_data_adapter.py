@@ -218,7 +218,8 @@ class DefaultDataAdapter(DataAdapter):
             repeats = 1 if is_fewshot else self.repeats
             dataset_dict = DatasetDict.from_dataset(
                 dataset=subset_data, subset_list=self.subset_list, limit=limit, repeats=repeats,
-                random_sample=self.random_sample,
+                random_sample=self.random_sample and not is_fewshot,
+                seed=self._task_config.seed,
             )
         else:
             # Load all specified subsets into separate entries
@@ -246,6 +247,8 @@ class DefaultDataAdapter(DataAdapter):
         split = subset if self.split_as_subset else self.eval_split
         subset_name = self.default_subset if self.split_as_subset else subset
 
+        # Reformatting applies selection later, after samples have been grouped by subset.
+        random_sample = self.random_sample and self.limit is not None and not self.reformat_subset
         # Create and configure the remote data loader
         loader = data_loader(
             data_id_or_path=self.dataset_id,
@@ -255,7 +258,9 @@ class DefaultDataAdapter(DataAdapter):
             filter_func=self.sample_filter,
             limit=self.limit if not self.reformat_subset else None,  # Limit number of samples if specified
             repeats=self.repeats,  # Number of repetitions for each sample
-            shuffle=self.shuffle,  # Shuffle dataset if enabled
+            shuffle=self.shuffle or random_sample,
+            # Seed only the task-level sampling override; preserve existing shuffle defaults.
+            seed=self._task_config.seed if random_sample else None,
             shuffle_choices=self.shuffle_choices,  # Shuffle choices if requested
             data_source=self.dataset_hub,  # Data source configuration
             force_redownload=self.force_redownload,  # Force redownload if enabled
