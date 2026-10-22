@@ -21,7 +21,7 @@ const EMBEDDING_TASK_TYPES = [
   'MultilabelClassification', 'InstructionRetrieval', 'ZeroShotClassification',
 ]
 
-const RERANKER_TASK_TYPES = ['Reranking', 'InstructionReranking']
+const RERANKER_TASK_TYPES = ['Reranking']
 
 const TYPE_DATASETS: Record<string, string[]> = {
   Classification: [
@@ -58,10 +58,6 @@ const TYPE_DATASETS: Record<string, string[]> = {
     'AskUbuntuDupQuestions', 'MindSmallReranking', 'SciDocsRR',
     'StackOverflowDupQuestions', 'MMarcoReranking', 'T2Reranking',
     'WikipediaRerankingMultilingual', 'CMedQAv1-reranking', 'CMedQAv2-reranking',
-  ],
-  InstructionReranking: [
-    'Core17InstructionRetrieval', 'News21InstructionRetrieval',
-    'Robust04InstructionRetrieval', 'mFollowIR', 'mFollowIRCrossLingual',
   ],
 }
 
@@ -345,7 +341,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
 
             <div className="md:col-span-2 border-t border-[var(--border-md)] pt-3"></div>
             <div className="md:col-span-2">
-              <FormField label={t('eval.ragTaskTypesTitle')} required>
+              <FormField label={t(ragTool === 'reranker' ? 'eval.rerankerTaskTypesTitle' : 'eval.ragTaskTypesTitle')} required>
                 <p className="text-xs text-[var(--text-muted)] mb-2">{t('eval.ragTaskTypesHint')}</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
                   {(ragTool === 'reranker' ? RERANKER_TASK_TYPES : EMBEDDING_TASK_TYPES).map((tt) => {
@@ -366,7 +362,7 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
               </FormField>
             </div>
 
-            {!isAdmin ? <PublishedDatasetPicker categories={['rag']} value={ragTaskNames} onChange={setRagTaskNames} onEntriesChange={setCatalogEntries} /> : <FormField label={t('eval.ragTaskNames')} required error={errors.ragTaskNames}>
+            {!isAdmin ? <PublishedDatasetPicker categories={['rag']} value={ragTaskNames} onChange={setRagTaskNames} onEntriesChange={setCatalogEntries} /> : <FormField label={t(ragTool === 'reranker' ? 'eval.rerankerDatasetNames' : 'eval.ragTaskNames')} required error={errors.ragTaskNames}>
               <div ref={nameInputRef} className="relative">
                 <input value={ragTaskNames}
                   onChange={(e) => handleTaskNameChange(e.target.value)}

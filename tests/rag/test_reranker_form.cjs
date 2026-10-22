@@ -28,6 +28,7 @@ function loadForm(tool, onSubmit) {
     if (name.includes('LocaleContext')) return { useLocale: () => ({ t: key => key }) }
     if (name.includes('AuthContext')) return { useAuth: () => ({ user: { role: 'admin' } }) }
     if (name.includes('formStyles')) return { inputClass: () => '', FORM_INPUT_CLASS: '', FORM_LABEL_CLASS: '' }
+    if (name.includes('PublishedDatasetPicker')) return { default: () => null }
     if (name.includes('FormField')) return { default: props => React.createElement('div', null, props.label, props.children) }
     if (name.includes('/Button')) return { default: props => React.createElement('button', { type: props.type }, props.children) }
     throw new Error(`Unexpected import: ${name}`)
@@ -41,7 +42,9 @@ test('reranker form exposes no two-stage or unused Top K controls', () => {
     assert.ok(!html.includes(key), `Unexpected control: ${key}`)
   }
   assert.ok(html.includes('Reranking'))
-  assert.ok(html.includes('InstructionReranking'))
+  assert.ok(!html.includes('InstructionReranking'))
+  assert.ok(html.includes('eval.rerankerTaskTypesTitle'))
+  assert.ok(html.includes('eval.rerankerDatasetNames'))
 })
 
 test('customer RAG selector exposes only embedding and reranker', () => {
