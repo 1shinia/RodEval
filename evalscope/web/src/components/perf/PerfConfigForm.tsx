@@ -68,6 +68,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
   const [parallel, setParallel] = useState('1')
   const [number, setNumber] = useState('10')
   const [rate, setRate] = useState('')
+  const [openLoop, setOpenLoop] = useState(false)
   const [warmupRatio, setWarmupRatio] = useState('')
   const [duration, setDuration] = useState('')
   const [maxTokens, setMaxTokens] = useState('')
@@ -139,6 +140,7 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
       number: number.replace(/，/g, ',').split(',').map((s) => Number(s.trim())).filter(Boolean),
     }
     if (rate) config.rate = Number(rate)
+    if (openLoop) config.open_loop = true
     if (warmupRatio) {
       const value = warmupRatio.trim()
       const isPercent = value.endsWith('%')
@@ -443,7 +445,21 @@ export default function PerfConfigForm({ onSubmit, disabled, onApiKeyChange, onB
           </select>
         </FormField>
 
-        <FormField label={t('perf.rate')} error={errors.rate}>
+        <FormField label={
+          <div className="flex items-center gap-4">
+            <span>{t('perf.rate')}</span>
+            <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+              <input type="radio" name="bm" checked={!openLoop}
+                onChange={() => setOpenLoop(false)} className="accent-[var(--accent)]" />
+              <span className="text-sm font-normal text-[var(--text)]">{t('perf.closedLoop')}</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="bm" checked={openLoop}
+                onChange={() => setOpenLoop(true)} className="accent-[var(--accent)]" />
+              <span className="text-sm font-normal text-[var(--text)]">{t('perf.openLoop')}</span>
+            </label>
+          </div>
+        } error={errors.rate}>
           <input type="number" value={rate}
             onChange={(e) => { setRate(e.target.value); if (errors.rate) setErrors((p) => ({ ...p, rate: '' })) }}
             className={inputClass(errors.rate)} placeholder={t('perf.placeholderReqPerSec')} />
