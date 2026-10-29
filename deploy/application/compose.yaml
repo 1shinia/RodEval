@@ -1,0 +1,20 @@
+services:
+  app:
+    image: evalperf/application:delivery-20261023
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-9000}:9000"
+    environment:
+      EVALSCOPE_OUTPUT_DIR: /app/outputs
+      REGISTRATION_MODE: admin_only
+      EVALSCOPE_ADMIN_PASSWORD: ${EVALSCOPE_ADMIN_PASSWORD:?请在.env设置首次管理员密码}
+      EVALSCOPE_ENABLE_LEGACY_DOCKER_CLEANUP: "0"
+    volumes:
+      - ${OUTPUTS_DIR:-./outputs}:/app/outputs
+      - ${CACHE_DIR:-/root/.cache}:/root/.cache
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

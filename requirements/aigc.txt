@@ -2,7 +2,7 @@ diffusers
 iopath
 omegaconf
 open_clip_torch
-opencv-python
+opencv-python-headless
 peft>=0.17
 torch
 torchvision

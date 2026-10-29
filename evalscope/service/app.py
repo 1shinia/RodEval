@@ -251,7 +251,14 @@ def create_app(outputs: str = None):
         logger.info('API Key authentication disabled (set EVALSCOPE_API_KEY to enable)')
 
     # --- JWT authentication -----------------------------------------------
-    app.before_request(require_auth)
+    @app.before_request
+    def authenticate_request():
+        # The compiled SPA must be reachable before login. Never let the
+        # SPA catch-all turn an unknown API route into a public endpoint.
+        if (request.method in ('GET', 'HEAD') and request.endpoint == 'serve_spa'
+                and not request.path.startswith('/api/')):
+            return None
+        return require_auth()
 
     # --- Registration and task-submission request-rate limits -------------
     # This bounds request frequency; existing process slots still enforce
