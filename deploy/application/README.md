@@ -5,7 +5,7 @@
 保留 CPU PyTorch 等 MTEB 评测依赖；源代码中的本地模型入口暂未移除，不能视为已禁用的产品能力。
 
 构建：在 hermes 环境执行 `python deploy/application/prepare.py`，然后
-`docker build -t evalperf/application:delivery-20261023 /data/evalperf-deploy/context`。
+`docker build -t evalperf/application:delivery-20261023 /data/evalperf-build/context`。
 requirements.lock 从当前已安装依赖递归锁定；missing_in_hermes 记录原环境也未安装的声明项。
 
 部署：导入交付的镜像归档 `docker load -i application-image.tar`。

@@ -8,7 +8,7 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = Path('/data/evalperf-deploy')
+OUT = Path('/data/evalperf-build')
 CTX = OUT / 'context'
 CTX.mkdir(parents=True, exist_ok=True)
 roots = []
@@ -53,7 +53,7 @@ if 'protobuf' in versions:
 (OUT / 'dependency-baseline.json').write_text(json.dumps({'versions': versions, 'missing_in_hermes': sorted(missing)}, indent=2))
 files = subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
 for name in files:
-    if not name or not (name.startswith(('evalscope/', 'requirements/')) or name in ['pyproject.toml','setup.py','README.md','LICENSE','MANIFEST.in']):
+    if not name or not (name.startswith(('evalscope/', 'requirements/', 'leaderboard_data/')) or name in ['pyproject.toml','setup.py','README.md','LICENSE','MANIFEST.in']):
         continue
     if any(part in {'node_modules', 'outputs', '__pycache__', '.env', '.git'} for part in Path(name).parts):
         continue

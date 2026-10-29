@@ -22,7 +22,7 @@ if __name__ == '__main__':
         assert code == 200 and data
     print(json.dumps({'spa': 'PASS', 'compiled_assets': len(assets)}, ensure_ascii=False))
     from pathlib import Path
-    password_file = Path('/data/evalperf-deploy/acceptance-admin-password')
+    password_file = Path('/data/evalperf-build/acceptance-admin-password')
     if password_file.exists():
         payload = json.dumps({'username': 'admin', 'password': password_file.read_text().strip()}).encode()
         request = urllib.request.Request(BASE + '/api/v1/auth/login', data=payload,
