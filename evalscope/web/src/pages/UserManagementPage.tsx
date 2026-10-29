@@ -117,8 +117,12 @@ export default function UserManagementPage() {
   }
 
   const handleResetPassword = async (id: number) => {
-    if (!resetPassword.trim() || resetPassword.length < 6) {
-      toast.error('密码至少6位')
+    if (!resetPassword.trim() || resetPassword.length < 8) {
+      toast.error('密码至少8位')
+      return
+    }
+    if (!/[a-zA-Z]/.test(resetPassword) || !/[0-9]/.test(resetPassword)) {
+      toast.error('密码必须同时包含字母和数字')
       return
     }
     try {
@@ -271,7 +275,7 @@ export default function UserManagementPage() {
             <label className="block text-sm text-[var(--text-muted)] mb-1">密码</label>
             <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
               className="w-44 px-3 py-2.5 rounded-lg border border-[var(--border)] bg-white text-base"
-              placeholder="至少6位" />
+              placeholder="至少8位，含字母和数字" />
           </div>
           <div>
             <label className="block text-sm text-[var(--text-muted)] mb-1">角色</label>

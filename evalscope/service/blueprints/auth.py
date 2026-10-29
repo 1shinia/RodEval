@@ -530,8 +530,10 @@ def register():
         return jsonify({'error': 'username and password are required'}), 400
     if len(username) < 2 or len(username) > 32:
         return jsonify({'error': 'username must be 2-32 characters'}), 400
-    if len(password) < 6:
-        return jsonify({'error': 'password must be at least 6 characters'}), 400
+    if len(password) < 8:
+        return jsonify({'error': 'password must be at least 8 characters'}), 400
+    if not any(c.isalpha() for c in password) or not any(c.isdigit() for c in password):
+        return jsonify({'error': 'password must contain both letters and numbers'}), 400
 
     pw_hash = generate_password_hash(password)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -655,8 +657,10 @@ def change_password():
     new_password = (data.get('new_password') or '').strip()
     if not old_password or not new_password:
         return jsonify({'error': 'old_password and new_password are required'}), 400
-    if len(new_password) < 6:
-        return jsonify({'error': '新密码至少6个字符'}), 400
+    if len(new_password) < 8:
+        return jsonify({'error': '新密码至少8个字符'}), 400
+    if not any(c.isalpha() for c in new_password) or not any(c.isdigit() for c in new_password):
+        return jsonify({'error': '新密码必须同时包含字母和数字'}), 400
     user = _user_by_username(payload['username'])
     if not user or not check_password_hash(user['password_hash'], old_password):
         return jsonify({'error': '当前密码错误'}), 401

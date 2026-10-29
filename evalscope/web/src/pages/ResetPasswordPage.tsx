@@ -16,7 +16,8 @@ export default function ResetPasswordPage() {
     e.preventDefault()
     if (!token) { setError('链接无效或已过期'); return }
     if (!password.trim()) { setError('请输入新密码'); return }
-    if (password.length < 6) { setError('密码至少 6 个字符'); return }
+    if (password.length < 8) { setError('密码至少 8 个字符，且需包含字母和数字'); return }
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) { setError('密码必须同时包含字母和数字'); return }
     if (password !== confirm) { setError('两次密码不一致'); return }
     setLoading(true)
     setError('')
@@ -49,7 +50,7 @@ export default function ResetPasswordPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <PasswordInput value={password} onChange={setPassword} placeholder="新密码 (至少6位)" />
+            <PasswordInput value={password} onChange={setPassword} placeholder="新密码 (至少8位，含字母和数字)" />
             <PasswordInput value={confirm} onChange={setConfirm} placeholder="确认新密码" />
             {error && <p className="text-xs text-[var(--danger)]">{error}</p>}
             <Button type="submit" variant="primary" disabled={loading} className="w-full">

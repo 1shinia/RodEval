@@ -24,8 +24,12 @@ export default function RegisterPage() {
       setError('用户名需要 2-32 个字符')
       return
     }
-    if (password.length < 6) {
-      setError('密码至少 6 个字符')
+    if (password.length < 8) {
+      setError('密码至少 8 个字符，且需包含字母和数字')
+      return
+    }
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('密码必须同时包含字母和数字')
       return
     }
     if (password !== confirm) {
@@ -62,7 +66,7 @@ export default function RegisterPage() {
           <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
             placeholder="用户名 (2-32 字符)" autoFocus
             className="w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" />
-          <PasswordInput value={password} onChange={setPassword} placeholder="密码 (至少6位)" />
+          <PasswordInput value={password} onChange={setPassword} placeholder="密码 (至少8位，含字母和数字)" />
           {registrationMode === 'invite' && (
             <input type="text" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)}
               placeholder="邀请码" autoComplete="off"
