@@ -574,6 +574,7 @@ const en: Dict = {
   leaderboardExtra: {
     boardType: 'Leaderboard Type', category: 'Category', period: 'Period', boardTab: 'Leaderboard',
     categoryCount: '${count} categories', columnCount: '${count} columns',
+    benchmarkText: 'Text-only', benchmarkFull: 'Full',
     noData: 'No leaderboard data found (OpenCompass snapshot may be missing)',
     loadFailed: 'Failed to load leaderboard', loadLlmFailed: 'Failed to load LLM leaderboard',
   },
@@ -1609,6 +1610,7 @@ const zh: Dict = {
   leaderboardExtra: {
     boardType: '榜单类型', category: '分类维度', period: '时间段', boardTab: '榜单',
     categoryCount: '${count} 个分类维度', columnCount: '${count} 列',
+    benchmarkText: '仅文本评测基准', benchmarkFull: '全量评测基准',
     noData: '未找到榜单数据（可能缺少 OpenCompass 快照）',
     loadFailed: '加载榜单失败', loadLlmFailed: '加载 LLM 榜单失败',
   },

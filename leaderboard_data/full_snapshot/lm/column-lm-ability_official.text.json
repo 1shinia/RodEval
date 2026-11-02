@@ -1,0 +1,843 @@
+{
+  "OverallColumn": {
+    "columns": [
+      {
+        "title": {
+          "zh-CN": "模型",
+          "en-US": "Model"
+        },
+        "width": 270,
+        "key": "model",
+        "fixed": "left"
+      },
+      {
+        "title": {
+          "zh-CN": "模型发布时间",
+          "en-US": "Model Release Date"
+        },
+        "width": 150,
+        "key": "release_date"
+      },
+      {
+        "title": {
+          "zh-CN": "评测时间",
+          "en-US": "Evaluation Date"
+        },
+        "width": 130,
+        "key": "date"
+      },
+      {
+        "title": {
+          "zh-CN": "参数量",
+          "en-US": "Parameters"
+        },
+        "width": 100,
+        "key": "para_num"
+      },
+      {
+        "title": {
+          "zh-CN": "平均分数",
+          "en-US": "Average Score"
+        },
+        "width": 124,
+        "key": "Average",
+        "customizeRender": {
+          "sorter": "descend"
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "知识",
+          "en-US": "Knowledge"
+        },
+        "width": 160,
+        "key": "Knowledge",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "抽象",
+          "en-US": "Abstraction"
+        },
+        "width": 160,
+        "key": "Abstraction",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "推理",
+          "en-US": "Reasoning"
+        },
+        "width": 160,
+        "key": "Reasoning",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "交互",
+          "en-US": "Interaction"
+        },
+        "width": 160,
+        "key": "Interaction",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "安全",
+          "en-US": "Safety"
+        },
+        "width": 160,
+        "key": "Safety",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "智能体",
+          "en-US": "Agent"
+        },
+        "width": 160,
+        "key": "Agent",
+        "customizeRender": {
+          "sorter": ""
+        }
+      }
+    ],
+    "groups": {
+      "all": [
+        "model",
+        "release_date",
+        "date",
+        "para_num",
+        "Average",
+        "Knowledge",
+        "Abstraction",
+        "Reasoning",
+        "Interaction",
+        "Safety",
+        "Agent"
+      ]
+    }
+  },
+  "KnowledgeColumn": {
+    "columns": [
+      {
+        "title": {
+          "zh-CN": "模型",
+          "en-US": "Model"
+        },
+        "width": 270,
+        "key": "model",
+        "fixed": "left"
+      },
+      {
+        "title": {
+          "zh-CN": "模型发布时间",
+          "en-US": "Model Release Date"
+        },
+        "width": 150,
+        "key": "release_date"
+      },
+      {
+        "title": {
+          "zh-CN": "评测时间",
+          "en-US": "Evaluation Date"
+        },
+        "width": 130,
+        "key": "date"
+      },
+      {
+        "title": {
+          "zh-CN": "参数量",
+          "en-US": "Parameters"
+        },
+        "width": 100,
+        "key": "para_num"
+      },
+      {
+        "title": {
+          "zh-CN": "知识平均分",
+          "en-US": "Knowledge Average"
+        },
+        "width": 124,
+        "key": "Average",
+        "customizeRender": {
+          "sorter": "descend"
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "应用科学知识",
+          "en-US": "Applied Scientific Knowledge"
+        },
+        "width": 160,
+        "key": "AppliedScientificKnowledge",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "日常常识",
+          "en-US": "Everyday Knowledge"
+        },
+        "width": 160,
+        "key": "EverydayKnowledge",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "形式科学知识",
+          "en-US": "Formal Scientific Knowledge"
+        },
+        "width": 160,
+        "key": "FormalScientificKnowledge",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "自然科学知识",
+          "en-US": "Natural Scientific Knowledge"
+        },
+        "width": 160,
+        "key": "NaturalScientificKnowledge",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "社会科学与人文",
+          "en-US": "Social Sciences and Humanities"
+        },
+        "width": 160,
+        "key": "SocialSciencesAndHumanities",
+        "customizeRender": {
+          "sorter": ""
+        }
+      }
+    ],
+    "groups": {
+      "all": [
+        "model",
+        "release_date",
+        "date",
+        "para_num",
+        "Average",
+        "AppliedScientificKnowledge",
+        "EverydayKnowledge",
+        "FormalScientificKnowledge",
+        "NaturalScientificKnowledge",
+        "SocialSciencesAndHumanities"
+      ]
+    }
+  },
+  "AbstractionColumn": {
+    "columns": [
+      {
+        "title": {
+          "zh-CN": "模型",
+          "en-US": "Model"
+        },
+        "width": 270,
+        "key": "model",
+        "fixed": "left"
+      },
+      {
+        "title": {
+          "zh-CN": "模型发布时间",
+          "en-US": "Model Release Date"
+        },
+        "width": 150,
+        "key": "release_date"
+      },
+      {
+        "title": {
+          "zh-CN": "评测时间",
+          "en-US": "Evaluation Date"
+        },
+        "width": 130,
+        "key": "date"
+      },
+      {
+        "title": {
+          "zh-CN": "参数量",
+          "en-US": "Parameters"
+        },
+        "width": 100,
+        "key": "para_num"
+      },
+      {
+        "title": {
+          "zh-CN": "抽象平均分",
+          "en-US": "Abstraction Average"
+        },
+        "width": 124,
+        "key": "Average",
+        "customizeRender": {
+          "sorter": "descend"
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "注意与扫描",
+          "en-US": "Attention and Scanning"
+        },
+        "width": 160,
+        "key": "AttentionAndScanning",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "语言理解",
+          "en-US": "Language Understanding"
+        },
+        "width": 160,
+        "key": "LanguageUnderstanding",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "相关信息识别",
+          "en-US": "Relevant Information Identification"
+        },
+        "width": 160,
+        "key": "RelevantInformationIdentification",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "概念化与抽象",
+          "en-US": "Conceptualization and Abstraction"
+        },
+        "width": 160,
+        "key": "ConceptualizationAndAbstraction",
+        "customizeRender": {
+          "sorter": ""
+        }
+      }
+    ],
+    "groups": {
+      "all": [
+        "model",
+        "release_date",
+        "date",
+        "para_num",
+        "Average",
+        "AttentionAndScanning",
+        "LanguageUnderstanding",
+        "RelevantInformationIdentification",
+        "ConceptualizationAndAbstraction"
+      ]
+    }
+  },
+  "ReasoningColumn": {
+    "columns": [
+      {
+        "title": {
+          "zh-CN": "模型",
+          "en-US": "Model"
+        },
+        "width": 270,
+        "key": "model",
+        "fixed": "left"
+      },
+      {
+        "title": {
+          "zh-CN": "模型发布时间",
+          "en-US": "Model Release Date"
+        },
+        "width": 150,
+        "key": "release_date"
+      },
+      {
+        "title": {
+          "zh-CN": "评测时间",
+          "en-US": "Evaluation Date"
+        },
+        "width": 130,
+        "key": "date"
+      },
+      {
+        "title": {
+          "zh-CN": "参数量",
+          "en-US": "Parameters"
+        },
+        "width": 100,
+        "key": "para_num"
+      },
+      {
+        "title": {
+          "zh-CN": "推理平均分",
+          "en-US": "Reasoning Average"
+        },
+        "width": 124,
+        "key": "Average",
+        "customizeRender": {
+          "sorter": "descend"
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "逻辑推理",
+          "en-US": "Logical Reasoning"
+        },
+        "width": 160,
+        "key": "LogicalReasoning",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "数量推理",
+          "en-US": "Quantitative Reasoning"
+        },
+        "width": 160,
+        "key": "QuantitativeReasoning",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "空间与物理推理",
+          "en-US": "Spatial and Physical Reasoning"
+        },
+        "width": 160,
+        "key": "SpatialAndPhysicalReasoning",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "批判性思考过程",
+          "en-US": "Critical Thinking Process"
+        },
+        "width": 160,
+        "key": "CriticalThinkingProcess",
+        "customizeRender": {
+          "sorter": ""
+        }
+      }
+    ],
+    "groups": {
+      "all": [
+        "model",
+        "release_date",
+        "date",
+        "para_num",
+        "Average",
+        "LogicalReasoning",
+        "QuantitativeReasoning",
+        "SpatialAndPhysicalReasoning",
+        "CriticalThinkingProcess"
+      ]
+    }
+  },
+  "InteractionColumn": {
+    "columns": [
+      {
+        "title": {
+          "zh-CN": "模型",
+          "en-US": "Model"
+        },
+        "width": 270,
+        "key": "model",
+        "fixed": "left"
+      },
+      {
+        "title": {
+          "zh-CN": "模型发布时间",
+          "en-US": "Model Release Date"
+        },
+        "width": 150,
+        "key": "release_date"
+      },
+      {
+        "title": {
+          "zh-CN": "评测时间",
+          "en-US": "Evaluation Date"
+        },
+        "width": 130,
+        "key": "date"
+      },
+      {
+        "title": {
+          "zh-CN": "参数量",
+          "en-US": "Parameters"
+        },
+        "width": 100,
+        "key": "para_num"
+      },
+      {
+        "title": {
+          "zh-CN": "交互平均分",
+          "en-US": "Interaction Average"
+        },
+        "width": 124,
+        "key": "Average",
+        "customizeRender": {
+          "sorter": "descend"
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "心智建模与社会认知",
+          "en-US": "Theory of Mind and Social Cognition"
+        },
+        "width": 160,
+        "key": "TheoryOfMindAndSocialCognition",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "语言表达与语用",
+          "en-US": "Language Expression and Pragmatics"
+        },
+        "width": 160,
+        "key": "LanguageExpressionAndPragmatics",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "交互认知与主动适应",
+          "en-US": "Interactive Cognition and Proactive Adaptation"
+        },
+        "width": 160,
+        "key": "InteractiveCognitionAndAdaptation",
+        "customizeRender": {
+          "sorter": ""
+        }
+      }
+    ],
+    "groups": {
+      "all": [
+        "model",
+        "release_date",
+        "date",
+        "para_num",
+        "Average",
+        "TheoryOfMindAndSocialCognition",
+        "LanguageExpressionAndPragmatics",
+        "InteractiveCognitionAndAdaptation"
+      ]
+    }
+  },
+  "SafetyColumn": {
+    "columns": [
+      {
+        "title": {
+          "zh-CN": "模型",
+          "en-US": "Model"
+        },
+        "width": 270,
+        "key": "model",
+        "fixed": "left"
+      },
+      {
+        "title": {
+          "zh-CN": "模型发布时间",
+          "en-US": "Model Release Date"
+        },
+        "width": 150,
+        "key": "release_date"
+      },
+      {
+        "title": {
+          "zh-CN": "评测时间",
+          "en-US": "Evaluation Date"
+        },
+        "width": 130,
+        "key": "date"
+      },
+      {
+        "title": {
+          "zh-CN": "参数量",
+          "en-US": "Parameters"
+        },
+        "width": 100,
+        "key": "para_num"
+      },
+      {
+        "title": {
+          "zh-CN": "安全平均分",
+          "en-US": "Safety Average"
+        },
+        "width": 124,
+        "key": "Average",
+        "customizeRender": {
+          "sorter": "descend"
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "已知与未知校准",
+          "en-US": "Known and Unknown Calibration"
+        },
+        "width": 160,
+        "key": "KnownAndUnknownCalibration",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "无害性与越狱抵抗",
+          "en-US": "Harmlessness and Jailbreak Resistance"
+        },
+        "width": 160,
+        "key": "HarmlessnessAndJailbreakResistance",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "对抗鲁棒性",
+          "en-US": "Adversarial Robustness"
+        },
+        "width": 160,
+        "key": "AdversarialRobustness",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "公平性与偏见管理",
+          "en-US": "Fairness and Bias Management"
+        },
+        "width": 160,
+        "key": "FairnessAndBiasManagement",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "隐私保护",
+          "en-US": "Privacy Protection"
+        },
+        "width": 160,
+        "key": "PrivacyProtection",
+        "customizeRender": {
+          "sorter": ""
+        }
+      }
+    ],
+    "groups": {
+      "all": [
+        "model",
+        "release_date",
+        "date",
+        "para_num",
+        "Average",
+        "KnownAndUnknownCalibration",
+        "HarmlessnessAndJailbreakResistance",
+        "AdversarialRobustness",
+        "FairnessAndBiasManagement",
+        "PrivacyProtection"
+      ]
+    }
+  },
+  "AgentColumn": {
+    "columns": [
+      {
+        "title": {
+          "zh-CN": "模型",
+          "en-US": "Model"
+        },
+        "width": 270,
+        "key": "model",
+        "fixed": "left"
+      },
+      {
+        "title": {
+          "zh-CN": "模型发布时间",
+          "en-US": "Model Release Date"
+        },
+        "width": 150,
+        "key": "release_date"
+      },
+      {
+        "title": {
+          "zh-CN": "评测时间",
+          "en-US": "Evaluation Date"
+        },
+        "width": 130,
+        "key": "date"
+      },
+      {
+        "title": {
+          "zh-CN": "参数量",
+          "en-US": "Parameters"
+        },
+        "width": 100,
+        "key": "para_num"
+      },
+      {
+        "title": {
+          "zh-CN": "智能体平均分",
+          "en-US": "Agent Average"
+        },
+        "width": 138,
+        "key": "Average",
+        "customizeRender": {
+          "sorter": "descend"
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "任务理解规划与工具调用",
+          "en-US": "Task Understanding, Planning and Tool Use"
+        },
+        "width": 160,
+        "key": "TaskPlanningAndToolUse",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "代码与终端工程执行",
+          "en-US": "Code and Terminal Engineering Execution"
+        },
+        "width": 160,
+        "key": "CodeAndTerminalExecution",
+        "customizeRender": {
+          "sorter": ""
+        }
+      },
+      {
+        "title": {
+          "zh-CN": "数据分析与深度研究",
+          "en-US": "Data Analysis and Deep Research"
+        },
+        "width": 160,
+        "key": "DataAnalysisAndDeepResearch",
+        "customizeRender": {
+          "sorter": ""
+        }
+      }
+    ],
+    "groups": {
+      "all": [
+        "model",
+        "release_date",
+        "date",
+        "para_num",
+        "Average",
+        "TaskPlanningAndToolUse",
+        "CodeAndTerminalExecution",
+        "DataAnalysisAndDeepResearch"
+      ]
+    }
+  },
+  "TabConfig": [
+    {
+      "key": "Overall",
+      "index": "Overall",
+      "name": {
+        "zh-CN": "综合",
+        "en-US": "Overall"
+      },
+      "tableData": "OverallTable",
+      "tableColumn": "OverallColumn"
+    },
+    {
+      "key": "Knowledge",
+      "index": "Knowledge",
+      "name": {
+        "zh-CN": "知识",
+        "en-US": "Knowledge"
+      },
+      "tableData": "KnowledgeTable",
+      "tableColumn": "KnowledgeColumn"
+    },
+    {
+      "key": "Abstraction",
+      "index": "Abstraction",
+      "name": {
+        "zh-CN": "抽象",
+        "en-US": "Abstraction"
+      },
+      "tableData": "AbstractionTable",
+      "tableColumn": "AbstractionColumn"
+    },
+    {
+      "key": "Reasoning",
+      "index": "Reasoning",
+      "name": {
+        "zh-CN": "推理",
+        "en-US": "Reasoning"
+      },
+      "tableData": "ReasoningTable",
+      "tableColumn": "ReasoningColumn"
+    },
+    {
+      "key": "Interaction",
+      "index": "Interaction",
+      "name": {
+        "zh-CN": "交互",
+        "en-US": "Interaction"
+      },
+      "tableData": "InteractionTable",
+      "tableColumn": "InteractionColumn"
+    },
+    {
+      "key": "Safety",
+      "index": "Safety",
+      "name": {
+        "zh-CN": "安全",
+        "en-US": "Safety"
+      },
+      "tableData": "SafetyTable",
+      "tableColumn": "SafetyColumn"
+    },
+    {
+      "key": "Agent",
+      "index": "Agent",
+      "name": {
+        "zh-CN": "智能体",
+        "en-US": "Agent"
+      },
+      "tableData": "AgentTable",
+      "tableColumn": "AgentColumn",
+      "attention": {
+        "title": {
+          "zh-CN": "趋势能力维度",
+          "en-US": "Emerging Capability Dimension"
+        },
+        "tooltip": {
+          "zh-CN": "司南官方自建榜单将结合大模型能力演进趋势，动态选取当前最受关注的能力方向作为新增评测维度。该维度将随技术发展与行业关注点变化持续更新，以反映模型能力的最新发展。",
+          "en-US": "The official OpenCompass leaderboard dynamically selects the most closely watched capability areas as new evaluation dimensions based on evolving model capabilities. These dimensions will continue to be updated as technology and industry priorities change, reflecting the latest developments in model capabilities."
+        }
+      }
+    }
+  ]
+}

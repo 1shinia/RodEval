@@ -6,8 +6,8 @@ import Table from '@/components/ui/Table'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import { toast } from '@/components/common/Toast'
 import { Trophy } from 'lucide-react'
-import type { LbMeta, LbColumn, LbPeriodOption, LlmLeaderboard, MmLeaderboard } from '@/api/leaderboard'
-import { getLeaderboardMeta, getLlmLeaderboard, getBoard } from '@/api/leaderboard'
+import type { LbMeta, LbColumn, LbPeriodOption, LlmLeaderboard, MmLeaderboard, LmV3Leaderboard } from '@/api/leaderboard'
+import { getLeaderboardMeta, getLlmLeaderboard, getBoard, getLmV3Leaderboard } from '@/api/leaderboard'
 
 const englishLabel = (label: string | null | undefined, fallback: string) =>
   label && !/[\u3400-\u9fff]/u.test(label) ? label : fallback
@@ -17,7 +17,7 @@ export default function LeaderboardPage() {
   const tRef = useRef(t)
   useEffect(() => { tRef.current = t }, [t])
   const [searchParams] = useSearchParams()
-  const urlType = searchParams.get('type') ?? 'llm'
+  const urlType = searchParams.get('type') ?? 'lm'
 
   const [meta, setMeta] = useState<LbMeta | null>(null)
   const [type, setType] = useState<string>(urlType === 'llm' ? 'llm' : urlType)
@@ -26,6 +26,8 @@ export default function LeaderboardPage() {
   const [category, setCategory] = useState('')
   const [llm, setLlm] = useState<LlmLeaderboard | null>(null)
   const [oss, setOss] = useState<MmLeaderboard | null>(null)
+  const [lmV3, setLmV3] = useState<LmV3Leaderboard | null>(null)
+  const [lmBenchmark, setLmBenchmark] = useState<'text' | 'full'>('full')
   const [loading, setLoading] = useState(true)
 
   // 首次拉取 meta（榜单类型清单 + LLM 时间段 + 各榜页签）
@@ -39,10 +41,10 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // 有效榜单类型：URL 里带非法 id 时回退 llm（渲染期派生，不在 effect 里改状态）
+  // 有效榜单类型：URL 里带非法 id 时回退 lm（渲染期派生，不在 effect 里改状态）
   const validType = useMemo(() => {
-    if (type === 'llm') return 'llm'
-    return meta?.boards.some((b) => b.id === type) ? type : 'llm'
+    if (type === 'lm') return 'lm'
+    return meta?.boards.some((b) => b.id === type) ? type : 'lm'
   }, [meta, type])
 
   // 榜单类型选项（llm 在最前，其余按后端返回顺序）
@@ -75,6 +77,7 @@ export default function LeaderboardPage() {
     setType(v)
     setLlm(null)
     setOss(null)
+    setLmV3(null)
   }
 
   // 按当前类型拉数据（切换下拉自动触发）
@@ -91,7 +94,21 @@ export default function LeaderboardPage() {
         .catch((e) => { toast.error(e instanceof Error ? e.message : tRef.current('leaderboardExtra.loadLlmFailed')) })
       return () => { stale = true }
     }
-    if (validType !== 'llm' && ossTab) {
+    if (validType === 'lm') {
+      // LLM V3: 维度走 category (overall/knowledge/...), benchmark 单独切
+      let stale = false
+      const dim = category || 'overall'
+      getLmV3Leaderboard(lmBenchmark, dim)
+        .then((d) => {
+          if (stale) return
+          setLmV3(d)
+          // 首次拉到 tabs 后初始化 category
+          setCategory((c) => (d.tabs?.some((t) => t.value === c) ? c : d.tabs?.[0]?.value ?? 'overall'))
+        })
+        .catch((e) => { toast.error(e instanceof Error ? e.message : tRef.current('leaderboardExtra.loadFailed')) })
+      return () => { stale = true }
+    }
+    if (validType !== 'llm' && validType !== 'lm' && ossTab) {
       let stale = false
       getBoard(validType, ossTab)
         .then((d) => { if (!stale) setOss(d) })
@@ -99,7 +116,7 @@ export default function LeaderboardPage() {
       return () => { stale = true }
     }
     return undefined
-  }, [meta, validType, llmPeriod, ossTab])
+  }, [meta, validType, llmPeriod, ossTab, lmBenchmark, category])
 
   const llmPeriods: LbPeriodOption[] = useMemo(() => meta?.llm_periods ?? [], [meta])
 
@@ -111,10 +128,14 @@ export default function LeaderboardPage() {
     : null
   const activeCols: LbColumn[] = validType === 'llm'
     ? (activeTable?.columns ?? [])
-    : (oss?.columns ?? [])
+    : validType === 'lm'
+      ? (lmV3?.columns ?? [])
+      : (oss?.columns ?? [])
   const rows: Record<string, unknown>[] = validType === 'llm'
     ? (activeTable?.rows ?? [])
-    : (oss?.rows ?? [])
+    : validType === 'lm'
+      ? (lmV3?.rows ?? [])
+      : (oss?.rows ?? [])
 
   // 把后端列配置映射成 Table 组件可用的列（数值列可排序，文本列只展示）
   const buildTableCols = useCallback(
@@ -183,7 +204,44 @@ export default function LeaderboardPage() {
           </div>
         )}
 
-        {validType !== 'llm' && ossTabs.length > 0 && (
+        {validType === 'lm' && lmV3 && (
+          <>
+            <div className="w-44">
+              <Select
+                label={t('leaderboardExtra.category')}
+                options={(lmV3.tabs ?? []).map((tab) => ({ value: tab.value, label: locale === 'zh' ? tab.label : englishLabel(tab.label_en, tab.value) }))}
+                value={lmV3.dim}
+                onChange={setCategory}
+              />
+            </div>
+            <div className="flex items-center gap-1 pt-5">
+              <button
+                type="button"
+                onClick={() => setLmBenchmark('text')}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  lmBenchmark === 'text'
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'bg-[var(--bg-card2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+                }`}
+              >
+                {t('leaderboardExtra.benchmarkText')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLmBenchmark('full')}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  lmBenchmark === 'full'
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'bg-[var(--bg-card2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+                }`}
+              >
+                {t('leaderboardExtra.benchmarkFull')}
+              </button>
+            </div>
+          </>
+        )}
+
+        {validType !== 'llm' && validType !== 'lm' && ossTabs.length > 0 && (
           <div className="w-56">
             <Select label={t('leaderboardExtra.boardTab')} options={ossTabs} value={ossTab} onChange={setRawOssTab} />
           </div>
@@ -208,18 +266,27 @@ export default function LeaderboardPage() {
               <Table
                 columns={buildTableCols(activeCols, rows)}
                 data={rows}
-                className="[&_th]:!text-sm [&_td]:text-base"
+                className="[&_th]:!text-sm [&_td]:text-sm [&_td:first-child]:text-base"
                 defaultSort={{ key: 'Average', dir: 'desc' }}
               />
             ) : <LoadingSpinner />)
-          : (oss ? (
-              <Table
-                columns={buildTableCols(activeCols, rows)}
-                data={rows}
-                className="[&_th]:!text-sm [&_td]:text-base"
-                defaultSort={{ key: ossSortKey, dir: 'desc' }}
-              />
-            ) : <LoadingSpinner />)
+          : validType === 'lm'
+            ? (lmV3 ? (
+                <Table
+                  columns={buildTableCols(activeCols, rows)}
+                  data={rows}
+                  className="[&_th]:!text-sm [&_td]:text-sm [&_td:first-child]:text-base"
+                  defaultSort={{ key: 'Average', dir: 'desc' }}
+                />
+              ) : <LoadingSpinner />)
+            : (oss ? (
+                <Table
+                  columns={buildTableCols(activeCols, rows)}
+                  data={rows}
+                  className="[&_th]:!text-sm [&_td]:text-sm [&_td:first-child]:text-base"
+                  defaultSort={{ key: ossSortKey, dir: 'desc' }}
+                />
+              ) : <LoadingSpinner />)
       )}
 
       {/* 空态 */}

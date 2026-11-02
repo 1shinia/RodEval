@@ -1,0 +1,2600 @@
+{
+  "modelBase": {
+    "claude-opus-5-5": {
+      "model": "Claude Opus 5.5 (max)",
+      "org": "Anthropic",
+      "model_link": "https://www.anthropic.com/claude-opus-5-5",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/anthropic.svg",
+      "inferenceSpeed": 118.00,
+      "apiPrice": 135.40,
+      "is_cn": false
+    },
+    "claude-sonnet-5-5": {
+      "model": "Claude Sonnet 5.5 (max)",
+      "org": "Anthropic",
+      "model_link": "https://www.anthropic.com/claude-sonnet-5-5",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/anthropic.svg",
+      "inferenceSpeed": 132.64,
+      "apiPrice": 67.70,
+      "is_cn": false
+    },
+    "gpt-6.1-sol": {
+      "model": "GPT-6.1 Sol (max)",
+      "org": "OpenAI",
+      "model_link": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/openai.svg",
+      "inferenceSpeed": 52.00,
+      "apiPrice": 67.70,
+      "is_cn": false
+    },
+    "gpt-6-astra": {
+      "model": "GPT-6 Astra (max)",
+      "org": "OpenAI",
+      "model_link": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/openai.svg",
+      "inferenceSpeed": 54.00,
+      "apiPrice": 338.50,
+      "is_cn": false
+    },
+    "qwen3.8-max": {
+      "model": "Qwen3.8-Max (xhigh)",
+      "org": "Alibaba",
+      "model_link": "https://huggingface.co/Qwen/Qwen3.8-2.4T-A95B-FP8",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "2.4T",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/alibaba.svg",
+      "inferenceSpeed": 35.17,
+      "apiPrice": 36.00,
+      "is_cn": true
+    },
+    "gemini-3.8-flash": {
+      "model": "Gemini 3.8 Flash (high)",
+      "org": "Google DeepMind",
+      "model_link": "https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/google.svg",
+      "inferenceSpeed": 105.98,
+      "apiPrice": 25.39,
+      "is_cn": false
+    },
+    "gemini-4-argon": {
+      "model": "Gemini 4 Argon (high)",
+      "org": "Google DeepMind",
+      "model_link": "https://ai.google.dev/gemini-api/docs/models/gemini-4-argon",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/google.svg",
+      "inferenceSpeed": 93.60,
+      "apiPrice": 67.70,
+      "is_cn": false
+    },
+    "doubao-seed-2-1-pro-260915": {
+      "model": "Doubao-Seed-2.1-Pro-0915 (high)",
+      "org": "ByteDance",
+      "model_link": "https://seed.bytedance.com/zh/blog/seed2-1-officially-released-advancing-ai-productivity",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/bytedance.svg",
+      "inferenceSpeed": 34.00,
+      "apiPrice": 30.00,
+      "is_cn": true
+    },
+    "glm-5.3": {
+      "model": "GLM-5.3 (max)",
+      "org": "Zhipu AI",
+      "model_link": "https://huggingface.co/zai-org/GLM-5.3",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "744B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/zhipu-ai.svg",
+      "inferenceSpeed": 72.00,
+      "apiPrice": 28.00,
+      "is_cn": true
+    },
+    "deepseek-flash": {
+      "model": "DeepSeek-V4.1-Flash-1017 (max)",
+      "org": "DeepSeek",
+      "model_link": "https://www.deepseek.com/",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "552B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/deepseek.svg",
+      "inferenceSpeed": 190.22,
+      "apiPrice": 4.00,
+      "is_cn": true
+    },
+    "grok-4.7": {
+      "model": "Grok 4.7 (xhigh)",
+      "org": "xAI",
+      "model_link": "https://x.ai/news/grok-4-7",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": null,
+      "inferenceSpeed": 81.00,
+      "apiPrice": 40.62,
+      "is_cn": false
+    },
+    "hy4-preview": {
+      "model": "hy4-preview (high)",
+      "org": "Tencent",
+      "model_link": "https://huggingface.co/tencent/Hy4-preview",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "770B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/tencent.svg",
+      "inferenceSpeed": 48.00,
+      "apiPrice": 18.00,
+      "is_cn": true
+    },
+    "qwen3.8-flash": {
+      "model": "Qwen3.8-Flash (xhigh)",
+      "org": "Alibaba",
+      "model_link": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "125B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/alibaba.svg",
+      "inferenceSpeed": 129.00,
+      "apiPrice": 2.70,
+      "is_cn": true
+    },
+    "glm-5.3-flash": {
+      "model": "GLM-5.3-Flash (max)",
+      "org": "Zhipu AI",
+      "model_link": "https://huggingface.co/zai-org/GLM-5.3-Flash",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "320B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/zhipu-ai.svg",
+      "inferenceSpeed": 64.56,
+      "apiPrice": 2.80,
+      "is_cn": true
+    },
+    "kimi-k3": {
+      "model": "Kimi K3 (max)",
+      "org": "Moonshot AI",
+      "model_link": "https://huggingface.co/moonshotai/Kimi-K3",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "2.8T",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/moonshot.svg",
+      "inferenceSpeed": 40.41,
+      "apiPrice": 100.00,
+      "is_cn": true
+    },
+    "deepseek-v4-pro-0813": {
+      "model": "DeepSeek-V4-Pro-0813 (max)",
+      "org": "DeepSeek",
+      "model_link": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "1.6T",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/deepseek.svg",
+      "inferenceSpeed": 85.00,
+      "apiPrice": 13.50,
+      "is_cn": true
+    },
+    "step-5-preview": {
+      "model": "Step 5 Preview (high)",
+      "org": "StepFun",
+      "model_link": "https://platform.stepfun.ai/docs/en/guides/models/step-5-preview",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "600B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/stepfun.svg",
+      "inferenceSpeed": 91.00,
+      "apiPrice": 20.00,
+      "is_cn": true
+    },
+    "mimo-v2.6-pro": {
+      "model": "MiMo-V2.6-Pro",
+      "org": "Xiaomi",
+      "model_link": "https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Pro-RL",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "1.02T",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/xiaomi.svg",
+      "inferenceSpeed": 47.14,
+      "apiPrice": 6.00,
+      "is_cn": true
+    },
+    "hy3": {
+      "model": "hy3 (high)",
+      "org": "Tencent",
+      "model_link": "https://huggingface.co/tencent/Hy3",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "295B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/tencent.svg",
+      "inferenceSpeed": 109.90,
+      "apiPrice": 4.00,
+      "is_cn": true
+    },
+    "ling-3.1-flash": {
+      "model": "Ling-3.1-flash",
+      "org": "Ant Group",
+      "model_link": "https://huggingface.co/inclusionAI",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "560B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/ant-group.svg",
+      "inferenceSpeed": 176.00,
+      "apiPrice": 1.50,
+      "is_cn": true
+    },
+    "MiniMax-M3": {
+      "model": "MiniMax-M3",
+      "org": "MiniMax",
+      "model_link": "https://huggingface.co/MiniMaxAI/MiniMax-M3",
+      "open_source": "YES",
+      "date": "2026/10/23",
+      "para_num": "428B",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/minimax.svg",
+      "inferenceSpeed": 156.84,
+      "apiPrice": 8.40,
+      "is_cn": true
+    },
+    "MiniMax-M3.1-Flash": {
+      "model": "MiniMax-M3.1-Flash (max)",
+      "org": "MiniMax",
+      "model_link": "https://www.minimax.io/blog/minimax-m31f",
+      "open_source": "NO",
+      "date": "2026/10/23",
+      "para_num": null,
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/minimax.svg",
+      "inferenceSpeed": 88.46,
+      "apiPrice": 4.00,
+      "is_cn": true
+    },
+    "kimi-k3.1-pro": {
+      "model": "Kimi K3.1 Pro (max)",
+      "org": "Moonshot AI",
+      "model_link": "https://www.kimi.ai/blog/kimi-k3-1-pro",
+      "open_source": "NO",
+      "date": "2026/10/28",
+      "para_num": "3T",
+      "language_model": null,
+      "vision_model": null,
+      "logoUrl": "https://cdn.opencompass.org.cn/compass-arena/assets/rank/lm/moonshot.svg",
+      "inferenceSpeed": 37.00,
+      "apiPrice": 68.00,
+      "is_cn": true
+    }
+  },
+  "OverallTable": [
+    {
+      "key": "kimi-k3.1-pro",
+      "model_type": null,
+      "release_date": "2026-10-24",
+      "Average": 78.47,
+      "Knowledge": 72.00,
+      "Abstraction": 80.00,
+      "Reasoning": 87.50,
+      "Interaction": 75.86,
+      "Safety": 82.93,
+      "Agent": 72.53,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6038.95,
+      "rank_change": null
+    },
+    {
+      "key": "claude-opus-5-5",
+      "model_type": null,
+      "release_date": "2026-09-22",
+      "Average": 78.25,
+      "Knowledge": 80.00,
+      "Abstraction": 75.00,
+      "Reasoning": 84.62,
+      "Interaction": 72.41,
+      "Safety": 85.37,
+      "Agent": 72.12,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6887.41,
+      "rank_change": null
+    },
+    {
+      "key": "claude-sonnet-5-5",
+      "model_type": null,
+      "release_date": "2026-09-28",
+      "Average": 75.56,
+      "Knowledge": 76.00,
+      "Abstraction": 80.00,
+      "Reasoning": 79.49,
+      "Interaction": 71.43,
+      "Safety": 85.37,
+      "Agent": 61.10,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10341.02,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6.1-sol",
+      "model_type": null,
+      "release_date": "2026-09-29",
+      "Average": 75.19,
+      "Knowledge": 78.00,
+      "Abstraction": 85.00,
+      "Reasoning": 77.50,
+      "Interaction": 69.23,
+      "Safety": 73.68,
+      "Agent": 67.71,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 3406.21,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6-astra",
+      "model_type": null,
+      "release_date": "2026-09-03",
+      "Average": 74.30,
+      "Knowledge": 72.00,
+      "Abstraction": 80.00,
+      "Reasoning": 82.50,
+      "Interaction": 62.07,
+      "Safety": 80.49,
+      "Agent": 68.72,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 696.76,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-4-argon",
+      "model_type": null,
+      "release_date": "2026-09-30",
+      "Average": 72.52,
+      "Knowledge": 66.00,
+      "Abstraction": 67.50,
+      "Reasoning": 80.00,
+      "Interaction": 79.31,
+      "Safety": 80.49,
+      "Agent": 61.79,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 4112.70,
+      "rank_change": null
+    },
+    {
+      "key": "doubao-seed-2-1-pro-260915",
+      "model_type": null,
+      "release_date": "2026-09-15",
+      "Average": 71.80,
+      "Knowledge": 72.00,
+      "Abstraction": 72.50,
+      "Reasoning": 77.50,
+      "Interaction": 65.52,
+      "Safety": 78.05,
+      "Agent": 65.26,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6935.79,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-max",
+      "model_type": "MoE",
+      "release_date": "2026-08-03",
+      "Average": 71.74,
+      "Knowledge": 78.00,
+      "Abstraction": 72.50,
+      "Reasoning": 77.50,
+      "Interaction": 65.52,
+      "Safety": 78.05,
+      "Agent": 58.90,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 14225.67,
+      "rank_change": null
+    },
+    {
+      "key": "grok-4.7",
+      "model_type": null,
+      "release_date": "2026-09-21",
+      "Average": 71.48,
+      "Knowledge": 67.35,
+      "Abstraction": 71.05,
+      "Reasoning": 78.79,
+      "Interaction": 67.86,
+      "Safety": 75.61,
+      "Agent": 68.22,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 13549.46,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3",
+      "model_type": "MoE",
+      "release_date": "2026-08-14",
+      "Average": 71.45,
+      "Knowledge": 72.00,
+      "Abstraction": 65.00,
+      "Reasoning": 84.21,
+      "Interaction": 72.41,
+      "Safety": 73.17,
+      "Agent": 61.89,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 18582.81,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-3.8-flash",
+      "model_type": null,
+      "release_date": "2026-09-02",
+      "Average": 71.01,
+      "Knowledge": 70.00,
+      "Abstraction": 72.50,
+      "Reasoning": 80.00,
+      "Interaction": 72.41,
+      "Safety": 75.61,
+      "Agent": 55.55,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 3099.02,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-flash",
+      "model_type": null,
+      "release_date": "2026-10-17",
+      "Average": 70.40,
+      "Knowledge": 68.00,
+      "Abstraction": 72.50,
+      "Reasoning": 82.50,
+      "Interaction": 62.07,
+      "Safety": 75.61,
+      "Agent": 61.73,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 18963.31,
+      "rank_change": null
+    },
+    {
+      "key": "hy4-preview",
+      "model_type": "MoE",
+      "release_date": "2026-08-28",
+      "Average": 68.63,
+      "Knowledge": 66.00,
+      "Abstraction": 77.50,
+      "Reasoning": 73.68,
+      "Interaction": 62.07,
+      "Safety": 78.05,
+      "Agent": 54.48,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 12758.47,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-flash",
+      "model_type": "MoE",
+      "release_date": "2026-08-26",
+      "Average": 68.49,
+      "Knowledge": 66.00,
+      "Abstraction": 69.23,
+      "Reasoning": 75.00,
+      "Interaction": 68.97,
+      "Safety": 75.61,
+      "Agent": 56.12,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 18422.75,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3-flash",
+      "model_type": "MoE",
+      "release_date": "2026-08-26",
+      "Average": 68.46,
+      "Knowledge": 66.00,
+      "Abstraction": 73.68,
+      "Reasoning": 75.68,
+      "Interaction": 57.14,
+      "Safety": 78.05,
+      "Agent": 60.21,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 13968.87,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3",
+      "model_type": "MoE",
+      "release_date": "2026-07-16",
+      "Average": 66.85,
+      "Knowledge": 70.00,
+      "Abstraction": 67.50,
+      "Reasoning": 72.50,
+      "Interaction": 65.52,
+      "Safety": 68.29,
+      "Agent": 57.31,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9946.87,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-v4-pro-0813",
+      "model_type": "MoE",
+      "release_date": "2026-08-13",
+      "Average": 66.38,
+      "Knowledge": 66.00,
+      "Abstraction": 72.50,
+      "Reasoning": 72.50,
+      "Interaction": 58.62,
+      "Safety": 68.29,
+      "Agent": 60.39,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 18048.23,
+      "rank_change": null
+    },
+    {
+      "key": "mimo-v2.6-pro",
+      "model_type": "MoE",
+      "release_date": "2026-09-22",
+      "Average": 64.72,
+      "Knowledge": 72.00,
+      "Abstraction": 62.50,
+      "Reasoning": 65.00,
+      "Interaction": 58.62,
+      "Safety": 75.61,
+      "Agent": 54.61,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 18123.15,
+      "rank_change": null
+    },
+    {
+      "key": "step-5-preview",
+      "model_type": "MoE",
+      "release_date": "2026-09-20",
+      "Average": 64.72,
+      "Knowledge": 64.00,
+      "Abstraction": 64.10,
+      "Reasoning": 70.27,
+      "Interaction": 64.29,
+      "Safety": 75.61,
+      "Agent": 50.05,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9100.69,
+      "rank_change": null
+    },
+    {
+      "key": "hy3",
+      "model_type": "MoE",
+      "release_date": "2026-07-06",
+      "Average": 64.45,
+      "Knowledge": 60.00,
+      "Abstraction": 75.00,
+      "Reasoning": 65.00,
+      "Interaction": 65.52,
+      "Safety": 70.73,
+      "Agent": 50.47,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 21656.43,
+      "rank_change": null
+    },
+    {
+      "key": "ling-3.1-flash",
+      "model_type": null,
+      "release_date": "2026-09-30",
+      "Average": 63.17,
+      "Knowledge": 60.00,
+      "Abstraction": 58.97,
+      "Reasoning": 71.79,
+      "Interaction": 65.52,
+      "Safety": 70.73,
+      "Agent": 52.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 17883.41,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3.1-Flash",
+      "model_type": null,
+      "release_date": "2026-10-19",
+      "Average": 60.85,
+      "Knowledge": 56.00,
+      "Abstraction": 62.50,
+      "Reasoning": 75.00,
+      "Interaction": 58.62,
+      "Safety": 58.54,
+      "Agent": 54.46,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10524.01,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3",
+      "model_type": "MoE",
+      "release_date": "2026-06-01",
+      "Average": 60.40,
+      "Knowledge": 62.00,
+      "Abstraction": 55.00,
+      "Reasoning": 65.00,
+      "Interaction": 58.62,
+      "Safety": 70.73,
+      "Agent": 51.05,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 14885.93,
+      "rank_change": null
+    }
+  ],
+  "KnowledgeTable": [
+    {
+      "key": "claude-opus-5-5",
+      "Average": 80.00,
+      "AppliedScientificKnowledge": 90.00,
+      "EverydayKnowledge": 80.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6404.48,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6.1-sol",
+      "Average": 78.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 90.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2177.04,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-max",
+      "Average": 78.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 80.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9094.72,
+      "rank_change": null
+    },
+    {
+      "key": "claude-sonnet-5-5",
+      "Average": 76.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 70.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 80.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9230.60,
+      "rank_change": null
+    },
+    {
+      "key": "doubao-seed-2-1-pro-260915",
+      "Average": 72.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 60.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 80.00,
+      "SocialSciencesAndHumanities": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2915.10,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3",
+      "Average": 72.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 60.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 13266.02,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6-astra",
+      "Average": 72.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 70.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 375.80,
+      "rank_change": null
+    },
+    {
+      "key": "mimo-v2.6-pro",
+      "Average": 72.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 70.00,
+      "FormalScientificKnowledge": 90.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 13003.08,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3.1-pro",
+      "Average": 72.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 60.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2858.00,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-3.8-flash",
+      "Average": 70.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 70.00,
+      "FormalScientificKnowledge": 80.00,
+      "NaturalScientificKnowledge": 80.00,
+      "SocialSciencesAndHumanities": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2107.94,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3",
+      "Average": 70.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 70.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 60.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 5196.80,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-flash",
+      "Average": 68.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 80.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 40.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 13898.78,
+      "rank_change": null
+    },
+    {
+      "key": "grok-4.7",
+      "Average": 67.35,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 70.00,
+      "FormalScientificKnowledge": 80.00,
+      "NaturalScientificKnowledge": 60.00,
+      "SocialSciencesAndHumanities": 55.56,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 11412.10,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-v4-pro-0813",
+      "Average": 66.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 60.00,
+      "FormalScientificKnowledge": 90.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10932.88,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-4-argon",
+      "Average": 66.00,
+      "AppliedScientificKnowledge": 70.00,
+      "EverydayKnowledge": 70.00,
+      "FormalScientificKnowledge": 80.00,
+      "NaturalScientificKnowledge": 60.00,
+      "SocialSciencesAndHumanities": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2419.72,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3-flash",
+      "Average": 66.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 70.00,
+      "FormalScientificKnowledge": 80.00,
+      "NaturalScientificKnowledge": 70.00,
+      "SocialSciencesAndHumanities": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10865.92,
+      "rank_change": null
+    },
+    {
+      "key": "hy4-preview",
+      "Average": 66.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 60.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 60.00,
+      "SocialSciencesAndHumanities": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9639.10,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-flash",
+      "Average": 66.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 60.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 50.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 12070.42,
+      "rank_change": null
+    },
+    {
+      "key": "step-5-preview",
+      "Average": 64.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 60.00,
+      "FormalScientificKnowledge": 80.00,
+      "NaturalScientificKnowledge": 60.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6630.10,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3",
+      "Average": 62.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 50.00,
+      "FormalScientificKnowledge": 90.00,
+      "NaturalScientificKnowledge": 50.00,
+      "SocialSciencesAndHumanities": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 7240.18,
+      "rank_change": null
+    },
+    {
+      "key": "hy3",
+      "Average": 60.00,
+      "AppliedScientificKnowledge": 50.00,
+      "EverydayKnowledge": 60.00,
+      "FormalScientificKnowledge": 100.00,
+      "NaturalScientificKnowledge": 50.00,
+      "SocialSciencesAndHumanities": 40.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 15539.00,
+      "rank_change": null
+    },
+    {
+      "key": "ling-3.1-flash",
+      "Average": 60.00,
+      "AppliedScientificKnowledge": 60.00,
+      "EverydayKnowledge": 40.00,
+      "FormalScientificKnowledge": 90.00,
+      "NaturalScientificKnowledge": 60.00,
+      "SocialSciencesAndHumanities": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 13146.92,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3.1-Flash",
+      "Average": 56.00,
+      "AppliedScientificKnowledge": 50.00,
+      "EverydayKnowledge": 50.00,
+      "FormalScientificKnowledge": 80.00,
+      "NaturalScientificKnowledge": 60.00,
+      "SocialSciencesAndHumanities": 40.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6534.22,
+      "rank_change": null
+    }
+  ],
+  "AbstractionTable": [
+    {
+      "key": "gpt-6.1-sol",
+      "Average": 85.00,
+      "AttentionAndScanning": 70.00,
+      "LanguageUnderstanding": 80.00,
+      "RelevantInformationIdentification": 90.00,
+      "ConceptualizationAndAbstraction": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 3996.18,
+      "rank_change": null
+    },
+    {
+      "key": "claude-sonnet-5-5",
+      "Average": 80.00,
+      "AttentionAndScanning": 80.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 70.00,
+      "ConceptualizationAndAbstraction": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 17379.68,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6-astra",
+      "Average": 80.00,
+      "AttentionAndScanning": 70.00,
+      "LanguageUnderstanding": 80.00,
+      "RelevantInformationIdentification": 70.00,
+      "ConceptualizationAndAbstraction": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 682.45,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3.1-pro",
+      "Average": 80.00,
+      "AttentionAndScanning": 70.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 80.00,
+      "ConceptualizationAndAbstraction": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 8044.85,
+      "rank_change": null
+    },
+    {
+      "key": "hy4-preview",
+      "Average": 77.50,
+      "AttentionAndScanning": 70.00,
+      "LanguageUnderstanding": 60.00,
+      "RelevantInformationIdentification": 80.00,
+      "ConceptualizationAndAbstraction": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 16482.35,
+      "rank_change": null
+    },
+    {
+      "key": "claude-opus-5-5",
+      "Average": 75.00,
+      "AttentionAndScanning": 60.00,
+      "LanguageUnderstanding": 60.00,
+      "RelevantInformationIdentification": 90.00,
+      "ConceptualizationAndAbstraction": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 8658.33,
+      "rank_change": null
+    },
+    {
+      "key": "hy3",
+      "Average": 75.00,
+      "AttentionAndScanning": 70.00,
+      "LanguageUnderstanding": 80.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 31940.28,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3-flash",
+      "Average": 73.68,
+      "AttentionAndScanning": 66.67,
+      "LanguageUnderstanding": 66.67,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 20589.55,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-flash",
+      "Average": 72.50,
+      "AttentionAndScanning": 60.00,
+      "LanguageUnderstanding": 80.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 30239.83,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-v4-pro-0813",
+      "Average": 72.50,
+      "AttentionAndScanning": 60.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 70.00,
+      "ConceptualizationAndAbstraction": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 28331.05,
+      "rank_change": null
+    },
+    {
+      "key": "doubao-seed-2-1-pro-260915",
+      "Average": 72.50,
+      "AttentionAndScanning": 70.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10482.15,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-3.8-flash",
+      "Average": 72.50,
+      "AttentionAndScanning": 80.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 4610.05,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-max",
+      "Average": 72.50,
+      "AttentionAndScanning": 70.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 22577.60,
+      "rank_change": null
+    },
+    {
+      "key": "grok-4.7",
+      "Average": 71.05,
+      "AttentionAndScanning": 66.67,
+      "LanguageUnderstanding": 66.67,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 20579.74,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-flash",
+      "Average": 69.23,
+      "AttentionAndScanning": 55.56,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 27289.18,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-4-argon",
+      "Average": 67.50,
+      "AttentionAndScanning": 60.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 70.00,
+      "ConceptualizationAndAbstraction": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6298.58,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3",
+      "Average": 67.50,
+      "AttentionAndScanning": 60.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 70.00,
+      "ConceptualizationAndAbstraction": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 13543.18,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3",
+      "Average": 65.00,
+      "AttentionAndScanning": 50.00,
+      "LanguageUnderstanding": 60.00,
+      "RelevantInformationIdentification": 50.00,
+      "ConceptualizationAndAbstraction": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 29235.15,
+      "rank_change": null
+    },
+    {
+      "key": "step-5-preview",
+      "Average": 64.10,
+      "AttentionAndScanning": 44.44,
+      "LanguageUnderstanding": 80.00,
+      "RelevantInformationIdentification": 50.00,
+      "ConceptualizationAndAbstraction": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 13154.54,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3.1-Flash",
+      "Average": 62.50,
+      "AttentionAndScanning": 60.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 50.00,
+      "ConceptualizationAndAbstraction": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 17423.63,
+      "rank_change": null
+    },
+    {
+      "key": "mimo-v2.6-pro",
+      "Average": 62.50,
+      "AttentionAndScanning": 60.00,
+      "LanguageUnderstanding": 70.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 26830.98,
+      "rank_change": null
+    },
+    {
+      "key": "ling-3.1-flash",
+      "Average": 58.97,
+      "AttentionAndScanning": 44.44,
+      "LanguageUnderstanding": 60.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 21666.49,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3",
+      "Average": 55.00,
+      "AttentionAndScanning": 40.00,
+      "LanguageUnderstanding": 50.00,
+      "RelevantInformationIdentification": 60.00,
+      "ConceptualizationAndAbstraction": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 16468.83,
+      "rank_change": null
+    }
+  ],
+  "ReasoningTable": [
+    {
+      "key": "kimi-k3.1-pro",
+      "Average": 87.50,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 90.00,
+      "SpatialAndPhysicalReasoning": 80.00,
+      "CriticalThinkingProcess": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 11527.50,
+      "rank_change": null
+    },
+    {
+      "key": "claude-opus-5-5",
+      "Average": 84.62,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 80.00,
+      "SpatialAndPhysicalReasoning": 88.89,
+      "CriticalThinkingProcess": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9503.26,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3",
+      "Average": 84.21,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 80.00,
+      "SpatialAndPhysicalReasoning": 100.00,
+      "CriticalThinkingProcess": 66.67,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 31828.66,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-flash",
+      "Average": 82.50,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 60.00,
+      "SpatialAndPhysicalReasoning": 90.00,
+      "CriticalThinkingProcess": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 29223.25,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6-astra",
+      "Average": 82.50,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 80.00,
+      "SpatialAndPhysicalReasoning": 80.00,
+      "CriticalThinkingProcess": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 1429.53,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-3.8-flash",
+      "Average": 80.00,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 80.00,
+      "SpatialAndPhysicalReasoning": 70.00,
+      "CriticalThinkingProcess": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 4854.30,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-4-argon",
+      "Average": 80.00,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 90.00,
+      "SpatialAndPhysicalReasoning": 70.00,
+      "CriticalThinkingProcess": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6011.60,
+      "rank_change": null
+    },
+    {
+      "key": "claude-sonnet-5-5",
+      "Average": 79.49,
+      "LogicalReasoning": 80.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 88.89,
+      "CriticalThinkingProcess": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 12611.59,
+      "rank_change": null
+    },
+    {
+      "key": "grok-4.7",
+      "Average": 78.79,
+      "LogicalReasoning": 88.89,
+      "QuantitativeReasoning": 71.43,
+      "SpatialAndPhysicalReasoning": 77.78,
+      "CriticalThinkingProcess": 75.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 19269.61,
+      "rank_change": null
+    },
+    {
+      "key": "doubao-seed-2-1-pro-260915",
+      "Average": 77.50,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 60.00,
+      "CriticalThinkingProcess": 90.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 12482.85,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6.1-sol",
+      "Average": 77.50,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 80.00,
+      "SpatialAndPhysicalReasoning": 60.00,
+      "CriticalThinkingProcess": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 4943.10,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-max",
+      "Average": 77.50,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 70.00,
+      "CriticalThinkingProcess": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 26062.03,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3-flash",
+      "Average": 75.68,
+      "LogicalReasoning": 80.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 77.78,
+      "CriticalThinkingProcess": 75.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 24571.95,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3.1-Flash",
+      "Average": 75.00,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 60.00,
+      "CriticalThinkingProcess": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 18327.45,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-flash",
+      "Average": 75.00,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 80.00,
+      "SpatialAndPhysicalReasoning": 50.00,
+      "CriticalThinkingProcess": 80.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 34815.50,
+      "rank_change": null
+    },
+    {
+      "key": "hy4-preview",
+      "Average": 73.68,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 60.00,
+      "CriticalThinkingProcess": 75.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 18073.18,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-v4-pro-0813",
+      "Average": 72.50,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 60.00,
+      "CriticalThinkingProcess": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 32537.30,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3",
+      "Average": 72.50,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 60.00,
+      "CriticalThinkingProcess": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 18995.38,
+      "rank_change": null
+    },
+    {
+      "key": "ling-3.1-flash",
+      "Average": 71.79,
+      "LogicalReasoning": 90.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 66.67,
+      "CriticalThinkingProcess": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 34493.38,
+      "rank_change": null
+    },
+    {
+      "key": "step-5-preview",
+      "Average": 70.27,
+      "LogicalReasoning": 80.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 55.56,
+      "CriticalThinkingProcess": 75.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 15288.76,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3",
+      "Average": 65.00,
+      "LogicalReasoning": 80.00,
+      "QuantitativeReasoning": 60.00,
+      "SpatialAndPhysicalReasoning": 60.00,
+      "CriticalThinkingProcess": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 36957.78,
+      "rank_change": null
+    },
+    {
+      "key": "hy3",
+      "Average": 65.00,
+      "LogicalReasoning": 80.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 60.00,
+      "CriticalThinkingProcess": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 35033.55,
+      "rank_change": null
+    },
+    {
+      "key": "mimo-v2.6-pro",
+      "Average": 65.00,
+      "LogicalReasoning": 80.00,
+      "QuantitativeReasoning": 70.00,
+      "SpatialAndPhysicalReasoning": 40.00,
+      "CriticalThinkingProcess": 70.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 31573.33,
+      "rank_change": null
+    }
+  ],
+  "InteractionTable": [
+    {
+      "key": "gemini-4-argon",
+      "Average": 79.31,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 100.00,
+      "InteractiveCognitionAndAdaptation": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 5275.93,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3.1-pro",
+      "Average": 75.86,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 60.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6621.27,
+      "rank_change": null
+    },
+    {
+      "key": "claude-opus-5-5",
+      "Average": 72.41,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 8221.41,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-3.8-flash",
+      "Average": 72.41,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2321.97,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3",
+      "Average": 72.41,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 11009.48,
+      "rank_change": null
+    },
+    {
+      "key": "claude-sonnet-5-5",
+      "Average": 71.43,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 75.00,
+      "InteractiveCognitionAndAdaptation": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9015.86,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6.1-sol",
+      "Average": 69.23,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 28.57,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 3445.69,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-flash",
+      "Average": 68.97,
+      "TheoryOfMindAndSocialCognition": 80.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 50.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9695.00,
+      "rank_change": null
+    },
+    {
+      "key": "grok-4.7",
+      "Average": 67.86,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 75.00,
+      "InteractiveCognitionAndAdaptation": 40.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9219.89,
+      "rank_change": null
+    },
+    {
+      "key": "doubao-seed-2-1-pro-260915",
+      "Average": 65.52,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6743.93,
+      "rank_change": null
+    },
+    {
+      "key": "hy3",
+      "Average": 65.52,
+      "TheoryOfMindAndSocialCognition": 80.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 40.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 14555.24,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3",
+      "Average": 65.52,
+      "TheoryOfMindAndSocialCognition": 80.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 40.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 7009.28,
+      "rank_change": null
+    },
+    {
+      "key": "ling-3.1-flash",
+      "Average": 65.52,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 66.67,
+      "InteractiveCognitionAndAdaptation": 40.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9206.10,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-max",
+      "Average": 65.52,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 7486.45,
+      "rank_change": null
+    },
+    {
+      "key": "step-5-preview",
+      "Average": 64.29,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 75.00,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6286.75,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-flash",
+      "Average": 62.07,
+      "TheoryOfMindAndSocialCognition": 80.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10798.45,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6-astra",
+      "Average": 62.07,
+      "TheoryOfMindAndSocialCognition": 90.00,
+      "LanguageExpressionAndPragmatics": 66.67,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 700.59,
+      "rank_change": null
+    },
+    {
+      "key": "hy4-preview",
+      "Average": 62.07,
+      "TheoryOfMindAndSocialCognition": 80.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9516.55,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3",
+      "Average": 58.62,
+      "TheoryOfMindAndSocialCognition": 80.00,
+      "LanguageExpressionAndPragmatics": 66.67,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10919.66,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3.1-Flash",
+      "Average": 58.62,
+      "TheoryOfMindAndSocialCognition": 70.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6051.69,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-v4-pro-0813",
+      "Average": 58.62,
+      "TheoryOfMindAndSocialCognition": 60.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 40.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9535.59,
+      "rank_change": null
+    },
+    {
+      "key": "mimo-v2.6-pro",
+      "Average": 58.62,
+      "TheoryOfMindAndSocialCognition": 70.00,
+      "LanguageExpressionAndPragmatics": 77.78,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 11561.14,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3-flash",
+      "Average": 57.14,
+      "TheoryOfMindAndSocialCognition": 70.00,
+      "LanguageExpressionAndPragmatics": 75.00,
+      "InteractiveCognitionAndAdaptation": 30.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 7986.29,
+      "rank_change": null
+    }
+  ],
+  "SafetyTable": [
+    {
+      "key": "claude-opus-5-5",
+      "Average": 85.37,
+      "KnownAndUnknownCalibration": 80.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 100.00,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2316.83,
+      "rank_change": null
+    },
+    {
+      "key": "claude-sonnet-5-5",
+      "Average": 85.37,
+      "KnownAndUnknownCalibration": 80.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 100.00,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 3573.39,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3.1-pro",
+      "Average": 82.93,
+      "KnownAndUnknownCalibration": 80.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 85.71,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2874.94,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-4-argon",
+      "Average": 80.49,
+      "KnownAndUnknownCalibration": 70.00,
+      "HarmlessnessAndJailbreakResistance": 70.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 100.00,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 1369.37,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6-astra",
+      "Average": 80.49,
+      "KnownAndUnknownCalibration": 70.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 57.14,
+      "FairnessAndBiasManagement": 100.00,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 384.54,
+      "rank_change": null
+    },
+    {
+      "key": "doubao-seed-2-1-pro-260915",
+      "Average": 78.05,
+      "KnownAndUnknownCalibration": 70.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 71.43,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 3103.15,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3-flash",
+      "Average": 78.05,
+      "KnownAndUnknownCalibration": 60.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 85.71,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 6133.76,
+      "rank_change": null
+    },
+    {
+      "key": "hy4-preview",
+      "Average": 78.05,
+      "KnownAndUnknownCalibration": 70.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 71.43,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10296.78,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-max",
+      "Average": 78.05,
+      "KnownAndUnknownCalibration": 50.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 100.00,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 5553.78,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-flash",
+      "Average": 75.61,
+      "KnownAndUnknownCalibration": 50.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 85.71,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 9903.51,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-3.8-flash",
+      "Average": 75.61,
+      "KnownAndUnknownCalibration": 70.00,
+      "HarmlessnessAndJailbreakResistance": 70.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 71.43,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 1634.90,
+      "rank_change": null
+    },
+    {
+      "key": "grok-4.7",
+      "Average": 75.61,
+      "KnownAndUnknownCalibration": 70.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 57.14,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 7940.76,
+      "rank_change": null
+    },
+    {
+      "key": "mimo-v2.6-pro",
+      "Average": 75.61,
+      "KnownAndUnknownCalibration": 60.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 71.43,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 7391.00,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-flash",
+      "Average": 75.61,
+      "KnownAndUnknownCalibration": 60.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 85.71,
+      "PrivacyProtection": 85.71,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 7915.93,
+      "rank_change": null
+    },
+    {
+      "key": "step-5-preview",
+      "Average": 75.61,
+      "KnownAndUnknownCalibration": 60.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 57.14,
+      "FairnessAndBiasManagement": 85.71,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 4594.85,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6.1-sol",
+      "Average": 73.68,
+      "KnownAndUnknownCalibration": 60.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 57.14,
+      "FairnessAndBiasManagement": 100.00,
+      "PrivacyProtection": 75.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 2798.16,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3",
+      "Average": 73.17,
+      "KnownAndUnknownCalibration": 50.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 71.43,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 7754.27,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3",
+      "Average": 70.73,
+      "KnownAndUnknownCalibration": 30.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 85.71,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 3937.63,
+      "rank_change": null
+    },
+    {
+      "key": "hy3",
+      "Average": 70.73,
+      "KnownAndUnknownCalibration": 60.00,
+      "HarmlessnessAndJailbreakResistance": 60.00,
+      "AdversarialRobustness": 57.14,
+      "FairnessAndBiasManagement": 85.71,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 11055.61,
+      "rank_change": null
+    },
+    {
+      "key": "ling-3.1-flash",
+      "Average": 70.73,
+      "KnownAndUnknownCalibration": 40.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 71.43,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 10398.98,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-v4-pro-0813",
+      "Average": 68.29,
+      "KnownAndUnknownCalibration": 40.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 71.43,
+      "FairnessAndBiasManagement": 57.14,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 8578.90,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3",
+      "Average": 68.29,
+      "KnownAndUnknownCalibration": 40.00,
+      "HarmlessnessAndJailbreakResistance": 80.00,
+      "AdversarialRobustness": 42.86,
+      "FairnessAndBiasManagement": 85.71,
+      "PrivacyProtection": 100.00,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 5369.40,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3.1-Flash",
+      "Average": 58.54,
+      "KnownAndUnknownCalibration": 40.00,
+      "HarmlessnessAndJailbreakResistance": 70.00,
+      "AdversarialRobustness": 28.57,
+      "FairnessAndBiasManagement": 71.43,
+      "PrivacyProtection": 85.71,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 4208.51,
+      "rank_change": null
+    }
+  ],
+  "AgentTable": [
+    {
+      "key": "kimi-k3.1-pro",
+      "Average": 72.53,
+      "TaskPlanningAndToolUse": 94.70,
+      "CodeAndTerminalExecution": 52.23,
+      "DataAnalysisAndDeepResearch": 70.66,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 35339.83,
+      "rank_change": null
+    },
+    {
+      "key": "claude-opus-5-5",
+      "Average": 72.12,
+      "TaskPlanningAndToolUse": 91.00,
+      "CodeAndTerminalExecution": 60.03,
+      "DataAnalysisAndDeepResearch": 65.34,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 110333.64,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6-astra",
+      "Average": 68.72,
+      "TaskPlanningAndToolUse": 90.37,
+      "CodeAndTerminalExecution": 54.54,
+      "DataAnalysisAndDeepResearch": 61.26,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 47883.03,
+      "rank_change": null
+    },
+    {
+      "key": "grok-4.7",
+      "Average": 68.22,
+      "TaskPlanningAndToolUse": 89.62,
+      "CodeAndTerminalExecution": 54.14,
+      "DataAnalysisAndDeepResearch": 60.91,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 87497.97,
+      "rank_change": null
+    },
+    {
+      "key": "gpt-6.1-sol",
+      "Average": 67.71,
+      "TaskPlanningAndToolUse": 88.85,
+      "CodeAndTerminalExecution": 53.74,
+      "DataAnalysisAndDeepResearch": 60.55,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 46690.04,
+      "rank_change": null
+    },
+    {
+      "key": "doubao-seed-2-1-pro-260915",
+      "Average": 65.26,
+      "TaskPlanningAndToolUse": 85.16,
+      "CodeAndTerminalExecution": 51.79,
+      "DataAnalysisAndDeepResearch": 58.84,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 66050.88,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3",
+      "Average": 61.89,
+      "TaskPlanningAndToolUse": 80.09,
+      "CodeAndTerminalExecution": 49.12,
+      "DataAnalysisAndDeepResearch": 56.47,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 106841.74,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-4-argon",
+      "Average": 61.79,
+      "TaskPlanningAndToolUse": 79.94,
+      "CodeAndTerminalExecution": 49.04,
+      "DataAnalysisAndDeepResearch": 56.40,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 57087.25,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-flash",
+      "Average": 61.73,
+      "TaskPlanningAndToolUse": 79.85,
+      "CodeAndTerminalExecution": 48.99,
+      "DataAnalysisAndDeepResearch": 56.36,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 164690.35,
+      "rank_change": null
+    },
+    {
+      "key": "claude-sonnet-5-5",
+      "Average": 61.10,
+      "TaskPlanningAndToolUse": 78.90,
+      "CodeAndTerminalExecution": 48.49,
+      "DataAnalysisAndDeepResearch": 55.92,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 265528.87,
+      "rank_change": null
+    },
+    {
+      "key": "deepseek-v4-pro-0813",
+      "Average": 60.39,
+      "TaskPlanningAndToolUse": 77.83,
+      "CodeAndTerminalExecution": 47.93,
+      "DataAnalysisAndDeepResearch": 55.42,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 89272.70,
+      "rank_change": null
+    },
+    {
+      "key": "glm-5.3-flash",
+      "Average": 60.21,
+      "TaskPlanningAndToolUse": 77.56,
+      "CodeAndTerminalExecution": 47.79,
+      "DataAnalysisAndDeepResearch": 55.29,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 83934.00,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-max",
+      "Average": 58.90,
+      "TaskPlanningAndToolUse": 75.59,
+      "CodeAndTerminalExecution": 46.75,
+      "DataAnalysisAndDeepResearch": 54.37,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 381345.43,
+      "rank_change": null
+    },
+    {
+      "key": "kimi-k3",
+      "Average": 57.31,
+      "TaskPlanningAndToolUse": 73.20,
+      "CodeAndTerminalExecution": 45.49,
+      "DataAnalysisAndDeepResearch": 53.25,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 79468.00,
+      "rank_change": null
+    },
+    {
+      "key": "qwen3.8-flash",
+      "Average": 56.12,
+      "TaskPlanningAndToolUse": 71.41,
+      "CodeAndTerminalExecution": 44.54,
+      "DataAnalysisAndDeepResearch": 52.42,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 158610.36,
+      "rank_change": null
+    },
+    {
+      "key": "gemini-3.8-flash",
+      "Average": 55.55,
+      "TaskPlanningAndToolUse": 70.55,
+      "CodeAndTerminalExecution": 44.09,
+      "DataAnalysisAndDeepResearch": 52.02,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 75243.50,
+      "rank_change": null
+    },
+    {
+      "key": "mimo-v2.6-pro",
+      "Average": 54.61,
+      "TaskPlanningAndToolUse": 69.13,
+      "CodeAndTerminalExecution": 43.34,
+      "DataAnalysisAndDeepResearch": 51.37,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 96897.87,
+      "rank_change": null
+    },
+    {
+      "key": "hy4-preview",
+      "Average": 54.48,
+      "TaskPlanningAndToolUse": 68.94,
+      "CodeAndTerminalExecution": 43.24,
+      "DataAnalysisAndDeepResearch": 51.27,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 106453.39,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3.1-Flash",
+      "Average": 54.46,
+      "TaskPlanningAndToolUse": 68.91,
+      "CodeAndTerminalExecution": 43.22,
+      "DataAnalysisAndDeepResearch": 51.26,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 380640.97,
+      "rank_change": null
+    },
+    {
+      "key": "ling-3.1-flash",
+      "Average": 52.00,
+      "TaskPlanningAndToolUse": 65.20,
+      "CodeAndTerminalExecution": 41.27,
+      "DataAnalysisAndDeepResearch": 49.54,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 111690.50,
+      "rank_change": null
+    },
+    {
+      "key": "MiniMax-M3",
+      "Average": 51.05,
+      "TaskPlanningAndToolUse": 63.77,
+      "CodeAndTerminalExecution": 40.52,
+      "DataAnalysisAndDeepResearch": 48.87,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 71858.27,
+      "rank_change": null
+    },
+    {
+      "key": "hy3",
+      "Average": 50.47,
+      "TaskPlanningAndToolUse": 62.90,
+      "CodeAndTerminalExecution": 40.06,
+      "DataAnalysisAndDeepResearch": 48.46,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 139030.61,
+      "rank_change": null
+    },
+    {
+      "key": "step-5-preview",
+      "Average": 50.05,
+      "TaskPlanningAndToolUse": 62.27,
+      "CodeAndTerminalExecution": 39.72,
+      "DataAnalysisAndDeepResearch": 48.17,
+      "thinkingTokenCost": 0.00,
+      "responseTokenCost": 158026.37,
+      "rank_change": null
+    }
+  ],
+  "globalData": {
+    "ui": {
+      "benchmarkModes": [
+        {
+          "key": "text",
+          "label": {
+            "zh-CN": "仅文本评测基准",
+            "en-US": "Text-only Benchmarks"
+          }
+        },
+        {
+          "key": "full",
+          "label": {
+            "zh-CN": "全量评测基准",
+            "en-US": "Full Benchmarks"
+          },
+          "disabled": true,
+          "tooltip": {
+            "zh-CN": "全量评测基准即将上线",
+            "en-US": "Full benchmarks are coming soon"
+          }
+        }
+      ],
+      "sourceFilters": [
+        {
+          "key": "all",
+          "label": {
+            "zh-CN": "全部",
+            "en-US": "All"
+          }
+        },
+        {
+          "key": "open",
+          "label": {
+            "zh-CN": "开源",
+            "en-US": "Open Source"
+          }
+        },
+        {
+          "key": "closed",
+          "label": {
+            "zh-CN": "闭源",
+            "en-US": "Closed Source"
+          }
+        }
+      ],
+      "parameterFilter": {
+        "label": {
+          "zh-CN": "参数量",
+          "en-US": "Parameters"
+        },
+        "defaultSelected": [],
+        "options": [
+          {
+            "key": "lt4",
+            "label": {
+              "zh-CN": "< 4B",
+              "en-US": "< 4B"
+            }
+          },
+          {
+            "key": "4to10",
+            "label": {
+              "zh-CN": "4B-10B",
+              "en-US": "4B-10B"
+            }
+          },
+          {
+            "key": "10to20",
+            "label": {
+              "zh-CN": "10B-20B",
+              "en-US": "10B-20B"
+            }
+          },
+          {
+            "key": "20to40",
+            "label": {
+              "zh-CN": "20B-40B",
+              "en-US": "20B-40B"
+            }
+          },
+          {
+            "key": "gt40",
+            "label": {
+              "zh-CN": "> 40B",
+              "en-US": "> 40B"
+            }
+          },
+          {
+            "key": "na",
+            "label": {
+              "zh-CN": "N/A",
+              "en-US": "N/A"
+            }
+          }
+        ]
+      },
+      "modelScopes": [
+        {
+          "key": "all",
+          "label": {
+            "zh-CN": "全量模型",
+            "en-US": "All Models"
+          }
+        },
+        {
+          "key": "top30",
+          "label": {
+            "zh-CN": "排名前30",
+            "en-US": "Top 30"
+          }
+        },
+        {
+          "key": "top50",
+          "label": {
+            "zh-CN": "排名前50",
+            "en-US": "Top 50"
+          }
+        },
+        {
+          "key": "top100",
+          "label": {
+            "zh-CN": "排名前100",
+            "en-US": "Top 100"
+          }
+        }
+      ],
+      "chartAction": {
+        "label": {
+          "zh-CN": "图表视图",
+          "en-US": "Chart View"
+        }
+      },
+      "copyTooltip": {
+        "zh-CN": "复制链接",
+        "en-US": "Copy Link"
+      },
+      "copiedTooltip": {
+        "zh-CN": "链接已复制",
+        "en-US": "Copied"
+      },
+      "downloadTooltip": {
+        "zh-CN": "下载榜单",
+        "en-US": "Download"
+      },
+      "inferenceRateChart": {
+        "title": {
+          "zh-CN": "推理速率（Tokens/S）",
+          "en-US": "Inference Speed (Tokens/s)"
+        },
+        "description": {
+          "zh-CN": "模型每秒钟输出的token数量，数值越高表示生成效率越高",
+          "en-US": "Tokens output by the model per second; higher values indicate greater generation efficiency."
+        },
+        "unit": {
+          "zh-CN": "Tokens/S",
+          "en-US": "Tokens/s"
+        },
+        "downloadTooltip": {
+          "zh-CN": "下载图片",
+          "en-US": "Download image"
+        },
+        "filename": "opencompass-inference-speed.png"
+      },
+      "chartTooltip": {
+        "scoreLabel": {
+          "zh-CN": "综合评分",
+          "en-US": "Overall Score"
+        },
+        "labelSeparator": {
+          "zh-CN": "：",
+          "en-US": ": "
+        },
+        "missingValue": {
+          "zh-CN": "-",
+          "en-US": "-"
+        },
+        "fields": [
+          {
+            "key": "open_source",
+            "label": {
+              "zh-CN": "模型开放度",
+              "en-US": "Model Availability"
+            },
+            "valueMap": {
+              "YES": {
+                "zh-CN": "开源",
+                "en-US": "Open Source"
+              },
+              "NO": {
+                "zh-CN": "闭源",
+                "en-US": "Closed Source"
+              }
+            }
+          },
+          {
+            "key": "para_num",
+            "label": {
+              "zh-CN": "模型参数量",
+              "en-US": "Parameters"
+            }
+          },
+          {
+            "key": "org",
+            "label": {
+              "zh-CN": "模型厂商",
+              "en-US": "Provider"
+            }
+          },
+          {
+            "key": "release_date",
+            "label": {
+              "zh-CN": "模型发布日期",
+              "en-US": "Release Date"
+            }
+          },
+          {
+            "key": "date",
+            "label": {
+              "zh-CN": "模型评测日期",
+              "en-US": "Evaluation Date"
+            }
+          }
+        ],
+        "summary": {
+          "prefix": {
+            "zh-CN": "*综合评分由",
+            "en-US": "*Overall score is averaged from"
+          },
+          "suffix": {
+            "zh-CN": "取均分构成",
+            "en-US": ""
+          },
+          "separator": {
+            "zh-CN": "，",
+            "en-US": ", "
+          },
+          "lastSeparator": {
+            "zh-CN": "及",
+            "en-US": " and "
+          },
+          "unit": {
+            "zh-CN": "分",
+            "en-US": " pts"
+          },
+          "itemTemplate": {
+            "zh-CN": "{label}{value}{unit}",
+            "en-US": "{label} {value}{unit}"
+          },
+          "items": [
+            {
+              "table": "KnowledgeTable",
+              "matchKey": "key",
+              "valueKey": "Average",
+              "label": {
+                "zh-CN": "知识",
+                "en-US": "Knowledge"
+              }
+            },
+            {
+              "table": "AbstractionTable",
+              "matchKey": "key",
+              "valueKey": "Average",
+              "label": {
+                "zh-CN": "抽象",
+                "en-US": "Abstraction"
+              }
+            },
+            {
+              "table": "ReasoningTable",
+              "matchKey": "key",
+              "valueKey": "Average",
+              "label": {
+                "zh-CN": "推理",
+                "en-US": "Reasoning"
+              }
+            },
+            {
+              "table": "InteractionTable",
+              "matchKey": "key",
+              "valueKey": "Average",
+              "label": {
+                "zh-CN": "交互",
+                "en-US": "Interaction"
+              }
+            },
+            {
+              "table": "SafetyTable",
+              "matchKey": "key",
+              "valueKey": "Average",
+              "label": {
+                "zh-CN": "安全",
+                "en-US": "Safety"
+              }
+            },
+            {
+              "table": "AgentTable",
+              "matchKey": "key",
+              "valueKey": "Average",
+              "label": {
+                "zh-CN": "智能体",
+                "en-US": "Agent"
+              }
+            }
+          ]
+        }
+      },
+      "tokenCostChart": {
+        "updatedAt": {
+          "zh-CN": "2026-10-23",
+          "en-US": "2026-10-23"
+        },
+        "title": {
+          "zh-CN": "Token消耗",
+          "en-US": "Token Usage"
+        },
+        "description": {
+          "zh-CN": "模型完成单任务平均输出 Token 用量",
+          "en-US": "Average output token usage per completed task."
+        },
+        "thinkingLabel": {
+          "zh-CN": "思考",
+          "en-US": "Thinking"
+        },
+        "responseLabel": {
+          "zh-CN": "回答",
+          "en-US": "Response"
+        },
+        "downloadTooltip": {
+          "zh-CN": "下载图片",
+          "en-US": "Download image"
+        },
+        "filename": "opencompass-token-cost.png"
+      },
+      "modelApiPriceChart": {
+        "title": {
+          "zh-CN": "模型API价格",
+          "en-US": "Model API Pricing"
+        },
+        "description": {
+          "zh-CN": "模型官方 API 输出 每百万token 计费价格（RMB）",
+          "en-US": "Official model API output price per million tokens (RMB)."
+        },
+        "remark": {
+          "zh-CN": "美元价格按本期固定汇率1:6.77折算。",
+          "en-US": "USD prices are converted at the fixed rate of USD 1 = RMB 6.77 for this release."
+        }
+      },
+      "modelSelectionChart": {
+        "parameters": {}
+      }
+    },
+    "commonTableMeta": {
+      "tableDesc": {
+        "zh-CN": "2026-10-29 更新 · 司南大模型评测榜单 V3.0",
+        "en-US": "Updated 2026-10-29 · Sinan Large Model Leaderboard V3.0"
+      },
+      "dimensionAction": {
+        "label": {
+          "zh-CN": "评测维度说明",
+          "en-US": "Dimensions"
+        },
+        "url": {
+          "zh-CN": "/rule-versions?lang=zh-CN",
+          "en-US": "/rule-versions?lang=en-US"
+        }
+      },
+      "ruleAction": {
+        "label": {
+          "zh-CN": "榜单规则",
+          "en-US": "Leaderboard Rules"
+        },
+        "url": {
+          "zh-CN": "/rule?lang=zh-CN",
+          "en-US": "/rule?lang=en-US"
+        }
+      }
+    },
+    "OverallTable": {
+      "latestNotice": {
+        "tag": {
+          "zh-CN": 0,
+          "en-US": 0
+        },
+        "historyAction": {
+          "label": {
+            "zh-CN": "更多历史纪录",
+            "en-US": "More History"
+          },
+          "url": {
+            "zh-CN": "https://rank.opencompass.org.cn/leaderboard/lm?lang=zh-CN",
+            "en-US": "https://rank.opencompass.org.cn/leaderboard/lm?lang=en-US"
+          }
+        }
+      }
+    }
+  }
+}

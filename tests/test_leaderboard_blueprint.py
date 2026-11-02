@@ -94,6 +94,40 @@ def snapshot_root(tmp_path: Path) -> Path:
             {'key': 'Score', 'title': {'zh-CN': '分数', 'en-US': 'Score'}},
         ]},
     })
+
+    # LLM V3 榜 —— lm/(新版 schema: modelBase + 7 维度 Table + benchmark 后缀)
+    lm = snap / 'lm'
+    lm.mkdir(parents=True)
+    _write(lm / 'rankLayout-lm.json', {'zh-CN': {}, 'en-US': {}})
+    _write(lm / 'history-lm-ability-official.json', {'records': []})
+    for bm in ('text', 'full'):
+        _write(lm / f'data-lm-ability_official.{bm}.json', {
+            'modelBase': {
+                'model-a': {'model': 'Model A', 'org': 'OrgA', 'open_source': 'YES', 'date': '2026/10/01'},
+                'model-b': {'model': 'Model B', 'org': 'OrgB', 'open_source': 'NO', 'date': '2026/09/15'},
+            },
+            'OverallTable': [
+                {'key': 'model-a', 'release_date': '2026-10-01', 'Average': 78.5, 'Knowledge': 80.0},
+                {'key': 'model-b', 'release_date': '2026-09-15', 'Average': 75.0, 'Knowledge': 70.0},
+            ],
+            # 真实数据里分维度表(如 KnowledgeTable)行内没有 release_date 字段,
+            # 需要 modelBase.date 兜底填充。
+            'KnowledgeTable': [
+                {'key': 'model-a', 'Knowledge': 80.0},
+                {'key': 'model-b', 'Knowledge': 70.0},
+            ],
+            'globalData': {'updateTime': '2026-10-29'},
+        })
+        _write(lm / f'column-lm-ability_official.{bm}.json', {
+            'OverallColumn': {'columns': [
+                {'key': 'model', 'title': {'zh-CN': '模型', 'en-US': 'Model'}},
+                {'key': 'Average', 'title': {'zh-CN': '平均分数', 'en-US': 'Average'}},
+            ]},
+            'KnowledgeColumn': {'columns': [
+                {'key': 'model', 'title': {'zh-CN': '模型', 'en-US': 'Model'}},
+                {'key': 'Knowledge', 'title': {'zh-CN': '知识', 'en-US': 'Knowledge'}},
+            ]},
+        })
     return tmp_path
 
 
@@ -154,9 +188,13 @@ def test_path_traversal_period_falls_back(client):
 def test_meta_boards_lists_all(client):
     data = client.get('/api/v1/leaderboard/meta').get_json()
     boards = {b['id']: b for b in data['boards']}
-    assert list(boards) == ['llm', 'multimodal', 'agent', 'ai4science', 'physical-intelligence']
-    assert boards['llm']['label_en'] == 'LLM Leaderboard'
-    assert boards['multimodal']['label_en'] == 'Multimodal Leaderboard'
+    assert list(boards) == ['lm', 'llm', 'multimodal', 'agent', 'ai4science', 'physical-intelligence']
+    assert boards['llm']['label_en'] == 'LLM Leaderboard (Historical)'
+    assert boards['lm']['label_en'] == 'LLM Leaderboard'
+    assert boards['lm']['label'] == '大模型'
+    # LLM V3 榜固定 7 个能力维度
+    assert [t['value'] for t in boards['lm']['tabs']] == ['overall', 'knowledge', 'abstraction', 'reasoning', 'interaction', 'safety', 'agent']
+    assert boards['multimodal']['label_en'] == 'Multimodal Leaderboard (Vision)'
     # 多模态（无布局文件，回退到旧中文名表）
     assert boards['multimodal']['tabs'] == [{'value': 'ability_official', 'label': '官方评测榜', 'label_en': 'Official Leaderboard'}]
     # 智能体（有布局文件，只暴露有 data 的页签：hermes 无 data 故不出现）
@@ -199,3 +237,85 @@ def test_extend_cols_surfaces_sorter():
     assert cols[0]['sorter'] is None
     assert cols[1]['sorter'] == 'descend'
     assert cols[2]['sorter'] == ''
+
+# ── LLM V3 (lm) 榜测试 ─────────────────────────────────────────
+
+def test_lm_v3_default_benchmark_and_dim(client):
+    """默认 benchmark=full, dim=overall;返回模型元数据 join 完成的行。"""
+    d = client.get('/api/v1/leaderboard/lm').get_json()
+    assert d['benchmark'] == 'full'
+    assert d['dim'] == 'overall'
+    assert len(d['rows']) == 2
+    assert len(d['columns']) == 2
+    assert [t['value'] for t in d['tabs']] == ['overall', 'knowledge', 'abstraction', 'reasoning', 'interaction', 'safety', 'agent']
+    # modelBase join 验证
+    row0 = d['rows'][0]
+    assert row0['key'] == 'model-a'
+    assert row0['model'] == 'Model A'
+    assert row0['org'] == 'OrgA'
+    assert row0['Average'] == 78.5
+    assert d['model_count'] == 2
+    assert d['updated_at'] == '2026-10-29'
+
+
+def test_lm_v3_benchmark_text(client):
+    d = client.get('/api/v1/leaderboard/lm', query_string={'benchmark': 'text'}).get_json()
+    assert d['benchmark'] == 'text'
+    assert d['dim'] == 'overall'
+
+
+def test_lm_v3_dim_knowledge_uses_knowledge_table(client):
+    d = client.get('/api/v1/leaderboard/lm', query_string={'dim': 'knowledge'}).get_json()
+    assert d['dim'] == 'knowledge'
+    # Knowledge 表只含 Knowledge 列 (cols=2: model + Knowledge)
+    assert len(d['columns']) == 2
+    assert d['columns'][1]['key'] == 'Knowledge'
+    # 行内含 Knowledge 但不一定有 Average
+    assert d['rows'][0]['Knowledge'] == 80.0
+    # 行内没有 release_date, 由 modelBase.date 兜底填充
+    assert d['rows'][0]['release_date'] == '2026/10/01'
+    assert d['rows'][1]['release_date'] == '2026/09/15'
+    # 评测时间从 modelBase.date 拿到
+    assert d['rows'][0]['date'] == '2026/10/01'
+    assert d['rows'][1]['date'] == '2026/09/15'
+
+
+def test_lm_v3_overall_rows_have_both_release_date_and_date(client):
+    """OverallTable 行里原有 release_date(模型发布), modelBase.date 作为 date(评测时间) 并入。"""
+    d = client.get('/api/v1/leaderboard/lm').get_json()
+    assert d['dim'] == 'overall'
+    row0 = d['rows'][0]
+    assert row0['release_date'] == '2026-10-01'  # 行内自带
+    assert row0['date'] == '2026/10/01'           # modelBase.date 并入
+
+
+def test_lm_v3_invalid_benchmark_returns_400(client):
+    r = client.get('/api/v1/leaderboard/lm', query_string={'benchmark': 'bad'})
+    assert r.status_code == 400
+    assert 'benchmark' in r.get_json()['error']
+
+
+def test_lm_v3_invalid_dim_returns_400(client):
+    r = client.get('/api/v1/leaderboard/lm', query_string={'dim': 'bad'})
+    assert r.status_code == 400
+    assert 'dim' in r.get_json()['error']
+
+
+def test_lm_v3_missing_snapshot_returns_404(snapshot_root):
+    """lm/ 目录缺失时返回 404。"""
+    import shutil
+    from flask import Flask
+    lm_dir = snapshot_root / 'full_snapshot' / 'lm'
+    backup = snapshot_root / 'full_snapshot' / 'lm.bak'
+    shutil.move(str(lm_dir), str(backup))
+    try:
+        original = lb._OPENCOMPASS_DIR
+        lb._OPENCOMPASS_DIR = str(snapshot_root)
+        app = Flask(__name__)
+        app.register_blueprint(lb.bp_leaderboard)
+        c = app.test_client()
+        r = c.get('/api/v1/leaderboard/lm')
+        assert r.status_code == 404
+        lb._OPENCOMPASS_DIR = original
+    finally:
+        shutil.move(str(backup), str(lm_dir))

@@ -118,11 +118,12 @@ def _extend_cols(config) -> list[dict]:
 #   其余「OSS 榜」由 rankLayout-<dir>.json 布局文件驱动页签清单（tab 维度）。
 # 未来上游新增榜单：在下载脚本的 OSS_BOARDS 加一项 + 此处加一行即可，无需再改接口/前端。
 _BOARDS = [
-    {'id': 'llm', 'dir': None, 'label': 'LLM 榜单', 'label_en': 'LLM Leaderboard'},
-    {'id': 'multimodal', 'dir': 'image-vlm', 'label': '多模态榜单', 'label_en': 'Multimodal Leaderboard'},
-    {'id': 'agent', 'dir': 'agent', 'label': '智能体榜单', 'label_en': 'Agent Leaderboard'},
-    {'id': 'ai4science', 'dir': 'ai4science', 'label': '科学智能榜单', 'label_en': 'AI for Science Leaderboard'},
-    {'id': 'physical-intelligence', 'dir': 'physical-intelligence', 'label': '物理智能榜单', 'label_en': 'Physical Intelligence Leaderboard'},
+    {'id': 'lm', 'dir': 'lm', 'label': '大模型', 'label_en': 'LLM Leaderboard'},
+    {'id': 'llm', 'dir': None, 'label': 'LLM 榜（历史月报）', 'label_en': 'LLM Leaderboard (Historical)'},
+    {'id': 'multimodal', 'dir': 'image-vlm', 'label': '多模态榜（图片理解）', 'label_en': 'Multimodal Leaderboard (Vision)'},
+    {'id': 'agent', 'dir': 'agent', 'label': '智能体榜', 'label_en': 'Agent Leaderboard'},
+    {'id': 'ai4science', 'dir': 'ai4science', 'label': '科学智能榜', 'label_en': 'AI for Science Leaderboard'},
+    {'id': 'physical-intelligence', 'dir': 'physical-intelligence', 'label': '物理智能榜', 'label_en': 'Physical Intelligence Leaderboard'},
 ]
 
 # 无布局文件时（旧快照/测试 fixture）image-vlm 页签的中文名回退表。
@@ -233,7 +234,10 @@ def leaderboard_meta():
     boards = []
     for b in _BOARDS:
         entry = {'id': b['id'], 'label': b['label'], 'label_en': b['label_en']}
-        if b['dir']:
+        if b['id'] == 'lm':
+            # LLM V3 榜: 7 个能力维度, 不是 OSS 风格的页签
+            entry['tabs'] = _lm_v3_tabs()
+        elif b['dir']:
             tabs = _oss_board_tabs(b['dir'])
             entry['tabs'] = tabs
             if b['id'] == 'multimodal':
@@ -248,6 +252,91 @@ def leaderboard_meta():
         'default_mm': None,
         'source': f'file://{_OPENCOMPASS_DIR}',
     })
+
+
+# LLM V3 (lm) 榜的 7 个能力维度，key 对应 data 文件里的 <Key>Table / column 文件里的 <Key>Column
+_LM_V3_TABS = [
+    {'key': 'Overall',     'zh': '综合', 'en': 'Overall'},
+    {'key': 'Knowledge',   'zh': '知识', 'en': 'Knowledge'},
+    {'key': 'Abstraction', 'zh': '抽象', 'en': 'Abstraction'},
+    {'key': 'Reasoning',   'zh': '推理', 'en': 'Reasoning'},
+    {'key': 'Interaction', 'zh': '交互', 'en': 'Interaction'},
+    {'key': 'Safety',      'zh': '安全', 'en': 'Safety'},
+    {'key': 'Agent',       'zh': '智能体', 'en': 'Agent'},
+]
+
+
+def _lm_v3_tabs() -> list[dict]:
+    """返回 LLM V3 的 7 个能力维度页签; value 即 dim 参数值。"""
+    return [{'value': t['key'].lower(), 'label': t['zh'], 'label_en': t['en']} for t in _LM_V3_TABS]
+
+
+def _read_lm_v3(benchmark: str) -> dict | None:
+    """读 LLM V3 榜 data 文件 (text 或 full benchmark)。
+
+    返回完整 dict (含 modelBase + 各维度 Table)。文件缺失返回 None。
+    """
+    if benchmark not in ('text', 'full'):
+        return None
+    root = _latest_batch_dir()
+    if root is None:
+        return None
+    fp = root / 'lm' / f'data-lm-ability_official.{benchmark}.json'
+    if not fp.is_file():
+        return None
+    try:
+        return json.loads(fp.read_text(encoding='utf-8'))
+    except Exception as e:
+        logger.warning('leaderboard lm v3 parse failed %s: %s', fp, e)
+        return None
+
+
+def _read_lm_v3_columns(benchmark: str) -> dict | None:
+    """读 LLM V3 榜 column 文件 (列定义)。"""
+    if benchmark not in ('text', 'full'):
+        return None
+    root = _latest_batch_dir()
+    if root is None:
+        return None
+    fp = root / 'lm' / f'column-lm-ability_official.{benchmark}.json'
+    if not fp.is_file():
+        return None
+    try:
+        return json.loads(fp.read_text(encoding='utf-8'))
+    except Exception as e:
+        logger.warning('leaderboard lm v3 column parse failed %s: %s', fp, e)
+        return None
+
+
+def _lm_v3_join_model(rows: list, model_base: dict) -> list:
+    """把 modelBase 的 model/org/logoUrl/open_source/date 等元数据 join 到行里。
+
+    新版 schema 中行只有 key 和分数, 模型名/机构/链接在 modelBase 字典里。
+    为了复用前端表格逻辑, 把这些字段平铺到行对象上。
+
+    字段语义对齐(以上游 column 定义为准):
+      - 行里 `release_date` = 模型发布时间(OverallTable 有, 分维度表无)
+      - 行里 `date`         = 评测时间(行里都没有, 需从 modelBase.date 拿)
+      - modelBase.date      = 评测时间(与列定义 'date' → '评测时间' 一致)
+    """
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = row.get('key')
+        merged = dict(row)
+        mb = model_base.get(key) if isinstance(model_base, dict) else None
+        if isinstance(mb, dict):
+            # 不覆盖行里已有的同名字段
+            for k, v in mb.items():
+                if k not in merged or merged.get(k) is None:
+                    merged[k] = v
+            # release_date 兜底: 行里没有时(分维度表), 用 modelBase.date 填
+            # (注意: 此时 release_date 语义上是「评测时间」, 但比分维度表完全空缺友好)
+            if merged.get('release_date') is None and mb.get('date') is not None:
+                merged['release_date'] = mb['date']
+        out.append(merged)
+    return out
 
 
 _FALLBACK_TAB_ORDER = ['Overall', 'Subjective', 'Language', 'Knowledge', 'Reason', 'Math', 'Code', 'Agent']
@@ -362,3 +451,50 @@ def leaderboard_board():
 def leaderboard_multimodal():
     """向后兼容别名：多模态榜单 = board 'multimodal'（image-vlm）。"""
     return _serve_oss_board('multimodal')
+
+
+@bp_leaderboard.route('/lm', methods=['GET'])
+def leaderboard_lm_v3():
+    """LLM V3 榜 (大模型评测榜单 V3.0, /leaderboard/llm)。
+
+    查询参数:
+      benchmark: 'text' (仅文本) 或 'full' (全量), 默认 'full'
+      dim: 'overall' | 'knowledge' | 'abstraction' | 'reasoning' | 'interaction' | 'safety' | 'agent',
+           默认 'overall'
+
+    返回: {benchmark, dim, tabs, columns, rows, model_base_size}
+      tabs:    7 个能力维度页签
+      columns: 当前 dim 的列定义(已 join 中文标题)
+      rows:    当前 dim 的行数据(已 join modelBase 元数据)
+    """
+    benchmark = (request.args.get('benchmark') or 'full').lower()
+    if benchmark not in ('text', 'full'):
+        return jsonify({'error': f"Invalid benchmark: {benchmark!r}; must be 'text' or 'full'"}), 400
+
+    dim = (request.args.get('dim') or 'overall').lower()
+    tab_keys = {t['key'].lower(): t for t in _LM_V3_TABS}
+    if dim not in tab_keys:
+        return jsonify({'error': f"Invalid dim: {dim!r}; must be one of {sorted(tab_keys)}"}), 400
+    tab_meta = tab_keys[dim]
+
+    data = _read_lm_v3(benchmark)
+    if data is None:
+        return jsonify({'error': f'No LLM V3 snapshot for benchmark={benchmark}'}), 404
+    col = _read_lm_v3_columns(benchmark) or {}
+
+    table_key = f'{tab_meta["key"]}Table'
+    col_key = f'{tab_meta["key"]}Column'
+    rows_raw = data.get(table_key) or []
+    model_base = data.get('modelBase') or {}
+    rows = _lm_v3_join_model(rows_raw, model_base)
+    cols = _extend_cols(col.get(col_key))
+
+    return jsonify({
+        'benchmark': benchmark,
+        'dim': dim,
+        'tabs': _lm_v3_tabs(),
+        'columns': cols,
+        'rows': rows,
+        'model_count': len(model_base),
+        'updated_at': (data.get('globalData') or {}).get('updateTime'),
+    })

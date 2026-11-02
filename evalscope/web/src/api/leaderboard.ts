@@ -72,3 +72,21 @@ export async function getMultimodalLeaderboard(tab?: string): Promise<MmLeaderbo
 export async function getBoard(board: string, tab?: string): Promise<MmLeaderboard> {
   return api<MmLeaderboard>('/api/v1/leaderboard/board', tab ? { board, tab } : { board })
 }
+
+// ── LLM V3 榜 (lm) ────────────────────────────────────────────
+export interface LmV3Leaderboard {
+  benchmark: 'text' | 'full'
+  dim: string
+  tabs: LbPeriodOption[]       // 7 个能力维度页签 (value=dim key)
+  columns: LbColumn[]
+  rows: Record<string, unknown>[]
+  model_count?: number
+  updated_at?: string | null
+}
+
+export async function getLmV3Leaderboard(
+  benchmark: 'text' | 'full' = 'full',
+  dim: string = 'overall',
+): Promise<LmV3Leaderboard> {
+  return api<LmV3Leaderboard>('/api/v1/leaderboard/lm', { benchmark, dim })
+}

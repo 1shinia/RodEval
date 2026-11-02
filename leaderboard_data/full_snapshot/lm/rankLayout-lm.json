@@ -1,0 +1,118 @@
+{
+  "zh-CN": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · LLM",
+      "title": "大模型评测榜单",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/lm.svg",
+      "description": "聚合全球主流大语言模型，基于多维度能力评测体系，呈现开放、公平、可信的模型表现排名，助力开发者与研究者快速洞察 LLM 技术格局。",
+      "stats": [
+        {
+          "label": "评测模型",
+          "value": "23",
+          "descriptionParts": {
+            "prefix": "包括 ",
+            "mono": "OpenAI, Anthropic, Google, DeepSeek, Seed",
+            "suffix": " 等主流模型"
+          }
+        }
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "能力榜单",
+          "title": "能力榜单",
+          "icon": "ability",
+          "lineTabs": [
+            {
+              "key": "official",
+              "name": "官方评测榜",
+              "benchmark_modes": [
+                {
+                  "key": "text",
+                  "name": "仅文本评测基准",
+                  "request_column_url": "/lm/column-lm-ability_official.json?benchmark=text",
+                  "request_data_url": "/lm/data-lm-ability_official.json?benchmark=text"
+                },
+                {
+                  "key": "full",
+                  "name": "全量评测基准",
+                  "request_column_url": "/lm/column-lm-ability_official_full.json",
+                  "request_data_url": "/lm/data-lm-ability_official_full.json",
+                  "attention": {
+                    "tooltip": "部分模型仅支持文本输入，无法使用各维度下的多模态评测数据进行评测。\n因此，此类模型在全量评测基准下的得分等同于仅文本评测基准。"
+                  }
+                }
+              ]
+            },
+            {
+              "key": "arena_votes",
+              "name": "竞技场投票榜",
+              "request_column_url": "https://opencompass.org.cn/api/v2/realtime-elo/column?pipeline=text",
+              "request_data_url": "https://opencompass.org.cn/api/v2/realtime-elo/data?pipeline=text&board=all"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "en-US": {
+    "hero": {
+      "breadcrumb": "OpenCompass · Leaderboard · LLM",
+      "title": "Large Model Evaluation Leaderboard",
+      "titleIcon": "https://openmmlab-open.oss-cn-shanghai.aliyuncs.com/opencompass/new-rank/lm.svg",
+      "description": "Aggregating leading Large Models worldwide, the leaderboard presents open, fair, and trustworthy model rankings based on a multidimensional capability evaluation system, helping developers and researchers quickly understand the Large Model landscape.",
+      "stats": [
+        {
+          "label": "Evaluated Models",
+          "value": "23",
+          "descriptionParts": {
+            "prefix": "Including ",
+            "mono": "OpenAI, Anthropic, Google, DeepSeek, Seed",
+            "suffix": " and other leading models"
+          }
+        }
+      ]
+    },
+    "ranks": {
+      "sections": [
+        {
+          "id": "ability",
+          "navLabel": "Ability Rankings",
+          "title": "Ability Rankings",
+          "icon": "ability",
+          "lineTabs": [
+            {
+              "key": "official",
+              "name": "Official Leaderboard",
+              "benchmark_modes": [
+                {
+                  "key": "text",
+                  "name": "Text-only Benchmarks",
+                  "request_column_url": "/lm/column-lm-ability_official.json?benchmark=text",
+                  "request_data_url": "/lm/data-lm-ability_official.json?benchmark=text"
+                },
+                {
+                  "key": "full",
+                  "name": "Full Benchmarks",
+                  "request_column_url": "/lm/column-lm-ability_official_full.json",
+                  "request_data_url": "/lm/data-lm-ability_official_full.json",
+                  "attention": {
+                    "tooltip": "Some models support text input only and cannot be evaluated with multimodal benchmark data for each dimension.\nFor such models, scores under the full evaluation benchmark are equivalent to those under the text-only benchmark."
+                  }
+                }
+              ]
+            },
+            {
+              "key": "arena_votes",
+              "name": "Arena Votes Leaderboard",
+              "request_column_url": "https://opencompass.org.cn/api/v2/realtime-elo/column?pipeline=text",
+              "request_data_url": "https://opencompass.org.cn/api/v2/realtime-elo/data?pipeline=text&board=all"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

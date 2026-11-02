@@ -1,0 +1,20 @@
+{
+  "records": [
+    {
+      "id": "2026-10-29-kimi-k3-1-pro",
+      "date": "2026-10-29",
+      "text": {
+        "zh-CN": "最新上榜模型：新增 Kimi K3.1 Pro（max）评测结果：全量评测基准综合得分75.46分，排名第2；仅文本评测基准综合得分78.47分，排名第1。",
+        "en-US": "Latest model added: Kimi K3.1 Pro (max), scoring 75.46 and ranking No. 2 on full benchmarks, and scoring 78.47 and ranking No. 1 on text-only benchmarks."
+      }
+    },
+    {
+      "id": "2026-10-23-opencompass-v3",
+      "date": "2026-10-23",
+      "text": {
+        "zh-CN": "司南大模型官方评测榜单升级至V3.0",
+        "en-US": "OpenCompass v3.0 was launched."
+      }
+    }
+  ]
+}
