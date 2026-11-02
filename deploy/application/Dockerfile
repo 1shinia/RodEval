@@ -15,8 +15,10 @@ RUN python -c "from pathlib import Path; p=Path('/etc/apt/sources.list.d/debian.
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.lock /opt/requirements.lock
-RUN pip install --no-cache-dir --index-url https://mirrors.aliyun.com/pypi/simple \
-    --extra-index-url https://download.pytorch.org/whl/cpu -r /opt/requirements.lock \
+RUN pip install --no-cache-dir --timeout 120 --retries 10 \
+    --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    --find-links https://download.pytorch.org/whl/cpu/torch/ \
+    -r /opt/requirements.lock \
     && pip check
 COPY . /app/
 COPY --from=frontend /web/dist /app/evalscope/web/dist
