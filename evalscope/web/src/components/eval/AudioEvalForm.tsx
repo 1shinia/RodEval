@@ -405,7 +405,7 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
             )}
             {asrEnabled && (
               <div className="mt-2">
-                <FormField label={t('evalAudioExtra.asrApiKey')} hint={t('evalAudioExtra.asrApiKeyHint')}>
+                <FormField label={t('evalAudioExtra.asrApiKey')}>
                   <input type="password" value={asrApiKey} onChange={e => setAsrApiKey(e.target.value)}
                     className={FORM_INPUT_CLASS}
                     placeholder="sk-..." />
@@ -413,17 +413,20 @@ export default function AudioEvalForm({ onSubmit, disabled }: Props) {
               </div>
             )}
             {asrEnabled && (
-              <div className="mt-2 flex gap-6">
-                {METRICS_OPTIONS.map(({ value, label }) => (
-                  <label key={value} className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={metrics.includes(value)}
-                      onChange={() => setMetrics(prev =>
-                        prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
-                      )}
-                      className="accent-[var(--accent)]" />
-                    <span className="text-sm text-[var(--text)]">{t(`evalAudioExtra.${label}`)}</span>
-                  </label>
-                ))}
+              <div className="mt-2">
+                <div className="mb-1.5 text-sm font-medium text-[var(--text)]">{t('evalAudioExtra.metricsLabel')}</div>
+                <div className="flex gap-6">
+                  {METRICS_OPTIONS.map(({ value, label }) => (
+                    <label key={value} className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={metrics.includes(value)}
+                        onChange={() => setMetrics(prev =>
+                          prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
+                        )}
+                        className="accent-[var(--accent)]" />
+                      <span className="text-sm text-[var(--text)]">{t(`evalAudioExtra.${label}`)}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
           </div>

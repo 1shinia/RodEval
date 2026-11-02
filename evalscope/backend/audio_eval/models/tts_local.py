@@ -5,14 +5,15 @@ Purely local Python process, no GPU or model download required.
 """
 import asyncio
 import logging
+import re
 import tempfile
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .base import AudioModelBase
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
-# Voice mapping: frontend voice → edge-tts ShortName
+# Voice alias mapping: short alias → edge-tts ShortName
 _VOICE_MAP = {
     'xiaoxiao': 'zh-CN-XiaoxiaoNeural',
     'xiaoyi': 'zh-CN-XiaoyiNeural',
@@ -24,10 +25,32 @@ _VOICE_MAP = {
 }
 _DEFAULT_VOICE = 'zh-CN-XiaoxiaoNeural'
 
+# Full edge-tts ShortName pattern, e.g. zh-CN-XiaoxiaoNeural, en-US-AriaNeural
+_SHORTNAME_RE = re.compile(r'^[a-z]{2,3}-[A-Z]{2,}-[A-Za-z0-9]+Neural$')
 
-def _resolve_voice(voice: str) -> str:
-    """Resolve voice name to edge-tts ShortName."""
-    return _VOICE_MAP.get(voice.lower(), _DEFAULT_VOICE)
+
+def _resolve_voice(voice: Optional[str]) -> str:
+    """Resolve voice name to edge-tts ShortName.
+
+    Accepts either a short alias from _VOICE_MAP or a full edge-tts
+    ShortName (e.g. 'zh-CN-XiaoxiaoNeural'). Empty input returns the
+    default; an unknown alias raises instead of silently falling back
+    so users notice misconfigured voices instead of hearing the wrong
+    voice in the report.
+    """
+    v = (voice or '').strip()
+    if not v:
+        return _DEFAULT_VOICE
+    if _SHORTNAME_RE.match(v):
+        return v
+    mapped = _VOICE_MAP.get(v.lower())
+    if mapped is None:
+        raise ValueError(
+            f'edge-tts 不支持音色 {voice!r}。'
+            f'可选别名: {sorted(_VOICE_MAP.keys())}; '
+            f'或直接填完整 ShortName (如 zh-CN-XiaoxiaoNeural)'
+        )
+    return mapped
 
 
 class TtsModelLocal(AudioModelBase):

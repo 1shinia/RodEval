@@ -16,7 +16,7 @@ for name in ['framework', 'service', 'perf', 'rag', 'sandbox', 'aigc']:
     for line in (ROOT / f'requirements/{name}.txt').read_text().splitlines():
         if line.strip() and not line.startswith('#'):
             roots.append(Requirement(line))
-for name in ['mutagen', 'websockets', 'jiwer', 'psutil', 'tiktoken', 'swebench', 'harbor', 'langdetect', 'emoji', 'syllapy', 'apted', 'distance', 'Polygon3', 'zss', 'python-Levenshtein', 'lxml', 'beautifulsoup4', 'shapely', 'seaborn', 'pythainlp']:
+for name in ['mutagen', 'websockets', 'jiwer', 'psutil', 'tiktoken', 'swebench', 'harbor', 'langdetect', 'emoji', 'syllapy', 'apted', 'distance', 'Polygon3', 'zss', 'python-Levenshtein', 'lxml', 'beautifulsoup4', 'shapely', 'seaborn', 'pythainlp', 'cn2an']:
     roots.append(Requirement(name))
 queue = roots[:]
 extras_seen = {}

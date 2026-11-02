@@ -6,6 +6,11 @@ DashScope TTS WebSocket protocol:
   3. Wait for task-started event
   4. Receive audio as BINARY frames
   5. Receive task-finished event
+
+Sambert only supports WebSocket (HTTP returns 'current user api does not
+support http call'). Known voice IDs are limited (zhichu, zhixiaobai,
+zhiluo, zhiyu). Unknown voices may silently fall back on the server side,
+so we log a warning to help users spot misconfigurations.
 """
 import json
 import logging
@@ -13,12 +18,17 @@ import uuid
 from typing import Any, Dict
 
 import websockets
+import websockets.exceptions
 from websockets.sync.client import connect as ws_connect
 
 from .asr_dashscope import _base_url
 from .base import AudioModelBase
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
+
+# Sambert voices confirmed by DashScope docs. Server may add more over time,
+# so we only warn on mismatch instead of rejecting the request.
+_KNOWN_SAMBERT_VOICES = frozenset({'zhichu', 'zhixiaobai', 'zhiluo', 'zhiyu'})
 
 # ── protocol constants (mirrors dashscope.protocol.websocket) ──────────────
 
@@ -70,6 +80,17 @@ class TtsModelDashScopeWS(AudioModelBase):
             "response_format", self.config.get("response_format", "mp3")
         )
         speed = float(kwargs.get("speed", self.config.get("speed", 1.0)))
+
+        if (
+            self.model_name.lower().startswith('sambert')
+            and voice not in _KNOWN_SAMBERT_VOICES
+        ):
+            logger.warning(
+                f"Sambert TTS voice {voice!r} is not in the known Sambert voice list "
+                f"{sorted(_KNOWN_SAMBERT_VOICES)}; DashScope may silently fall back to a "
+                f"default voice. If the generated audio does not match the requested "
+                f"voice, this is the likely cause."
+            )
 
         task_id = uuid.uuid4().hex
 

@@ -182,3 +182,128 @@ def test_english_wer_retains_word_boundary():
 
 def test_mixed_language_wer_retains_english_words():
     assert compute_wer('你好 hello world', '你好 hello earth') == pytest.approx(0.25)
+
+
+# ── 方案 A:数字与书写形式归一化 ──────────────────────────────────────
+
+def test_normalize_chinese_digit_sequence_matches_arabic():
+    """核心场景:中文数字串 vs 阿拉伯数字,两边归一后应等价。"""
+    assert compute_wer('一二三四五', '12345') == pytest.approx(0.0)
+    assert compute_cer('一二三四五', '12345') == pytest.approx(0.0)
+
+
+def test_normalize_chinese_digit_sequence_embedded_in_sentence():
+    assert compute_wer('我想一二三四五这样数下去', '我想12345这样数下去') == pytest.approx(0.0)
+
+
+def test_normalize_formal_chinese_number():
+    assert compute_wer('一百二十三', '123') == pytest.approx(0.0)
+    assert compute_cer('一百二十三', '123') == pytest.approx(0.0)
+
+
+def test_normalize_year_expression():
+    assert compute_wer('二零二四年三月', '2024年3月') == pytest.approx(0.0)
+
+
+def test_normalize_percentage():
+    # cn2an 把 百分之五十 转成 50%;归一在标点剥离之前运行,% 被保留。
+    assert compute_wer('百分之五十', '50%') == pytest.approx(0.0)
+
+
+def test_normalize_ordinal():
+    assert compute_wer('第三', '第3') == pytest.approx(0.0)
+
+
+def test_normalize_fullwidth_digits_and_letters():
+    assert compute_wer('１２３', '123') == pytest.approx(0.0)
+    assert compute_wer('ＡＢＣ', 'abc') == pytest.approx(0.0)
+
+
+def test_normalize_english_case():
+    assert compute_wer('Hello World', 'hello world') == pytest.approx(0.0)
+    assert compute_cer('Hello World', 'hello world') == pytest.approx(0.0)
+
+
+def test_idiom_qianfangbaiji_not_broken():
+    """千方百计 是成语,不应被数字归一化拆坏;两侧同形时分数必须仍为 0。"""
+    assert compute_wer('千方百计', '千方百计') == pytest.approx(0.0)
+
+
+def test_builtin_digit_prompt_improves_cer():
+    """内置 TTS 提示词 一二三四五六七八九十。 对典型 ASR 输出的 CER 应从 1.0 大幅改善。"""
+    cer = compute_cer('一二三四五六七八九十。', '12345678910')
+    assert cer < 0.5  # 归一前为 1.0
+
+
+def test_digit_sequence_reading_equals_chinese_form():
+    """核心场景:逐字读数字序列 与 中文数字写法 应完全等价。"""
+    assert compute_wer('一二三四五六七八九十', '1 2 3 4 5 6 7 8 9 10') == pytest.approx(0.0)
+    assert compute_cer('一二三四五六七八九十', '1 2 3 4 5 6 7 8 9 10') == pytest.approx(0.0)
+
+
+def test_numeric_value_reading_equals_digit_sequence():
+    """数值读法(一百二十三)与逐字读(123)在归一化后应等价。"""
+    assert compute_wer('一百二十三', '123') == pytest.approx(0.0)
+    assert compute_cer('一百二十三', '123') == pytest.approx(0.0)
+
+
+def test_percentage_equals_digit_form():
+    """百分比数值 与 阿拉伯数字形式 应等价。"""
+    assert compute_wer('百分之五十', '50%') == pytest.approx(0.0)
+    assert compute_cer('百分之五十', '50%') == pytest.approx(0.0)
+
+
+# ── edge-tts 本地音色解析 ──────────────────────────────────────
+
+def test_local_voice_alias_resolves_to_shortname():
+    from evalscope.backend.audio_eval.models.tts_local import _resolve_voice
+    assert _resolve_voice('xiaoxiao') == 'zh-CN-XiaoxiaoNeural'
+    assert _resolve_voice('XiaoXiao') == 'zh-CN-XiaoxiaoNeural'  # case-insensitive
+    assert _resolve_voice('  yunxi  ') == 'zh-CN-YunxiNeural'  # trims whitespace
+
+
+def test_local_voice_full_shortname_passes_through():
+    """完整 edge-tts ShortName 直通, 让服务端做最终校验。"""
+    from evalscope.backend.audio_eval.models.tts_local import _resolve_voice
+    assert _resolve_voice('zh-CN-YunyangNeural') == 'zh-CN-YunyangNeural'
+    assert _resolve_voice('en-US-AriaNeural') == 'en-US-AriaNeural'
+
+
+def test_local_voice_empty_falls_back_to_default():
+    """空值/None 回退到默认音色, 不报错。"""
+    from evalscope.backend.audio_eval.models.tts_local import _DEFAULT_VOICE, _resolve_voice
+    assert _resolve_voice('') == _DEFAULT_VOICE
+    assert _resolve_voice(None) == _DEFAULT_VOICE
+
+
+def test_local_voice_unknown_alias_raises():
+    """未知别名显式报错, 不静默改值;错误信息包含可选列表。"""
+    from evalscope.backend.audio_eval.models.tts_local import _resolve_voice
+    with pytest.raises(ValueError, match='edge-tts 不支持音色'):
+        _resolve_voice('my-custom-voice')
+    with pytest.raises(ValueError, match='xiaoxiao'):
+        _resolve_voice('xiaoxiao2')
+    # 其他供应商的音色填到 edge-tts 也必须拦截
+    with pytest.raises(ValueError):
+        _resolve_voice('longxiaochun')
+    with pytest.raises(ValueError):
+        _resolve_voice('alloy')
+
+
+def test_sambert_ws_voice_warning_constant():
+    """Sambert WS 适配器对未知 voice 仅警告不拦截;此处校验白名单常量与模型名拿到。"""
+    from evalscope.backend.audio_eval.models.tts_dashscope_ws import (
+        TtsModelDashScopeWS,
+        _KNOWN_SAMBERT_VOICES,
+    )
+
+    model = TtsModelDashScopeWS({
+        'model_name_or_path': 'sambert-zhichu-v1',
+        'provider': 'dashscope',
+        'api_base': 'https://dashscope.aliyuncs.com/api/v1',
+        'api_key': 'test',
+    })
+
+    assert model.model_name == 'sambert-zhichu-v1'
+    assert 'zhichu' in _KNOWN_SAMBERT_VOICES
+    assert 'alloy' not in _KNOWN_SAMBERT_VOICES
