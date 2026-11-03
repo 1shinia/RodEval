@@ -27,7 +27,7 @@ export default function LeaderboardPage() {
   const [llm, setLlm] = useState<LlmLeaderboard | null>(null)
   const [oss, setOss] = useState<MmLeaderboard | null>(null)
   const [lmV3, setLmV3] = useState<LmV3Leaderboard | null>(null)
-  const [lmBenchmark, setLmBenchmark] = useState<'text' | 'full'>('full')
+  const [lmBenchmark, setLmBenchmark] = useState<'text' | 'full'>('text')
   const [loading, setLoading] = useState(true)
 
   // 首次拉取 meta（榜单类型清单 + LLM 时间段 + 各榜页签）

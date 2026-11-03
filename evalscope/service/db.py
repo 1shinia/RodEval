@@ -986,7 +986,7 @@ def _verify_schema(*, strict: bool = False) -> None:
             }
             if not any(
                 'code_hash' in {info['name']
-                                for info in conn.execute(f"PRAGMA index_info({index_name})")}
+                                for info in conn.execute(f'PRAGMA index_info({index_name})')}
                 for index_name in invite_unique
             ):
                 structural_errors.append('registration_invites missing unique code_hash constraint')
@@ -1704,7 +1704,9 @@ def query_eval_reports(
         ds_scores = None
         if row['dataset_scores']:
             try:
-                ds_scores = json.loads(row['dataset_scores'])
+                # NaN/Infinity 不是合法 JSON：MTEB/STS 分数可能为 NaN（如 STS16 无有效样本），
+                # 解析时把它们归一为 None，避免响应体出现 NaN 导致前端 JSON.parse 失败。
+                ds_scores = json.loads(row['dataset_scores'], parse_constant=lambda _: None)
             except (json.JSONDecodeError, TypeError):
                 pass
         # Construct the full report_name format expected by process_report_name:
@@ -3171,9 +3173,13 @@ def get_compare_report(report_id: int, user_id: int) -> dict | None:
     if row is None:
         return None
     return {
-        'id': row[0], 'name': row[1], 'task_ids': row[2],
-        'created_at': row[3], 'task_count': row[4],
-        'backend': row[5] or 'Perf', 'root_path': row[6] or '',
+        'id': row[0],
+        'name': row[1],
+        'task_ids': row[2],
+        'created_at': row[3],
+        'task_count': row[4],
+        'backend': row[5] or 'Perf',
+        'root_path': row[6] or '',
     }
 
 

@@ -215,7 +215,7 @@ export default function RAGReportsTab() {
                     <td className="px-4 py-3 text-[var(--text)]">{report.model_name}</td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">{report.dataset_name}</td>
                     <td className="px-4 py-3 text-right text-[var(--text)]">{report.num_samples}</td>
-                    <td className="px-4 py-3 text-right font-mono text-sm text-[var(--accent)]">{report.score.toFixed(4)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-[var(--accent)]">{report.score != null ? report.score.toFixed(4) : '—'}</td>
                     <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{report.timestamp ? new Date(report.timestamp).toLocaleString() : '-'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
