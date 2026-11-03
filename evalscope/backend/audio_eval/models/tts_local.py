@@ -58,25 +58,19 @@ class TtsModelLocal(AudioModelBase):
 
     def _generate_api(self, prompt: str, **kwargs) -> bytes:
         """Generate TTS audio via edge-tts."""
-        voice = kwargs.get(
-            'voice', self.config.get('voice', 'xiaoxiao')
-        )
+        voice = kwargs.get('voice', self.config.get('voice', 'xiaoxiao'))
         speed = float(kwargs.get('speed', self.config.get('speed', 1.0)))
         short_name = _resolve_voice(voice)
 
-        logger.info(
-            f'Local TTS (edge-tts): voice={voice}→{short_name}, '
-            f'speed={speed}'
-        )
+        logger.info(f'Local TTS (edge-tts): voice={voice}→{short_name}, '
+                    f'speed={speed}')
 
         async def _generate():
             import edge_tts
 
             rate = f'{int((speed - 1) * 100):+d}%' if speed != 1.0 else '+0%'
             tts = edge_tts.Communicate(prompt, short_name, rate=rate)
-            with tempfile.NamedTemporaryFile(
-                suffix='.mp3', delete=False
-            ) as tmp:
+            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp:
                 await tts.save(tmp.name)
                 return tmp.name
 
@@ -85,9 +79,7 @@ class TtsModelLocal(AudioModelBase):
             if loop.is_running():
                 # In a running loop, use run_coroutine_threadsafe
                 import concurrent.futures
-                future = asyncio.run_coroutine_threadsafe(
-                    _generate(), loop
-                )
+                future = asyncio.run_coroutine_threadsafe(_generate(), loop)
                 tmp_path = future.result(timeout=60)
             else:
                 tmp_path = asyncio.run(_generate())
@@ -100,9 +92,7 @@ class TtsModelLocal(AudioModelBase):
         import os
         os.unlink(tmp_path)
 
-        logger.info(
-            f'Local TTS generated {len(audio_bytes)} bytes'
-        )
+        logger.info(f'Local TTS generated {len(audio_bytes)} bytes')
         return audio_bytes
 
     def _generate_local(self, prompt: str, **kwargs) -> bytes:

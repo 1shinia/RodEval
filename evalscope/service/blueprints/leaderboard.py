@@ -9,9 +9,8 @@ import json
 import logging
 import os
 import re
-from pathlib import Path
-
 from flask import Blueprint, jsonify, request
+from pathlib import Path
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
@@ -24,7 +23,7 @@ _OPENCOMPASS_DIR = os.environ.get('OPENCOMPASS_DATA_DIR', os.path.join(_PROJECT_
 # 文件名模式：full_snapshot 下的归一化文件名。
 _LLM_DATA_PAT = re.compile(r'^llm-rank__llm-data-v2\.(.+)\.json$')
 _LLM_COL_PAT = re.compile(r'^llm-rank__llm-column-v2\.(.+)\.json$')
-_DATE_RE = re.compile(r'(\d{8})')           # 取文件名里最后的 YYYYMMDD 作排序键
+_DATE_RE = re.compile(r'(\d{8})')  # 取文件名里最后的 YYYYMMDD 作排序键
 _LLM_VARIANT_RE = re.compile(r'^(\d\d)-(\d\d)\.(\d{8})$')
 
 
@@ -118,12 +117,42 @@ def _extend_cols(config) -> list[dict]:
 #   其余「OSS 榜」由 rankLayout-<dir>.json 布局文件驱动页签清单（tab 维度）。
 # 未来上游新增榜单：在下载脚本的 OSS_BOARDS 加一项 + 此处加一行即可，无需再改接口/前端。
 _BOARDS = [
-    {'id': 'lm', 'dir': 'lm', 'label': '大模型', 'label_en': 'LLM Leaderboard'},
-    {'id': 'llm', 'dir': None, 'label': 'LLM 榜（历史月报）', 'label_en': 'LLM Leaderboard (Historical)'},
-    {'id': 'multimodal', 'dir': 'image-vlm', 'label': '多模态榜（图片理解）', 'label_en': 'Multimodal Leaderboard (Vision)'},
-    {'id': 'agent', 'dir': 'agent', 'label': '智能体榜', 'label_en': 'Agent Leaderboard'},
-    {'id': 'ai4science', 'dir': 'ai4science', 'label': '科学智能榜', 'label_en': 'AI for Science Leaderboard'},
-    {'id': 'physical-intelligence', 'dir': 'physical-intelligence', 'label': '物理智能榜', 'label_en': 'Physical Intelligence Leaderboard'},
+    {
+        'id': 'lm',
+        'dir': 'lm',
+        'label': '大模型',
+        'label_en': 'LLM Leaderboard'
+    },
+    {
+        'id': 'llm',
+        'dir': None,
+        'label': 'LLM 榜（历史月报）',
+        'label_en': 'LLM Leaderboard (Historical)'
+    },
+    {
+        'id': 'multimodal',
+        'dir': 'image-vlm',
+        'label': '多模态榜（图片理解）',
+        'label_en': 'Multimodal Leaderboard (Vision)'
+    },
+    {
+        'id': 'agent',
+        'dir': 'agent',
+        'label': '智能体榜',
+        'label_en': 'Agent Leaderboard'
+    },
+    {
+        'id': 'ai4science',
+        'dir': 'ai4science',
+        'label': '科学智能榜',
+        'label_en': 'AI for Science Leaderboard'
+    },
+    {
+        'id': 'physical-intelligence',
+        'dir': 'physical-intelligence',
+        'label': '物理智能榜',
+        'label_en': 'Physical Intelligence Leaderboard'
+    },
 ]
 
 # 无布局文件时（旧快照/测试 fixture）image-vlm 页签的中文名回退表。
@@ -134,13 +163,13 @@ _LEGACY_VLM_LABELS = {
     'security_overall': '安全综合榜',
 }
 
-
 _LEGACY_VLM_LABELS_EN = {
     'ability_official': 'Official Leaderboard',
     'ability_open_source': 'Open Source Leaderboard',
     'ability_arena_votes': 'Arena Votes Leaderboard',
     'security_overall': 'Overall',
 }
+
 
 def _read_layout(dir_name: str) -> dict | None:
     """读 OSS 榜的布局文件 rankLayout-<dir>.json；缺失/损坏返回 None。"""
@@ -244,9 +273,12 @@ def leaderboard_meta():
                 vlm_tabs = tabs
         boards.append(entry)
     return jsonify({
-        'llm_periods': [{'value': v, 'label': _period_label(v)} for v in llm_periods],
-        'mm_periods': [],                       # OSS 榜无历史期，改用 boards[].tabs
-        'vlm_tabs': vlm_tabs,                   # 向后兼容：= multimodal 榜的页签
+        'llm_periods': [{
+            'value': v,
+            'label': _period_label(v)
+        } for v in llm_periods],
+        'mm_periods': [],  # OSS 榜无历史期，改用 boards[].tabs
+        'vlm_tabs': vlm_tabs,  # 向后兼容：= multimodal 榜的页签
         'boards': boards,
         'default_llm': llm_periods[0] if llm_periods else None,
         'default_mm': None,
@@ -256,13 +288,41 @@ def leaderboard_meta():
 
 # LLM V3 (lm) 榜的 7 个能力维度，key 对应 data 文件里的 <Key>Table / column 文件里的 <Key>Column
 _LM_V3_TABS = [
-    {'key': 'Overall',     'zh': '综合', 'en': 'Overall'},
-    {'key': 'Knowledge',   'zh': '知识', 'en': 'Knowledge'},
-    {'key': 'Abstraction', 'zh': '抽象', 'en': 'Abstraction'},
-    {'key': 'Reasoning',   'zh': '推理', 'en': 'Reasoning'},
-    {'key': 'Interaction', 'zh': '交互', 'en': 'Interaction'},
-    {'key': 'Safety',      'zh': '安全', 'en': 'Safety'},
-    {'key': 'Agent',       'zh': '智能体', 'en': 'Agent'},
+    {
+        'key': 'Overall',
+        'zh': '综合',
+        'en': 'Overall'
+    },
+    {
+        'key': 'Knowledge',
+        'zh': '知识',
+        'en': 'Knowledge'
+    },
+    {
+        'key': 'Abstraction',
+        'zh': '抽象',
+        'en': 'Abstraction'
+    },
+    {
+        'key': 'Reasoning',
+        'zh': '推理',
+        'en': 'Reasoning'
+    },
+    {
+        'key': 'Interaction',
+        'zh': '交互',
+        'en': 'Interaction'
+    },
+    {
+        'key': 'Safety',
+        'zh': '安全',
+        'en': 'Safety'
+    },
+    {
+        'key': 'Agent',
+        'zh': '智能体',
+        'en': 'Agent'
+    },
 ]
 
 
@@ -341,8 +401,14 @@ def _lm_v3_join_model(rows: list, model_base: dict) -> list:
 
 _FALLBACK_TAB_ORDER = ['Overall', 'Subjective', 'Language', 'Knowledge', 'Reason', 'Math', 'Code', 'Agent']
 _FALLBACK_TAB_LABELS_ZH = {
-    'Overall': '综合评分', 'Subjective': '主观', 'Language': '语言',
-    'Knowledge': '知识', 'Reason': '推理', 'Math': '数学', 'Code': '代码', 'Agent': '智能体',
+    'Overall': '综合评分',
+    'Subjective': '主观',
+    'Language': '语言',
+    'Knowledge': '知识',
+    'Reason': '推理',
+    'Math': '数学',
+    'Code': '代码',
+    'Agent': '智能体',
 }
 
 
@@ -371,17 +437,18 @@ def _derive_tabs(data: dict, col: dict) -> tuple[list, list]:
                 continue
             key = t.get('key') or t.get('index')
             name = t.get('name') or {}
-            push(key, name.get('zh-CN') if isinstance(name, dict) else name,
-                 name.get('en-US') if isinstance(name, dict) else name,
-                 t.get('tableData'), t.get('tableColumn'))
+            push(
+                key,
+                name.get('zh-CN') if isinstance(name, dict) else name,
+                name.get('en-US') if isinstance(name, dict) else name, t.get('tableData'), t.get('tableColumn')
+            )
         return tabs, tables
     # 老版本没有 TabConfig：按固定顺序平铺
     for base in _FALLBACK_TAB_ORDER:
         data_key = f'{base}Table'
         if data_key not in data:
             continue
-        push(base, _FALLBACK_TAB_LABELS_ZH.get(base, base), base,
-             data_key, f'{base}Column')
+        push(base, _FALLBACK_TAB_LABELS_ZH.get(base, base), base, data_key, f'{base}Column')
     # 兜底：data 里还有其它 Table 键也带上
     for k in data:
         if k.endswith('Table') and k not in {f'{b}Table' for b in _FALLBACK_TAB_ORDER}:
@@ -474,7 +541,7 @@ def leaderboard_lm_v3():
     dim = (request.args.get('dim') or 'overall').lower()
     tab_keys = {t['key'].lower(): t for t in _LM_V3_TABS}
     if dim not in tab_keys:
-        return jsonify({'error': f"Invalid dim: {dim!r}; must be one of {sorted(tab_keys)}"}), 400
+        return jsonify({'error': f'Invalid dim: {dim!r}; must be one of {sorted(tab_keys)}'}), 400
     tab_meta = tab_keys[dim]
 
     data = _read_lm_v3(benchmark)

@@ -13,16 +13,32 @@ _CJK_RE = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u309f\u30a0-\u30ff\uac
 
 # Chinese digit characters mapped to Arabic digits (character-level fallback)
 _CN_DIGIT_MAP = {
-    '零': '0', '〇': '0',
-    '一': '1', '二': '2', '三': '3', '四': '4', '五': '5',
-    '六': '6', '七': '7', '八': '8', '九': '9',
+    '零': '0',
+    '〇': '0',
+    '一': '1',
+    '二': '2',
+    '三': '3',
+    '四': '4',
+    '五': '5',
+    '六': '6',
+    '七': '7',
+    '八': '8',
+    '九': '9',
     '幺': '1',  # phone-number colloquial for 一
 }
 # Arabic digit → Chinese digit (for digit-by-digit reading normalization)
 # Note: map to 零 (not 〇) so that 一零 → 十 replacement works correctly
 _ARABIC_TO_CN_DIGIT = {
-    '0': '零', '1': '一', '2': '二', '3': '三', '4': '四',
-    '5': '五', '6': '六', '7': '七', '8': '八', '9': '九',
+    '0': '零',
+    '1': '一',
+    '2': '二',
+    '3': '三',
+    '4': '四',
+    '5': '五',
+    '6': '六',
+    '7': '七',
+    '8': '八',
+    '9': '九',
 }
 # A run of 2+ consecutive CN digit characters (excluding multiplicative
 # characters 十/百/千/万/亿) that cn2an refuses to parse as a formal number.
@@ -67,6 +83,7 @@ def _normalize_chinese_numbers(text: str) -> str:
     """
     try:
         import cn2an
+
         # cn2an logs UserWarning for malformed numbers; suppress the noise.
         import warnings
         with warnings.catch_warnings():
