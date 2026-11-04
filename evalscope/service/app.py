@@ -101,8 +101,8 @@ def create_app(outputs: str = None):
     app.register_blueprint(bp_leaderboard)
     app.register_blueprint(bp_dataset_catalog, url_prefix='/api/v1/dataset-catalog')
 
-    # Use HuggingFace mirror for MTEB dataset downloads (faster in CN)
-    os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
+    # HF_ENDPOINT mirror is configured at package import time in
+    # evalscope/__init__.py (before huggingface_hub reads its constants).
 
     # --- Initialise SQLite metadata store --------------------------------
     outputs_root = app.config.get('OUTPUTS_ROOT') or _DEFAULT_ROOT
