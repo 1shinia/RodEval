@@ -103,6 +103,11 @@ class ZeroBenchAdapter(VisionLanguageAdapter):
                     import io as _io
                     buf = _io.BytesIO()
                     fmt_name = (getattr(img, 'format', None) or 'JPEG').upper()
+                    # PIL cannot save alpha-bearing images (RGBA/LA/P/PA) as JPEG.
+                    # Flatten to RGB first so the save never raises
+                    # "cannot write mode RGBA as JPEG".
+                    if fmt_name == 'JPEG' and img.mode not in ('RGB', 'L', 'CMYK', 'YCbCr', '1'):
+                        img = img.convert('RGB')
                     img.save(buf, format=fmt_name)
                     image_bytes = buf.getvalue()
                     default_fmt = fmt_name.lower()

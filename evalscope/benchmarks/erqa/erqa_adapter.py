@@ -20,7 +20,11 @@ SUBSET_LIST = [
     'Other',
 ]
 
-PROMPT_TEMPLATE = """{question}"""
+# NOTE: this template is NOT used to build the model input for ERQA.
+# ERQAAdapter.record_to_sample() assembles the prompt directly from the dataset
+# `question` field (the question text already embeds the A/B/C/D choices).
+# The output-format constraint is appended there instead.
+PROMPT_TEMPLATE = "{question}"
 
 
 @register_benchmark(
@@ -70,6 +74,16 @@ class ERQAAdapter(VisionLanguageAdapter, MultiChoiceAdapter):
     def record_to_sample(self, record: Dict[str, Any]) -> Sample:
         question = record.get('question', '')
         answer = record.get('answer', '')
+
+        # The multi-choice grader (evalscope/utils/multi_choices.py: parse_answers)
+        # only accepts output of the form 'ANSWER: <letter>'. The raw dataset
+        # question asks the model to answer with "only the letter", which cannot
+        # be extracted -> every sample scores 0. Append the required format.
+        question = (
+            f'{question}\n\n'
+            'The last line of your response must be exactly: '
+            'ANSWER: <LETTER>  (where <LETTER> is one of A, B, C, D).'
+        )
 
         content_list: List[Content] = [ContentText(text=question)]
 
