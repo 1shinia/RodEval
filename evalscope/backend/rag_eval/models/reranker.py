@@ -13,6 +13,7 @@ from torch import Tensor
 from typing import Any, Dict, List, Optional, Union
 
 from evalscope.backend.rag_eval.models.base import Array, BaseReranker
+from evalscope.backend.rag_eval.models.request_cache import load_response, request_cache_path, save_response
 from evalscope.backend.rag_eval.models.utils import resolve_model_path
 from evalscope.constants import HubType
 from evalscope.utils.argument_utils import get_supported_params
@@ -307,6 +308,14 @@ class APIReranker(BaseReranker):
                         'top_n': len(documents),
                         'return_documents': False,
                     }
+                cache_path = request_cache_path(self, 'rerank', {
+                    'url': self.rerank_url, 'payload': payload,
+                })
+                cached_scores = load_response(cache_path, len(batch_pairs), ndim=1)
+                if cached_scores is not None:
+                    for (original_idx, _), score in zip(batch_pairs, cached_scores):
+                        scores[original_idx] = score
+                    continue
                 response = None
                 for attempt in range(max_retries):
                     try:
@@ -374,6 +383,33 @@ class APIReranker(BaseReranker):
                     raise requests.HTTPError(message, response=response) from None
                 data = response.json()
 
+                if cache_path is not None:
+                    # Validate the whole response before assigning scores or checkpointing.
+                    import math
+                    from numbers import Real
+
+                    container = data.get('output', {}) if self.is_dashscope and isinstance(data, dict) else data
+                    results = container.get('results') if isinstance(container, dict) else None
+                    if not isinstance(results, list) or len(results) != len(batch_pairs):
+                        raise ValueError('Invalid rerank response: result count mismatch')
+                    batch_scores = [None] * len(batch_pairs)
+                    for position, result in enumerate(results):
+                        if not isinstance(result, dict):
+                            raise ValueError('Invalid rerank response: result must be an object')
+                        index = result.get('index', position)
+                        if type(index) is not int or not 0 <= index < len(batch_pairs):
+                            raise ValueError('Invalid rerank response: invalid index')
+                        if batch_scores[index] is not None:
+                            raise ValueError('Invalid rerank response: duplicate index')
+                        score = result.get('relevance_score', result.get('score'))
+                        if isinstance(score, bool) or not isinstance(score, Real) or not math.isfinite(score):
+                            raise ValueError('Invalid rerank response: score must be finite numeric')
+                        batch_scores[index] = score
+                    for (original_idx, _), score in zip(batch_pairs, batch_scores):
+                        scores[original_idx] = score
+                    save_response(cache_path, batch_scores)
+                    continue
+
                 if self.is_dashscope:
                     # DashScope wraps results in output.results
                     results = data.get('output', {}).get('results')
@@ -397,5 +433,6 @@ class APIReranker(BaseReranker):
                         continue
                     score = result.get('relevance_score', result.get('score', 0.0))
                     scores[batch_pairs[doc_idx][0]] = score
+                save_response(cache_path, [scores[idx] for idx, _ in batch_pairs])
 
         return torch.tensor(scores)

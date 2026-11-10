@@ -12,6 +12,7 @@ from tqdm import tqdm
 from typing import Any, Dict, List, Optional, Union
 
 from evalscope.backend.rag_eval.models.base import Array, BaseEncoder
+from evalscope.backend.rag_eval.models.request_cache import load_response, request_cache_path, save_response
 from evalscope.backend.rag_eval.models.utils import resolve_model_path
 from evalscope.constants import HubType
 from evalscope.utils.argument_utils import get_supported_params
@@ -34,6 +35,23 @@ def _validate_embedding_response_count(batch_texts: List[str], response: List[An
     if len(response) != len(batch_texts):
         raise ValueError('Embedding response count mismatch: '
                          f'expected {len(batch_texts)}, got {len(response)}')
+
+
+def _validate_embedding_vectors(response: List[Any], dimension: Optional[int] = None) -> int:
+    """Require rectangular, non-empty, finite numeric embedding vectors."""
+    import math
+    from numbers import Real
+
+    width = dimension
+    for vector in response:
+        if not isinstance(vector, (list, tuple)) or not vector:
+            raise ValueError('Invalid embedding response: expected non-empty numeric vectors')
+        if width is None:
+            width = len(vector)
+        if len(vector) != width or any(isinstance(value, bool) or not isinstance(value, Real)
+                                       or not math.isfinite(value) for value in vector):
+            raise ValueError('Invalid embedding response: vector dimensions or values')
+    return width if width is not None else 0
 
 
 try:
@@ -290,6 +308,10 @@ class APIEncoder(BaseEncoder):
         self.max_seq_length = max_seq_length
         # Optional path to progress.json for incremental encode progress
         self.progress_path: Optional[str] = None
+        self._request_identity = {
+            'model': model_name, 'api_base': api_base, 'dimensions': dimensions,
+            'check_embedding_ctx_length': check_embedding_ctx_length,
+        }
 
         self._client = OpenAIEmbeddings(
             model=model_name,
@@ -347,7 +369,20 @@ class APIEncoder(BaseEncoder):
             batch_texts = texts[i * self.batch_size:(i + 1) * self.batch_size]
             if prompt is not None:
                 batch_texts = [prompt + text for text in batch_texts]
-            response = self._client.embed_documents(batch_texts, chunk_size=self.batch_size, **encode_kwargs)
+            cache_path = request_cache_path(self, 'embedding', {
+                **self._request_identity, 'texts': batch_texts,
+                'chunk_size': self.batch_size, 'kwargs': encode_kwargs,
+            })
+            response = load_response(cache_path, len(batch_texts), ndim=2)
+            dimension = len(embeddings[0]) if embeddings else None
+            if response is not None and dimension is not None and len(response[0]) != dimension:
+                response = None
+            if response is None:
+                response = self._client.embed_documents(batch_texts, chunk_size=self.batch_size, **encode_kwargs)
+                _validate_embedding_response_count(batch_texts, response)
+                if cache_path is not None:
+                    _validate_embedding_vectors(response, dimension)
+                save_response(cache_path, response)
             _validate_embedding_response_count(batch_texts, response)
             embeddings.extend(response)
             _update_progress(self.progress_path, i + 1, total_batches)

@@ -68,7 +68,15 @@ def run_mteb_eval(config: MTEBToolConfig):
     encoders = [m for m in models if not m.is_cross_encoder]
     rerankers = [m for m in models if m.is_cross_encoder]
 
-    with _redirect_stderr_to_logger():
+    @contextmanager
+    def publication_session():
+        token = _publish_resume_results(None, eval_args.output_folder, _session='begin')
+        try:
+            yield
+        finally:
+            _publish_resume_results(None, eval_args.output_folder, _session=token)
+
+    with publication_session(), _redirect_stderr_to_logger():
         with _offline_dataset_guard(eval_args.offline or not eval_args.allow_download):
             if len(encoders) == 1 and len(rerankers) == 1:
                 tasks = resolve_tasks(eval_args)
@@ -220,8 +228,109 @@ def _build_evaluate_kwargs(eval_args: MTEBEvalConfig, output_folder: str, predic
     # Use task's work_dir as result cache to isolate per-eval results
     os.makedirs(output_folder, exist_ok=True)
     eval_kwargs['cache'] = ResultCache(cache_path=output_folder)
-    eval_kwargs['overwrite_strategy'] = 'always'
+    eval_kwargs['overwrite_strategy'] = 'only-missing'
     return eval_kwargs
+
+
+def _configure_resume(model, model_args, eval_args):
+    """Scope checkpoints to this task's effective configuration, never credentials."""
+    import hashlib
+    import json
+
+    def identity(value):
+        if isinstance(value, dict):
+            return {k: identity(v) for k, v in value.items()
+                    if k.lower() not in ('api_key', 'token', 'access_token', 'secret', 'password',
+                                         'authorization', 'headers', 'api_token', 'secret_key')
+                    and k not in ('output_folder', 'offline', 'allow_download', 'overwrite_results')}
+        if isinstance(value, list):
+            return [identity(v) for v in value]
+        return value
+
+    eval_identity = eval_args.model_dump()
+    model_identity = identity(model_args.model_dump())
+    local_path = Path(model_args.model_name_or_path)
+    if not model_args.model_name and local_path.is_dir():
+        # Detect replaced local weights without hashing multi-GB checkpoints.
+        model_identity['local_files'] = [(str(p.relative_to(local_path)), p.stat().st_size,
+                                          p.stat().st_mtime_ns)
+                                         for p in sorted(local_path.rglob('*')) if p.is_file()]
+    if eval_identity.pop('resume_unlimited', False):
+        eval_identity['limits'] = None
+    payload = {'schema': 1, 'mteb': mteb.__version__,
+               'model': model_identity, 'eval': identity(eval_identity)}
+    namespace = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+    checkpoint_dir = os.path.join(eval_args.output_folder, '.rag_resume', namespace)
+    model.request_cache_dir = os.path.join(checkpoint_dir, 'requests')
+    model.request_cache_namespace = namespace
+    return checkpoint_dir
+
+
+def _publish_resume_results(checkpoint_dir, output_folder, *, _session=None):
+    """Publish only current managed results; never delete untracked history.
+
+    A run-scoped ContextVar accumulates all models, while direct callers replace
+    a single publication. The manifest lives outside the report JSON tree.
+    """
+    import json
+    import shutil
+    import tempfile
+    from contextvars import ContextVar
+
+    if not hasattr(_publish_resume_results, '_sessions'):
+        _publish_resume_results._sessions = ContextVar('rag_publications', default=None)
+    sessions = _publish_resume_results._sessions
+    root = Path(output_folder).resolve()
+    if _session == 'begin':
+        token = sessions.set({root: set()})
+        try:
+            _publish_resume_results(None, output_folder)
+        except BaseException:
+            sessions.reset(token)
+            raise
+        return token
+    if _session is not None:
+        sessions.reset(_session)
+        return
+
+    active = sessions.get()
+    current = active[root] if active is not None and root in active else set()
+    manifest = root / '.rag_resume_publication.json'
+    previous = set(json.loads(manifest.read_text())) if manifest.is_file() else set()
+    source = Path(checkpoint_dir) / 'results' if checkpoint_dir is not None else None
+    items = sorted(source.rglob('*.json')) if source is not None and source.is_dir() else []
+    incoming = {item.relative_to(source).as_posix() for item in items}
+    wanted = current | incoming
+    public = root / 'results'
+    # Persist ownership before changing files, so an interrupted copy is still
+    # tracked and can be cleaned on the next run. Manifest writes are atomic.
+    root.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode='w', dir=root, delete=False) as stream:
+        temporary_manifest = Path(stream.name)
+        json.dump(sorted(previous | wanted), stream)
+    os.replace(temporary_manifest, manifest)
+    for name in previous - wanted:
+        relative = Path(name)
+        if relative.is_absolute() or '..' in relative.parts:
+            continue
+        destination = public / relative
+        if destination.resolve().is_relative_to(public.resolve()) and destination.is_file():
+            destination.unlink()
+    for item in items:
+        destination = public / item.relative_to(source)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+        try:
+            shutil.copyfile(item, temporary)
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+    with tempfile.NamedTemporaryFile(mode='w', dir=root, delete=False) as stream:
+        temporary_manifest = Path(stream.name)
+        json.dump(sorted(wanted), stream)
+    os.replace(temporary_manifest, manifest)
+    current.update(incoming)
 
 
 def _is_retrieval_task(task) -> bool:
@@ -306,6 +415,7 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
     from datetime import datetime as _datetime
 
     model = load_model(model_args)
+    checkpoint_dir = _configure_resume(model, model_args, eval_args)
     tasks = resolve_tasks(eval_args)
     _preflight_offline_tasks(tasks, eval_args.offline, eval_args.allow_download)
 
@@ -334,6 +444,8 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
     )
 
     # Apply per-task limits: subset the dataset after loading
+    if eval_args.resume_unlimited:
+        eval_args.limits = None
     if eval_args.limits is not None:
         logger.info(f'Applying limits={eval_args.limits} to {total_tasks} task(s)')
         for task in tasks:
@@ -388,7 +500,7 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
         logger.info('Starting evaluation with server-prepared local dataset cache (online download disabled)...')
     else:
         logger.info('Starting evaluation (data may be downloaded from HF mirror on first run)...')
-    eval_kwargs = _build_evaluate_kwargs(eval_args, eval_args.output_folder)
+    eval_kwargs = _build_evaluate_kwargs(eval_args, checkpoint_dir)
 
     # ── Update progress: evaluating ─────────────────────────────────
     _write_progress(
@@ -409,6 +521,8 @@ def one_stage_eval(model_args: MTEBModelConfig, eval_args: MTEBEvalConfig):
         tasks=tasks,
         **eval_kwargs,
     )
+
+    _publish_resume_results(checkpoint_dir, eval_args.output_folder)
 
     # ── Write completion progress ───────────────────────────────────
     _write_progress(
@@ -437,13 +551,15 @@ def two_stage_eval(
     """Run two-stage evaluation: encoder retrieval, then cross-encoder rerank."""
     encoder = load_model(encoder_args)
     reranker = load_model(reranker_args)
+    stage1_checkpoint = _configure_resume(encoder, encoder_args, eval_args)
+    _configure_resume(reranker, reranker_args, eval_args)
 
     tasks = resolve_tasks(eval_args)
     _preflight_offline_tasks(tasks, eval_args.offline, eval_args.allow_download)
 
     stage1_path = os.path.join(eval_args.output_folder, 'stage1')
     stage2_path = os.path.join(eval_args.output_folder, 'stage2')
-    stage1_predictions = Path(stage1_path) / 'predictions'
+    stage1_predictions = Path(stage1_checkpoint) / 'predictions'
 
     # Enable incremental encode progress
     try:
@@ -455,14 +571,19 @@ def two_stage_eval(
     logger.info('=== Stage 1: Encoder retrieval ===')
     eval_kwargs_s1 = _build_evaluate_kwargs(
         eval_args,
-        stage1_path,
+        stage1_checkpoint,
         prediction_folder=stage1_predictions,
     )
+    # Completed metrics do not guarantee complete prediction artifacts. Re-run
+    # retrieval even for partial prediction directories; request-level cache
+    # still reuses completed embeddings without repeating provider requests.
+    eval_kwargs_s1['overwrite_strategy'] = 'always'
     mteb.evaluate(
         model=encoder,
         tasks=tasks,
         **eval_kwargs_s1,
     )
+    _publish_resume_results(stage1_checkpoint, stage1_path)
 
     logger.info('=== Stage 2: CrossEncoder reranking ===')
     for task in tasks:
@@ -635,6 +756,7 @@ def _update_config_limits(work_dir: str, count: int) -> None:
             cfg = yaml.safe_load(f) or {}
         eval_cfg = cfg.setdefault('eval_config', {}).setdefault('eval', {})
         eval_cfg['limits'] = count
+        eval_cfg['resume_unlimited'] = True
         with open(config_path, 'w') as f:
             yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
         logger.info(f'Updated config limits to actual sample count: {count}')

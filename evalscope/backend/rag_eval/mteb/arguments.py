@@ -75,6 +75,8 @@ class MTEBEvalConfig(BaseArgument):
     output_folder: str = 'outputs'
     overwrite_results: bool = True
     limits: Optional[int] = None
+    # Internal marker: limits was populated with a display count after a full run.
+    resume_unlimited: bool = False
     random_sample: bool = False
     hub: str = 'modelscope'
     # Server-side policy flags. The service sets these for normal users;
