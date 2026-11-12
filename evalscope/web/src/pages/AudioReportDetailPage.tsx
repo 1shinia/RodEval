@@ -34,6 +34,13 @@ interface AudioReport {
   elapsed_seconds?: number
   num_samples?: number
   total_elapsed_seconds?: number
+  coverage?: { planned: number; tts_success: number; asr_success: number; wer_scored: number; cer_scored: number }
+  status?: string
+  requested_metrics?: string[]
+  closed_loop_enabled?: boolean
+  prompt_seed?: number | null
+  prompt_dataset_version?: string | null
+  dataset?: { name: string; config: string; split: string; revision: string; sample_id: string; scoring?: string }
 }
 
 interface AudioSample {
@@ -46,9 +53,12 @@ interface AudioSample {
   elapsed_seconds?: number
   audio_url?: string
   prompt?: string
+  prompt_id?: string
+  prompt_category?: string
   error?: string
   duration_seconds?: number
   asr_elapsed_seconds?: number
+  asr_error?: string
 }
 
 export default function AudioReportDetailPage() {
@@ -145,6 +155,13 @@ export default function AudioReportDetailPage() {
         </div>
       </div>
 
+      {isASR && report.dataset && <div className="p-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] text-sm text-[var(--text)]">
+        <div className="font-medium">{t('evalAudioExtra.detailDataset')}</div>
+        <div>{report.dataset.name} / {report.dataset.config} / {report.dataset.split} · {report.dataset.sample_id}</div>
+        <div className="break-all text-[var(--text-muted)]">revision: {report.dataset.revision}</div>
+        <div className="text-[var(--text-muted)]">{t('evalAudioExtra.detailScoring')}</div>
+      </div>}
+
       {/* TTS→ASR Closed-Loop Metrics */}
       {!isASR && report.metrics && (
         <div className="grid grid-cols-2 gap-4">
@@ -193,6 +210,15 @@ export default function AudioReportDetailPage() {
         </div>
       )}
 
+      {report.coverage && <div className="text-sm text-[var(--text)] space-y-2">
+        {report.status === 'partial' && <p className="text-amber-600">{t('evalAudioExtra.partialResult')}</p>}
+        <p>{t('evalAudioExtra.coverageTts')}: {report.coverage.tts_success} / {report.coverage.planned}</p>
+        {report.closed_loop_enabled && <>
+          <p>{t('evalAudioExtra.coverageAsr')}: {report.coverage.asr_success} / {report.coverage.planned}</p>
+          <p>{t('evalAudioExtra.coverageScore')}: {(report.requested_metrics ?? ['wer', 'cer']).map(m => `${m.toUpperCase()} ${m === 'wer' ? report.coverage!.wer_scored : report.coverage!.cer_scored} / ${report.coverage!.planned}`).join(', ')}</p>
+        </>}
+        {report.prompt_dataset_version && <p>{report.prompt_dataset_version} · {t('evalAudioExtra.promptSeed')}: {report.prompt_seed}</p>}
+      </div>}
       {/* TTS Summary */}
       {isASR && report.metrics?.wer == null && report.metrics?.cer == null && !samples[0]?.reference?.trim() && (
         <p className="text-sm text-[var(--text-muted)]">{t('evalAudioExtra.detailNoMetrics')}</p>
@@ -257,8 +283,11 @@ export default function AudioReportDetailPage() {
                         <div className="text-sm text-[var(--danger)]">{t('evalAudioExtra.detailError')}: {sample.error}</div>
                       ) : (
                         <>
+                          {sample.prompt_id && <div className="text-sm text-[var(--text-muted)] mb-1">{sample.prompt_id} · {sample.prompt_category}</div>}
                           <div className="text-sm text-[var(--text)] mb-2">{sample.prompt || '-'}</div>
-                          {sample.audio_url && (
+                          {sample.asr_error && <div className="text-sm text-red-500 mb-2">{t('evalAudioExtra.asrFailure')}: {sample.asr_error}</div>}
+                    {((sample.wer !== undefined && sample.wer < 0) || (sample.cer !== undefined && sample.cer < 0)) && <div className="text-sm text-red-500 mb-2">{t('evalAudioExtra.scoreFailure')}</div>}
+                    {sample.audio_url && (
                             <audio controls className="w-full h-8">
                               <source src={sample.audio_url} />
                               {t('evalAudioExtra.detailUnsupportedAudio')}
@@ -273,8 +302,8 @@ export default function AudioReportDetailPage() {
                               <div className="text-[var(--text-muted)] mb-1">{t('evalAudioExtra.detailAsrRecognition')}:</div>
                               <div className="text-[var(--text)]">{sample.hypothesis}</div>
                               <div className="flex gap-3 mt-1">
-                                {sample.wer != null && <span className="text-[var(--accent)]">WER: {(sample.wer * 100).toFixed(2)}%</span>}
-                                {sample.cer != null && <span className="text-[var(--text)]">CER: {(sample.cer * 100).toFixed(2)}%</span>}
+                                {sample.wer != null && sample.wer >= 0 && <span className="text-[var(--accent)]">WER: {(sample.wer * 100).toFixed(2)}%</span>}
+                                {sample.cer != null && sample.cer >= 0 && <span className="text-[var(--text)]">CER: {(sample.cer * 100).toFixed(2)}%</span>}
                                 {sample.asr_elapsed_seconds != null && <span className="text-[var(--text-dim)]">{t('evalAudioExtra.detailAsrElapsed')}: {sample.asr_elapsed_seconds}s</span>}
                               </div>
                             </div>

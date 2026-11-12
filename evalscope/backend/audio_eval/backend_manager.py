@@ -159,8 +159,20 @@ class AudioBackendManager(BackendManager):
         # All providers: decode base64 → save temp file → pass path to model
         audio_base64 = getattr(config.generate, 'audio_base64', None)
         audio_path = getattr(config.generate, 'audio_path', None)
+        audio_source = getattr(config.generate, 'audio_source', 'upload')
+        fleurs_sample = None
+        if audio_source == 'fleurs':
+            from .datasets.fleurs import get_fleurs_sample
+            sample_id = getattr(config.generate, 'dataset_sample_id', None)
+            if not sample_id:
+                raise ValueError('A FLEURS sample must be selected')
+            fleurs_sample = get_fleurs_sample(sample_id)
+            audio_path = fleurs_sample['audio_path']
+            audio_base64 = None
+        elif audio_source != 'upload':
+            raise ValueError(f'Unsupported ASR audio source: {audio_source}')
 
-        if not audio_base64 and not audio_path:
+        if audio_source != 'fleurs' and not audio_base64 and not audio_path:
             raise ValueError('audio_base64 or audio_path is required for ASR')
 
         audio_dir = output_dir / 'audio'
@@ -206,7 +218,7 @@ class AudioBackendManager(BackendManager):
         elapsed = time.time() - start_time
 
         hypothesis = result['text']
-        reference = config.generate.reference_text or ''
+        reference = fleurs_sample['reference_text'] if fleurs_sample else (config.generate.reference_text or '')
 
         # Compute metrics only when a reference was supplied
         metrics_result: Dict[str, float] = {}
@@ -242,6 +254,18 @@ class AudioBackendManager(BackendManager):
             'elapsed_seconds': round(elapsed, 2),
         }
 
+        if fleurs_sample:
+            per_sample.update({
+                'dataset': 'google/fleurs', 'dataset_config': 'cmn_hans_cn',
+                'dataset_split': 'test', 'dataset_revision': fleurs_sample['revision'],
+                'dataset_sample_id': fleurs_sample['id'],
+            })
+            results['dataset'] = {
+                'name': 'google/fleurs', 'config': 'cmn_hans_cn', 'split': 'test',
+                'revision': fleurs_sample['revision'], 'sample_id': fleurs_sample['id'],
+                'scoring': 'ASR WER/CER use the existing AUDIO text normalization; Mandarin WER is character-level',
+            }
+
         # Save to results.json
         results_path = output_dir / 'results.json'
         with open(results_path, 'w', encoding='utf-8') as f:
@@ -254,14 +278,16 @@ class AudioBackendManager(BackendManager):
 
     def _run_tts(self, config: AudioToolConfig) -> Dict[str, Any]:
         """Run TTS evaluation pipeline, optionally with ASR closed-loop eval."""
-        from evalscope.backend.audio_eval.datasets.prompt_loader import load_tts_prompts
-        from .utils.audio import save_audio, get_audio_duration
+        from evalscope.backend.audio_eval.datasets.prompt_loader import load_tts_prompts, TTS_DATASET
+        from .utils.audio import save_audio, validate_tts_audio
 
         output_dir = self._ensure_output_dir(config.eval.output_dir)
         audio_dir = output_dir / 'audio'
         audio_dir.mkdir(exist_ok=True)
 
         # Load prompts
+        prompt_seed = config.eval.prompt_seed
+        selected_prompt_index = config.eval.selected_prompt_index
         custom_prompt = getattr(config.eval, 'custom_prompt', None)
         prompt_source = getattr(config.eval, 'prompt_source', None)
         if prompt_source == 'custom':
@@ -271,6 +297,8 @@ class AudioBackendManager(BackendManager):
         elif prompt_source == 'builtin':
             prompts = load_tts_prompts(
                 'builtin', limit=config.eval.prompt_limit, custom_path=None,
+                seed=prompt_seed, selected_index=selected_prompt_index,
+                category=config.eval.prompt_category,
             )
         elif custom_prompt:
             # Legacy configs with a custom prompt continue to synthesize just that text.
@@ -280,8 +308,14 @@ class AudioBackendManager(BackendManager):
                 config.eval.prompt_dataset,
                 limit=config.eval.prompt_limit,
                 custom_path=config.eval.custom_dataset_path,
+                seed=prompt_seed, selected_index=selected_prompt_index,
+                category=config.eval.prompt_category,
             )
 
+        actual_source = (
+            'custom' if (prompt_source == 'custom' or (custom_prompt and prompt_source != 'builtin'))
+            else (prompt_source or config.eval.prompt_dataset)
+        )
         logger.info(f'TTS prompts loaded: {len(prompts)}')
 
         # Load TTS model
@@ -291,6 +325,10 @@ class AudioBackendManager(BackendManager):
         # Optional ASR for closed-loop evaluation
         asr_model = None
         asr_model_name = getattr(config.eval, 'asr_model_name', None)
+        if asr_model_name is not None and not asr_model_name.strip():
+            raise ValueError('TTS closed-loop ASR model must not be blank')
+        if asr_model_name and not set(config.eval.metrics).intersection({'wer', 'cer'}):
+            raise ValueError('TTS closed-loop requires at least one metric')
         if asr_model_name:
             asr_api_base = getattr(config.eval, 'asr_api_base', None) or config.model.api_base
             # Explicit ASR type wins; existing configurations retain model-name inference.
@@ -327,6 +365,7 @@ class AudioBackendManager(BackendManager):
                 elapsed = time.time() - start_time
                 total_elapsed += elapsed
 
+                duration = validate_tts_audio(audio_bytes, config.generate.response_format)
                 audio_filename = (
                     f'sample_{i:04d}.{config.generate.response_format}'
                 )
@@ -334,8 +373,6 @@ class AudioBackendManager(BackendManager):
                     audio_bytes, audio_dir / audio_filename,
                     fmt=config.generate.response_format,
                 )
-                duration = get_audio_duration(audio_path)
-
                 sample_result = {
                     'index': i,
                     'prompt': prompt,
@@ -399,7 +436,15 @@ class AudioBackendManager(BackendManager):
                     'error': str(e),
                 })
 
-        # Compute aggregate metrics
+        if actual_source == 'builtin':
+            metadata = {item['text']: item for item in TTS_DATASET['items']}
+            for sample in per_sample_results:
+                item = metadata[sample['prompt']]
+                sample.update(prompt_id=item['id'], prompt_category=item['category'])
+
+        metrics_summary = {}
+        wer_vals = []
+        cer_vals = []
         if asr_model:
             wer_vals = [
                 s.get('wer') for s in per_sample_results
@@ -418,15 +463,38 @@ class AudioBackendManager(BackendManager):
                     sum(cer_vals) / len(cer_vals), 4
                 )
 
+        coverage = {
+            'planned': len(prompts),
+            'tts_success': sum('audio_path' in s for s in per_sample_results),
+            'asr_success': sum('hypothesis' in s for s in per_sample_results) if asr_model else 0,
+            'wer_scored': len(wer_vals) if asr_model else 0,
+            'cer_scored': len(cer_vals) if asr_model else 0,
+        }
+        partial = coverage['tts_success'] < len(prompts) or (
+            asr_model is not None and any(
+                coverage[f'{metric}_scored'] < len(prompts)
+                for metric in config.eval.metrics if metric in ('wer', 'cer')
+            )
+        )
         results = {
             'tool': 'tts',
             'model': _safe_model_name(config.model.model_name_or_path, 'tts'),
             'num_samples': len(prompts),
             'total_elapsed_seconds': round(total_elapsed, 2),
             'per_sample': per_sample_results,
+            'coverage': coverage,
+            'closed_loop_enabled': bool(asr_model),
+            'requested_metrics': config.eval.metrics if asr_model else [],
+            'status': 'failed' if not coverage['tts_success'] else ('partial' if partial else 'success'),
+            'prompt_source': actual_source,
+            'prompt_seed': prompt_seed if actual_source == 'builtin' else None,
+            'selected_prompt_index': selected_prompt_index if actual_source == 'builtin' else None,
+            'prompt_category': config.eval.prompt_category if actual_source == 'builtin' else None,
+            'prompt_dataset_version': TTS_DATASET['version'] if actual_source == 'builtin' else None,
         }
         if metrics_summary:
             results['metrics'] = metrics_summary
+        if asr_model:
             results['asr_model'] = asr_model_name
 
         all_failed = not per_sample_results or all('error' in sample for sample in per_sample_results)

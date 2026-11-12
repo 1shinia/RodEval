@@ -33,6 +33,7 @@ build-backend = "setuptools.build_meta"
 include-package-data = true
 
 [tool.setuptools.package-data]
+"evalscope.backend.audio_eval.datasets" = ["tts_basic_100_v1.json"]
 "evalscope.web" = ["dist/**/*"]
 "evalscope.service" = ["static/vendor/*.js"]
 

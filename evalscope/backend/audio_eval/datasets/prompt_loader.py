@@ -1,6 +1,8 @@
 """Audio prompt loader — builtin ASR/TTS datasets."""
 
+import json
 import random
+from pathlib import Path
 from typing import List, Optional
 
 # Builtin ASR test samples: (audio_filename_hint, reference_text, language)
@@ -17,19 +19,9 @@ ASR_BUILTIN = [
     ('深度学习是机器学习的一个重要分支', '深度学习是机器学习的一个重要分支', 'zh'),
 ]
 
-# Builtin TTS test prompts
-TTS_BUILTIN = [
-    '你好，欢迎使用语音合成系统。',
-    '今天天气真好，适合出去散步。',
-    '人工智能正在改变世界。',
-    '请确认您的身份信息。',
-    'Hello world, this is a test of text to speech.',
-    'The quick brown fox jumps over the lazy dog.',
-    '一二三四五六七八九十。',
-    '请问最近的医院怎么走？',
-    '这个产品的质量非常好，我强烈推荐。',
-    'Welcome to the speech synthesis evaluation system.',
-]
+# One source of truth for the indexed, categorized TTS test texts.
+TTS_DATASET = json.loads(Path(__file__).with_name('tts_basic_100_v1.json').read_text(encoding='utf-8'))
+TTS_BUILTIN = [item['text'] for item in TTS_DATASET['items']]
 
 
 def load_asr_samples(
@@ -58,13 +50,28 @@ def load_tts_prompts(
     dataset: str = 'builtin',
     limit: int = 10,
     custom_path: Optional[str] = None,
+    seed: int = 42,
+    selected_index: Optional[int] = None,
+    category: Optional[str] = None,
 ) -> List[str]:
     """Load TTS text prompts. Returns list of strings."""
     if dataset == 'custom':
         if not custom_path:
             raise ValueError('custom TTS dataset path is required')
         return _load_custom_lines(custom_path, limit)
-    return random.SystemRandom().sample(TTS_BUILTIN, min(limit, len(TTS_BUILTIN)))
+    items = TTS_DATASET['items']
+    if category:
+        items = [item for item in items if item['category'] == category]
+        if not items:
+            raise ValueError('Unknown TTS prompt category')
+    if selected_index is not None:
+        if not 0 <= selected_index < len(TTS_BUILTIN):
+            raise ValueError('TTS prompt index is out of range')
+        selected = TTS_DATASET['items'][selected_index]
+        if category and selected['category'] != category:
+            raise ValueError('Selected TTS prompt is outside the category')
+        return [selected['text']]
+    return random.Random(seed).sample([item['text'] for item in items], min(limit, len(items)))
 
 
 def _load_custom_asr(path: str, limit: int) -> List[dict]:

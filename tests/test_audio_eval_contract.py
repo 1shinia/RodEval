@@ -1,5 +1,7 @@
 import base64
 import json
+import io
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -58,6 +60,16 @@ def test_asr_without_reference_does_not_report_zero_error(tmp_path):
     assert 'wer' not in result['metrics']
 
 
+def valid_tts_audio():
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(b'\x00\x00' * 1600)
+    return buffer.getvalue()
+
+
 def tts_config(tmp_path, custom_prompt: str | None = 'hello', prompt_source=None, prompt_limit=1):
     eval_config = {'output_dir': str(tmp_path), 'prompt_limit': prompt_limit}
     if custom_prompt is not None:
@@ -65,7 +77,7 @@ def tts_config(tmp_path, custom_prompt: str | None = 'hello', prompt_source=None
     if prompt_source is not None:
         eval_config['prompt_source'] = prompt_source
     return AudioToolConfig(
-        tool='tts', model={'model_name_or_path': 'tts-1'}, eval=eval_config,
+        tool='tts', model={'model_name_or_path': 'tts-1'}, generate={'response_format': 'wav'}, eval=eval_config,
     )
 
 
@@ -85,7 +97,7 @@ def test_tts_success_is_not_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(audio_utils, 'get_audio_duration', lambda _: 1.0)
     config = tts_config(tmp_path)
     obj = manager(config)
-    obj._create_tts_model = lambda _: SimpleNamespace(generate=lambda *a, **k: b'audio')
+    obj._create_tts_model = lambda _: SimpleNamespace(generate=lambda *a, **k: valid_tts_audio())
     result = obj._run_tts(config)
     assert len(result['per_sample']) == 1
     assert 'error' not in result['per_sample'][0]
@@ -100,7 +112,7 @@ def test_tts_custom_prompt_overrides_builtin_dataset_by_default(tmp_path, monkey
     config = tts_config(tmp_path, custom_prompt='  one custom text  ', prompt_limit=10)
     obj = manager(config)
     generated = []
-    obj._create_tts_model = lambda _: SimpleNamespace(generate=lambda prompt, **kwargs: generated.append(prompt) or b'audio')
+    obj._create_tts_model = lambda _: SimpleNamespace(generate=lambda prompt, **kwargs: generated.append(prompt) or valid_tts_audio())
 
     result = obj._run_tts(config)
 
@@ -114,16 +126,16 @@ def test_tts_explicit_builtin_source_uses_dataset_even_if_custom_text_is_present
     from evalscope.backend.audio_eval.utils import audio as audio_utils
 
     prompts = TTS_BUILTIN
-    monkeypatch.setattr(prompt_loader, 'load_tts_prompts', lambda dataset, limit, custom_path: prompts[:limit])
+    monkeypatch.setattr(prompt_loader, 'load_tts_prompts', lambda dataset, limit, custom_path, **kwargs: prompts[:limit])
     monkeypatch.setattr(audio_utils, 'get_audio_duration', lambda _: 1.0)
     generated = []
     config = tts_config(tmp_path, custom_prompt='must not replace the builtin source', prompt_source='builtin', prompt_limit=10)
     obj = manager(config)
-    obj._create_tts_model = lambda _: SimpleNamespace(generate=lambda prompt, **kwargs: generated.append(prompt) or b'audio')
+    obj._create_tts_model = lambda _: SimpleNamespace(generate=lambda prompt, **kwargs: generated.append(prompt) or valid_tts_audio())
 
     result = obj._run_tts(config)
 
-    assert generated == TTS_BUILTIN
+    assert generated == prompts[:10]
     assert [sample['prompt'] for sample in result['per_sample']] == generated
 
 
@@ -141,31 +153,21 @@ def test_tts_prompt_endpoint_returns_builtin_list():
     response = app.test_client().get('/api/v1/audio/tts-prompts')
 
     assert response.status_code == 200
-    assert response.get_json() == {'prompts': TTS_BUILTIN}
-    assert len(response.get_json()['prompts']) == 10
+    payload = response.get_json()
+    assert payload['prompts'] == TTS_BUILTIN
+    assert payload['dataset']['version'] == 'tts-basic-100-v1'
+    assert len(payload['dataset']['items']) == 100
+    assert len(payload['prompts']) == 100
 
 
-def test_builtin_tts_sampling_ignores_task_seed(monkeypatch):
+def test_builtin_tts_sampling_respects_seed():
     import random
     from evalscope.backend.audio_eval.datasets import prompt_loader
 
-    class DistinctSampler:
-        calls = 0
-
-        def sample(self, population, count):
-            self.calls += 1
-            return [population[self.calls]]
-
-    sampler = DistinctSampler()
-    monkeypatch.setattr(random, 'SystemRandom', lambda: sampler)
-    random.seed(42)
-    first = prompt_loader.load_tts_prompts(limit=1)
-    random.seed(42)
-    second = prompt_loader.load_tts_prompts(limit=1)
-
-    assert first != second
-    assert first == [TTS_BUILTIN[1]]
-    assert second == [TTS_BUILTIN[2]]
+    first = prompt_loader.load_tts_prompts(limit=3, seed=42)
+    random.seed(999)
+    assert first == prompt_loader.load_tts_prompts(limit=3, seed=42)
+    assert len(first) == 3
 
 
 def test_custom_dataset_requires_path():

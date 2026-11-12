@@ -4,7 +4,7 @@ import logging
 import os
 from pathlib import Path
 
-from flask import Blueprint, jsonify, send_file
+from flask import Blueprint, jsonify, request, send_file
 from evalscope.service.utils.log import (
     OUTPUT_DIR as _OUTPUT_DIR,
     resolve_task_dir,
@@ -12,7 +12,7 @@ from evalscope.service.utils.log import (
     validate_task_id,
 )
 from evalscope.service.time_utils import epoch_to_utc_iso
-from evalscope.backend.audio_eval.datasets.prompt_loader import TTS_BUILTIN
+from evalscope.backend.audio_eval.datasets.prompt_loader import TTS_BUILTIN, TTS_DATASET
 
 logger = logging.getLogger(__name__.replace('evalscope', 'evalperf'))
 
@@ -21,10 +21,57 @@ bp_audio = Blueprint('audio', __name__, url_prefix='/api/v1/audio')
 OUTPUT_DIR = Path(_OUTPUT_DIR)
 
 
+@bp_audio.route('/fleurs/status', methods=['GET'])
+def fleurs_status():
+    from evalscope.backend.audio_eval.datasets.fleurs import get_fleurs_status
+    return jsonify(get_fleurs_status())
+
+
+@bp_audio.route('/fleurs/samples', methods=['GET'])
+def fleurs_samples():
+    from evalscope.backend.audio_eval.datasets.fleurs import list_fleurs_samples
+    try:
+        limit = min(max(int(request.args.get('limit', 50)), 1), 100)
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except ValueError:
+        return jsonify({'error': 'Invalid pagination'}), 400
+    return jsonify(list_fleurs_samples(limit, offset, request.args.get('q', '').strip()[:200]))
+
+
+@bp_audio.route('/fleurs/random', methods=['GET'])
+def fleurs_random():
+    from evalscope.backend.audio_eval.datasets.fleurs import random_fleurs_sample
+    try:
+        return jsonify(random_fleurs_sample())
+    except FileNotFoundError:
+        return jsonify({'error': 'FLEURS dataset is not prepared'}), 404
+
+
+@bp_audio.route('/fleurs/sample/<sample_id>', methods=['GET'])
+def fleurs_sample(sample_id: str):
+    from evalscope.backend.audio_eval.datasets.fleurs import get_fleurs_sample
+    try:
+        sample = get_fleurs_sample(sample_id)
+    except (FileNotFoundError, ValueError):
+        return jsonify({'error': 'Sample not available'}), 404
+    return jsonify({'id': sample['id'], 'text': sample['reference_text'],
+                    'audio_url': f'/api/v1/audio/fleurs/file/{sample_id}'})
+
+
+@bp_audio.route('/fleurs/file/<sample_id>', methods=['GET'])
+def fleurs_file(sample_id: str):
+    from evalscope.backend.audio_eval.datasets.fleurs import get_fleurs_sample
+    try:
+        sample = get_fleurs_sample(sample_id)
+    except (FileNotFoundError, ValueError):
+        return jsonify({'error': 'Sample not available'}), 404
+    return send_file(sample['audio_path'])
+
+
 @bp_audio.route('/tts-prompts', methods=['GET'])
 def get_tts_prompts():
     """Return the built-in TTS prompts for the AUDIO evaluation form."""
-    return jsonify({'prompts': TTS_BUILTIN})
+    return jsonify({'prompts': TTS_BUILTIN, 'dataset': TTS_DATASET})
 
 
 def _require_task_access(task_id: str):
@@ -150,7 +197,11 @@ def get_audio_report(task_id: str):
                 rel_path = os.path.relpath(audio_path, task_dir)
             else:
                 rel_path = audio_path
-            sample['audio_url'] = f'/api/v1/audio/file/{task_id}/{rel_path}'
+            if sample.get('dataset') == 'google/fleurs' and sample.get('dataset_sample_id'):
+                from urllib.parse import quote
+                sample['audio_url'] = f"/api/v1/audio/fleurs/file/{quote(sample['dataset_sample_id'], safe='')}"
+            else:
+                sample['audio_url'] = f'/api/v1/audio/file/{task_id}/{rel_path}'
 
     return jsonify(results)
 

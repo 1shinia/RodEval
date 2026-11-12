@@ -29,6 +29,8 @@ class AudioGenerateConfig(BaseArgument):
 
     # ASR-specific
     audio_path: Optional[str] = Field(None, description='Path to audio file for ASR')
+    audio_source: Literal['upload', 'fleurs'] = Field('upload', description='ASR audio source')
+    dataset_sample_id: Optional[str] = Field(None, description='Selected FLEURS sample ID')
     reference_text: Optional[str] = Field(None, description='Reference transcription for ASR')
 
     # TTS-specific
@@ -46,6 +48,9 @@ class AudioEvalConfig(BaseArgument):
     )
     prompt_dataset: str = Field('builtin', description='Dataset (builtin/custom)')
     prompt_limit: int = Field(1, ge=1, le=1000, description='Number of prompts')
+    prompt_seed: int = Field(42, description='Deterministic TTS prompt sampling seed')
+    selected_prompt_index: Optional[int] = Field(None, ge=0, description='Zero-based builtin TTS prompt index')
+    prompt_category: Optional[str] = Field(None, description='Builtin TTS category filter for seeded sampling')
     custom_prompt: Optional[str] = Field(None, description='Custom prompt for TTS')
     prompt_source: Optional[Literal['builtin', 'custom']] = Field(
         None, description='Explicit TTS prompt source; None preserves legacy custom_prompt behavior'
