@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRagDraft } from './useRagDraft'
 import PublishedDatasetPicker from './PublishedDatasetPicker'
 import type { PublishedDataset } from '@/api/datasetCatalog'
 import Button from '@/components/ui/Button'
@@ -78,35 +79,37 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
 
-  const [ragTool, setRagTool] = useState<RAGTool>('embedding')
+  const { field, reset } = useRagDraft(user?.id)
+  const [savedTool, setRagTool] = field('ragTool')
+  const ragTool = savedTool as RAGTool
   // ── MTEB fields ──
-  const [ragModelPath, setRagModelPath] = useState('')
-  const [ragApiBase, setRagApiBase] = useState('')
+  const [ragModelPath, setRagModelPath] = field('ragModelPath')
+  const [ragApiBase, setRagApiBase] = field('ragApiBase')
   const [ragApiKey, setRagApiKey] = useState('')
-  const [ragTaskTypes, setRagTaskTypes] = useState('')
-  const [ragTaskNames, setRagTaskNames] = useState('')
+  const [ragTaskTypes, setRagTaskTypes] = field('ragTaskTypes')
+  const [ragTaskNames, setRagTaskNames] = field('ragTaskNames')
   const [catalogEntries, setCatalogEntries] = useState<PublishedDataset[]>([])
-  const [ragLanguages, setRagLanguages] = useState('')
-  const [ragLimit, setRagLimit] = useState('')
-  const [ragRandomSample, setRagRandomSample] = useState(false)
-  const [truncateInput, setTruncateInput] = useState(false)
-  const [maxInputChars, setMaxInputChars] = useState('2000')
-  const [ragBatchSize, setRagBatchSize] = useState('')
+  const [ragLanguages, setRagLanguages] = field('ragLanguages')
+  const [ragLimit, setRagLimit] = field('ragLimit')
+  const [ragRandomSample, setRagRandomSample] = field('ragRandomSample')
+  const [truncateInput, setTruncateInput] = field('truncateInput')
+  const [maxInputChars, setMaxInputChars] = field('maxInputChars')
+  const [ragBatchSize, setRagBatchSize] = field('ragBatchSize')
 
-  const [ragPrompt, setRagPrompt] = useState('')
-  const [ragDataHub, setRagDataHub] = useState('huggingface')
+  const [ragPrompt, setRagPrompt] = field('ragPrompt')
+  const [ragDataHub, setRagDataHub] = field('ragDataHub')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // ── RAGAS fields ──
-  const [ragasTestset, setRagasTestset] = useState('')
-  const [ragasLlmModel, setRagasLlmModel] = useState('')
-  const [ragasLlmBase, setRagasLlmBase] = useState('')
+  const [ragasTestset, setRagasTestset] = field('ragasTestset')
+  const [ragasLlmModel, setRagasLlmModel] = field('ragasLlmModel')
+  const [ragasLlmBase, setRagasLlmBase] = field('ragasLlmBase')
   const [ragasLlmKey, setRagasLlmKey] = useState('')
-  const [ragasEmbModel, setRagasEmbModel] = useState('')
-  const [ragasEmbProv, setRagasEmbProv] = useState('huggingface')
-  const [ragasEmbBase, setRagasEmbBase] = useState('')
+  const [ragasEmbModel, setRagasEmbModel] = field('ragasEmbModel')
+  const [ragasEmbProv, setRagasEmbProv] = field('ragasEmbProv')
+  const [ragasEmbBase, setRagasEmbBase] = field('ragasEmbBase')
   const [ragasEmbKey, setRagasEmbKey] = useState('')
-  const [ragasMetrics, setRagasMetrics] = useState<string[]>(['answer_relevancy', 'faithfulness'])
+  const [ragasMetrics, setRagasMetrics] = field('ragasMetrics')
   const ragasNeedsEmbeddings = ragasMetrics.some(metric => ['answer_relevancy', 'answer_correctness'].includes(metric))
 
   useEffect(() => {
@@ -114,17 +117,28 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
   }, [ragApiKey, onApiKeyChange])
 
   // ── CLIP fields ──
-  const [clipModelPath, setClipModelPath] = useState('')
-  const [clipApiBase, setClipApiBase] = useState('')
+  const [clipModelPath, setClipModelPath] = field('clipModelPath')
+  const [clipApiBase, setClipApiBase] = field('clipApiBase')
   const [clipApiKey, setClipApiKey] = useState('')
-  const [clipDatasets, setClipDatasets] = useState('')
-  const [clipBatchSize, setClipBatchSize] = useState('128')
-  const [clipLimit, setClipLimit] = useState('')
+  const [clipDatasets, setClipDatasets] = field('clipDatasets')
+  const [clipBatchSize, setClipBatchSize] = field('clipBatchSize')
+  const [clipLimit, setClipLimit] = field('clipLimit')
 
   // MTEB auto-complete
   const [showNameSuggestions, setShowNameSuggestions] = useState(false)
   const [filteredNameSuggestions, setFilteredNameSuggestions] = useState<string[]>([])
   const nameInputRef = useRef<HTMLDivElement>(null)
+
+  const resetDraft = () => {
+    reset()
+    setRagApiKey('')
+    setRagasLlmKey('')
+    setRagasEmbKey('')
+    setClipApiKey('')
+    setErrors({})
+    setShowNameSuggestions(false)
+    setFilteredNameSuggestions([])
+  }
 
   const checkedTypes = ragTaskTypes.split(/[,，]/).map(s => s.trim()).filter(Boolean)
   const candidateDatasets = checkedTypes.length > 0
@@ -287,11 +301,19 @@ export default function RAGEvalForm({ onSubmit, disabled, onApiKeyChange }: Prop
       {/* RAG Tool Selector */}
       <div className="flex items-center gap-3 border-b border-[var(--border-md)] pb-4">
         <span className="text-sm font-medium text-[var(--text)]">{t('evalRagExtra.tool')}</span>
-        <select value={ragTool} onChange={e => setRagTool(e.target.value as RAGTool)} className={FORM_INPUT_CLASS + ' !w-auto'}>
+        <select value={ragTool} onChange={e => setRagTool(e.target.value as 'embedding' | 'reranker')} className={FORM_INPUT_CLASS + ' !w-auto'}>
           <option value="embedding">{t('evalRagExtra.toolEmbedding')}</option>
           <option value="reranker">{t('evalRagExtra.toolReranker')}</option>
         </select>
+        <Button type="button" onClick={resetDraft} variant="outline" disabled={disabled} className="ml-auto">
+          {locale === 'zh' ? '重置配置' : 'Reset configuration'}
+        </Button>
       </div>
+      <p className="text-sm text-[var(--text-muted)]">
+        {locale === 'zh'
+          ? '配置仅在当前标签页临时保存，24 小时未修改后过期；密钥不保存，刷新后需重新填写。'
+          : 'Configuration is kept in this tab for 24 hours after editing. API keys are not saved and must be re-entered after reload.'}
+      </p>
 
       {/* ── MTEB Embedding / Reranker ── */}
       {isMTEB && (

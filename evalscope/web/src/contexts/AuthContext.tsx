@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { loadAppConfig } from '@/api/config'
+import { clearRagDrafts } from '@/components/eval/ragDraft'
 
 interface User {
   id: number
@@ -64,6 +65,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const isAuthenticated = !!(token && user)
+
+  // RAG-only cleanup: authentication and all other module state stay unchanged.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      try { clearRagDrafts(window.sessionStorage) } catch { /* storage unavailable */ }
+    }
+  }, [isAuthenticated])
 
   const updateRegistrationMode = useCallback(async (mode: RegistrationMode) => {
     const res = await fetch('/api/v1/auth/settings/registration', {
